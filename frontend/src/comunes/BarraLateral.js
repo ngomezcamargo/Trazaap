@@ -3,13 +3,24 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { limpiarSesion } from '@/utilidades/sesion';
+import { esGerente, normalizarRol } from '@/utilidades/roles';
+import { obtenerUsuario } from '@/utilidades/sesion';
 
-const links = [
-  { href: '/panel', label: 'Panel' },
+const linksGerente = [
+  { href: '/panel', label: 'Dashboard' },
   { href: '/proveedores', label: 'Proveedores' },
-  { href: '/proveedores/nuevo', label: 'Nuevo proveedor' },
-  { href: '/recepciones/nueva', label: 'Nueva recepcion' },
-  { href: '/recepciones/inspeccion', label: 'Nueva inspeccion' },
+  { href: '/materias-primas', label: 'Materias primas' },
+  { href: '/recepciones', label: 'Recepciones' },
+  { href: '/produccion', label: 'Produccion' },
+  { href: '/trazabilidad', label: 'Trazabilidad' },
+  { href: '/blockchain', label: 'Blockchain' },
+  { href: '/inventario', label: 'Inventario' },
+  { href: '/reportes', label: 'Reportes' }
+];
+
+const linksOperario = [
+  { href: '/panel', label: 'Dashboard' },
+  { href: '/recepciones/nueva', label: 'Recepcion' },
   { href: '/produccion', label: 'Produccion' },
   { href: '/liberacion', label: 'Liberacion' },
   { href: '/trazabilidad', label: 'Trazabilidad' }
@@ -18,6 +29,9 @@ const links = [
 export function BarraLateral() {
   const pathname = usePathname();
   const router = useRouter();
+  const usuario = obtenerUsuario();
+  const rol = normalizarRol(usuario?.role);
+  const links = esGerente(rol) ? linksGerente : linksOperario;
 
   const cerrarSesion = () => {
     limpiarSesion();
@@ -28,7 +42,7 @@ export function BarraLateral() {
     <aside className="barra-lateral">
       <div className="marca">
         <h1>Trazaap</h1>
-        <p>Operacion Sprint 2</p>
+        <p>Trazabilidad alimentaria segura</p>
       </div>
 
       <nav className="menu-lateral">

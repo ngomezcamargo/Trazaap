@@ -7,11 +7,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function run() {
-  const sqlPath = path.join(__dirname, '..', 'sql', '001_init.sql');
-  const sql = await fs.readFile(sqlPath, 'utf8');
+  const sqlDir = path.join(__dirname, '..', 'sql');
+  const entries = await fs.readdir(sqlDir);
+  const files = entries.filter((name) => name.endsWith('.sql')).sort();
 
-  await poolPostgres.query(sql);
-  console.log('Migration 001_init.sql applied');
+  for (const file of files) {
+    const sqlPath = path.join(sqlDir, file);
+    const sql = await fs.readFile(sqlPath, 'utf8');
+    await poolPostgres.query(sql);
+    console.log(`Migration ${file} applied`);
+  }
+
   await poolPostgres.end();
 }
 

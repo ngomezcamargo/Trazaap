@@ -1,8 +1,10 @@
 {
-  "/page": "app/page.js",
-  "/panel/page": "app/panel/page.js",
-  "/proveedores/page": "app/proveedores/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
   "/iniciar-sesion/page": "app/iniciar-sesion/page.js",
-  "/recepciones/inspeccion/page": "app/recepciones/inspeccion/page.js",
-  "/recepciones/nueva/page": "app/recepciones/nueva/page.js"
+  "/recepciones/nueva/page": "app/recepciones/nueva/page.js",
+  "/produccion/page": "app/produccion/page.js",
+  "/panel/page": "app/panel/page.js",
+  "/recepciones/page": "app/recepciones/page.js",
+  "/liberacion/page": "app/liberacion/page.js",
+  "/trazabilidad/page": "app/trazabilidad/page.js"
 }

@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { ContenedorApp } from '@/comunes/ContenedorApp';
+import { GuardiaRol } from '@/comunes/GuardiaRol';
 import { GuardiaSesion } from '@/comunes/GuardiaSesion';
 import { proveedoresServicio } from '@/servicios/proveedores.servicio';
+import { ROLES } from '@/utilidades/roles';
 
 export default function ProveedoresPage() {
   const [proveedores, setProveedores] = useState([]);
+  const [busqueda, setBusqueda] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -21,11 +24,27 @@ export default function ProveedoresPage() {
     loadProveedores();
   }, []);
 
+  const proveedoresFiltrados = proveedores.filter((provider) => {
+    const filtro = busqueda.trim().toLowerCase();
+    if (!filtro) return true;
+
+    return [provider.nombre, provider.nit, provider.nombre_contacto || provider.contacto]
+      .join(' ')
+      .toLowerCase()
+      .includes(filtro);
+  });
+
   return (
     <GuardiaSesion>
-      <ContenedorApp titulo="Proveedores" subtitulo="Consulta y seguimiento basico de proveedores activos.">
-        <div className="tarjeta">
-          {error && <div className="alerta error">{error}</div>}
+      <GuardiaRol permitido={[ROLES.GERENTE]}>
+        <ContenedorApp titulo="Proveedores" subtitulo="Consulta y seguimiento basico de proveedores activos.">
+          <div className="tarjeta">
+            {error && <div className="alerta error">{error}</div>}
+
+          <div className="campo" style={{ marginBottom: 14 }}>
+            <label>Buscar por nombre, NIT o contacto</label>
+            <input value={busqueda} onChange={(event) => setBusqueda(event.target.value)} placeholder="Ej: Harinas Andinas" />
+          </div>
 
           <table className="tabla">
             <thead>
@@ -39,12 +58,12 @@ export default function ProveedoresPage() {
               </tr>
             </thead>
             <tbody>
-              {proveedores.map((provider) => (
+              {proveedoresFiltrados.map((provider) => (
                 <tr key={provider.id}>
                   <td>{provider.id}</td>
                   <td>{provider.nombre}</td>
                   <td>{provider.nit}</td>
-                  <td>{provider.contacto}</td>
+                  <td>{provider.nombre_contacto || provider.contacto}</td>
                   <td>{provider.telefono}</td>
                   <td>
                     <span className="estado">{provider.estado}</span>
@@ -53,8 +72,9 @@ export default function ProveedoresPage() {
               ))}
             </tbody>
           </table>
-        </div>
-      </ContenedorApp>
+          </div>
+        </ContenedorApp>
+      </GuardiaRol>
     </GuardiaSesion>
   );
 }

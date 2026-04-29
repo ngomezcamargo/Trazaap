@@ -8,6 +8,7 @@ import { noEncontrado } from './middlewares/noEncontrado.js';
 import rutasAutenticacion from './modulos/autenticacion/autenticacion.routes.js';
 import rutasProveedores from './modulos/proveedores/proveedores.routes.js';
 import rutasRecepciones from './modulos/recepciones/recepciones.routes.js';
+import rutasMateriasPrimas from './modulos/materias_primas/materias_primas.routes.js';
 import rutasTrazabilidad from './modulos/trazabilidad/trazabilidad.routes.js';
 import rutasProduccion from './modulos/produccion/produccion.routes.js';
 import rutasLiberacion from './modulos/liberacion/liberacion.routes.js';
@@ -29,6 +30,7 @@ export function createApp() {
   api.use('/auth', rutasAutenticacion);
   api.use('/providers', rutasProveedores);
   api.use('/receptions', rutasRecepciones);
+  api.use('/materias-primas', rutasMateriasPrimas);
   api.use('/produccion', rutasProduccion);
   api.use('/liberacion', rutasLiberacion);
   api.use('/traceability', rutasTrazabilidad);

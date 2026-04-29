@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/page": [
+    "/iniciar-sesion/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/iniciar-sesion/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -16,25 +16,40 @@
       "static/chunks/main-app.js",
       "static/chunks/app/panel/page.js"
     ],
-    "/proveedores/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/proveedores/page.js"
-    ],
-    "/iniciar-sesion/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/iniciar-sesion/page.js"
-    ],
     "/recepciones/nueva/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/recepciones/nueva/page.js"
     ],
-    "/recepciones/inspeccion/page": [
+    "/produccion/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/recepciones/inspeccion/page.js"
+      "static/chunks/app/produccion/page.js"
+    ],
+    "/liberacion/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/liberacion/page.js"
+    ],
+    "/materias-primas/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/materias-primas/page.js"
+    ],
+    "/recepciones/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/recepciones/page.js"
+    ],
+    "/trazabilidad/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/trazabilidad/page.js"
+    ],
+    "/_not-found/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/_not-found/page.js"
     ]
   }
 }

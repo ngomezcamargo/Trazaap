@@ -7,7 +7,8 @@ Trazaap queda refactorizado como una base academica limpia para Sprint 2, enfoca
 - Iniciar sesion
 - Gestionar proveedores
 - Registrar recepcion de materias primas
-- Registrar inspeccion de recepcion
+- Registrar inspeccion de producto y vehiculo dentro de la misma recepcion (modales)
+- Gestionar catalogo de materias primas
 - Gestionar ordenes de produccion diarias
 - Orden de produccion basada en formato real de Angela's Bagels (encabezado, productos, ingredientes y mojes)
 - Registrar consumo planificado/real y tiempos de produccion
@@ -40,6 +41,7 @@ Sin MongoDB, sin MinIO, sin QR y sin modulos futuros no usados.
 |   |   |   |-- blockchain/
 |   |   |   |-- proveedores/
 |   |   |   |-- recepciones/
+|   |   |   |-- materias_primas/
 |   |   |   `-- trazabilidad/
 |   |   |-- app.js
 |   |   `-- server.js
@@ -68,9 +70,10 @@ Base URL backend: `http://localhost:4000/api`
 - `PUT /providers/:id`
 - `DELETE /providers/:id`
 - `GET /receptions`
-- `GET /receptions/materias-primas`
 - `POST /receptions`
-- `POST /receptions/:id/inspection`
+- `GET /materias-primas`
+- `POST /materias-primas`
+- `PUT /materias-primas/:id`
 - `GET /traceability/lote/:lote`
 - `GET /produccion/ordenes`
 - `GET /produccion/recepciones-disponibles`
@@ -83,7 +86,7 @@ Base URL backend: `http://localhost:4000/api`
 
 ## Blockchain en Sprint 2
 
-- Eventos criticos registrados: recepcion, inspeccion, produccion y liberacion.
+- Eventos criticos registrados: recepcion (incluye inspecciones), produccion y liberacion.
 - Produccion incluye: productos, materias primas, lotes usados, cantidades reales, unidades y tiempos/temperaturas.
 - Liberacion incluye: producto, lote, vencimiento, unidades, peso neto, estado y responsable.
 - Cada evento genera hash `SHA-256` sobre el payload completo.

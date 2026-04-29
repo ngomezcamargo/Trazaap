@@ -1,4 +1,4 @@
-import { obtenerToken } from '@/utilidades/sesion';
+import { limpiarSesion, obtenerToken } from '@/utilidades/sesion';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -21,6 +21,9 @@ async function request(path, options = {}) {
   const data = await response.json();
 
   if (!response.ok) {
+    if (response.status === 401) {
+      limpiarSesion();
+    }
     throw new Error(data.message || 'Error en la solicitud');
   }
 

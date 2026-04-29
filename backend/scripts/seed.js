@@ -23,6 +23,21 @@ async function seedAdminUser() {
   await poolPostgres.query(query, ['admin@trazaap.local', passwordHash]);
 }
 
+async function seedOperarioUser() {
+  const passwordHash = await bcrypt.hash('Operario123*', 12);
+  const query = `
+    INSERT INTO users (email, password_hash, role_id)
+    VALUES (
+      $1,
+      $2,
+      (SELECT id FROM roles WHERE name = 'operario')
+    )
+    ON CONFLICT (email) DO NOTHING
+  `;
+
+  await poolPostgres.query(query, ['operario@trazaap.local', passwordHash]);
+}
+
 async function seedProviders() {
   await poolPostgres.query(
     `INSERT INTO providers (nombre, nit, contacto, telefono, email, direccion, estado)
@@ -120,6 +135,7 @@ async function seedProduccionYLiberacion() {
 async function run() {
   await seedRoles();
   await seedAdminUser();
+  await seedOperarioUser();
   await seedProviders();
   await seedRawMaterials();
   await seedReceptionSample();

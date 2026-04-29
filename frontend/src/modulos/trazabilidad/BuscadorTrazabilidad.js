@@ -5,6 +5,7 @@ import { trazabilidadServicio } from '@/servicios/trazabilidad.servicio';
 
 export function BuscadorTrazabilidad() {
   const [lote, setLote] = useState('');
+  const [filtroEvento, setFiltroEvento] = useState('');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
@@ -20,6 +21,12 @@ export function BuscadorTrazabilidad() {
       setError(err.message);
     }
   };
+
+  const eventosFiltrados = (data?.eventos || []).filter((event) => {
+    const filtro = filtroEvento.trim().toLowerCase();
+    if (!filtro) return true;
+    return [event.event_type, event.actor].join(' ').toLowerCase().includes(filtro);
+  });
 
   return (
     <div className="tarjeta">
@@ -43,23 +50,34 @@ export function BuscadorTrazabilidad() {
       {data && (
         <div style={{ marginTop: 16 }}>
           <h3 style={{ marginBottom: 8 }}>Lote: {data.lote}</h3>
-          <p><strong>Proveedor:</strong> {data.proveedor ? `${data.proveedor.nombre} (${data.proveedor.nit})` : 'sin registro directo'}</p>
-          <p><strong>Recepcion:</strong> {data.recepcion ? `${data.recepcion.estado_recepcion} - ${data.recepcion.materia_prima}` : 'sin registro directo'}</p>
-          <p>
-            <strong>Inspeccion:</strong> {data.inspeccion ? data.inspeccion.decision_final : 'pendiente'}
-          </p>
-          <p>
-            <strong>Produccion:</strong>{' '}
-            {data.produccion
-              ? `${data.produccion.orden.codigo_orden} / ${data.produccion.productos?.[0]?.producto || 'sin producto'} / lote ${data.produccion.lote_terminado?.lote_producto || 'pendiente'}`
-              : 'sin registro'}
-          </p>
-          <p>
-            <strong>Liberacion:</strong>{' '}
-            {data.liberacion ? `${data.liberacion.estado_liberacion} / peso neto ${data.liberacion.peso_neto}` : 'sin registro'}
-          </p>
+
+          <div className="grid grid-2">
+            <div className="tarjeta">
+              <h4>Recepcion</h4>
+              <p><strong>Proveedor:</strong> {data.proveedor ? `${data.proveedor.nombre} (${data.proveedor.nit})` : 'sin registro directo'}</p>
+              <p><strong>Estado:</strong> <span className={`estado ${data.recepcion?.estado_recepcion || ''}`}>{data.recepcion?.estado_recepcion || 'sin registro'}</span></p>
+              <p><strong>Materia prima:</strong> {data.recepcion?.materia_prima || '-'}</p>
+            </div>
+            <div className="tarjeta">
+              <h4>Inspeccion y liberacion</h4>
+              <p><strong>Inspeccion:</strong> <span className={`estado ${data.inspeccion?.decision_final || 'retenido'}`}>{data.inspeccion ? data.inspeccion.decision_final : 'pendiente'}</span></p>
+              <p><strong>Liberacion:</strong> {data.liberacion ? `${data.liberacion.estado_liberacion} / peso neto ${data.liberacion.peso_neto}` : 'sin registro'}</p>
+              <p><strong>Produccion:</strong> {data.produccion ? `${data.produccion.orden.codigo_orden} / lote ${data.produccion.lote_terminado?.lote_producto || 'pendiente'}` : 'sin registro'}</p>
+            </div>
+          </div>
+
+          <div className="tarjeta" style={{ marginTop: 12 }}>
+            <h4>Linea de tiempo del lote</h4>
+            <div className="flujo" style={{ fontSize: '0.95rem' }}>
+              Recepcion <span>{'->'}</span> Inspeccion <span>{'->'}</span> Produccion <span>{'->'}</span> Liberacion <span>{'->'}</span> Blockchain
+            </div>
+          </div>
 
           <h4>Eventos</h4>
+          <div className="campo" style={{ marginBottom: 10 }}>
+            <label>Filtrar eventos por tipo o actor</label>
+            <input value={filtroEvento} onChange={(event) => setFiltroEvento(event.target.value)} />
+          </div>
           <table className="tabla">
             <thead>
               <tr>
@@ -69,13 +87,18 @@ export function BuscadorTrazabilidad() {
               </tr>
             </thead>
             <tbody>
-              {data.eventos.map((event) => (
+              {eventosFiltrados.map((event) => (
                 <tr key={event.id}>
                   <td>{event.event_type}</td>
                   <td>{event.actor}</td>
                   <td>{new Date(event.timestamp).toLocaleString()}</td>
                 </tr>
               ))}
+              {eventosFiltrados.length === 0 ? (
+                <tr>
+                  <td colSpan={3}>No hay eventos que coincidan con el filtro.</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
 

@@ -6,22 +6,6 @@ function generarHash(evento) {
   return crypto.createHash('sha256').update(JSON.stringify(evento)).digest('hex');
 }
 
-function normalizarResultadoInspeccion(valor) {
-  if (valor === 'aceptado') return 'aprobado';
-  if (valor === 'rechazado') return 'rechazado';
-  return 'retenido';
-}
-
-function normalizarCumplimiento(valor) {
-  if (typeof valor === 'boolean') return valor;
-
-  const limpio = String(valor || '')
-    .trim()
-    .toLowerCase();
-
-  return ['si', 'true', '1', 'ok', 'cumple', 'aprobado', 'aceptable', 'conforme'].includes(limpio);
-}
-
 export async function registrarEventoRecepcion(data) {
   const evento = {
     tipoEvento: 'recepcion_materia_prima',
@@ -29,15 +13,17 @@ export async function registrarEventoRecepcion(data) {
     lote: data.lote,
     usuario: data.usuario,
     datosRelevantes: {
+      fechaRecepcion: data.fechaRecepcion,
       proveedor: data.proveedor,
       materiaPrima: data.materiaPrima,
       cantidad: Number(data.cantidad),
-      unidad: data.unidad,
-      loteProveedor: data.loteProveedor,
-      fechaRecepcion: data.fechaRecepcion,
+      presentacion: data.presentacion,
+      numeroLote: data.numeroLote,
+      temperatura: Number(data.temperaturaRecepcion),
       fechaVencimiento: data.fechaVencimiento,
-      temperaturaRecepcion: Number(data.temperaturaRecepcion),
-      pesoRecibido: Number(data.pesoRecibido),
+      recibidoPor: data.recibidoPor,
+      inspeccionProducto: data.resultadoInspeccionProducto,
+      inspeccionVehiculo: data.resultadoInspeccionVehiculo,
       estadoRecepcion: data.estadoRecepcion
     }
   };
@@ -61,16 +47,7 @@ export async function registrarEventoInspeccion(data) {
     fechaEvento: new Date().toISOString(),
     lote: data.lote,
     usuario: data.usuario,
-    datosRelevantes: {
-      resultadoInspeccion: normalizarResultadoInspeccion(data.resultadoInspeccion),
-      olor: normalizarCumplimiento(data.olor),
-      color: normalizarCumplimiento(data.color),
-      textura: normalizarCumplimiento(data.textura),
-      estadoEmpaque: normalizarCumplimiento(data.estadoEmpaque),
-      certificadoCalidad: normalizarCumplimiento(data.certificadoCalidad),
-      inspeccionVehiculo: normalizarCumplimiento(data.inspeccionVehiculo),
-      observaciones: (data.observaciones || '').trim() || 'sin observaciones'
-    }
+    datosRelevantes: data
   };
 
   const hash = generarHash(evento);

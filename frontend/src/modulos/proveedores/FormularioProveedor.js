@@ -6,10 +6,11 @@ import { proveedoresServicio } from '@/servicios/proveedores.servicio';
 const initialState = {
   nombre: '',
   nit: '',
-  contacto: '',
+  nombre_contacto: '',
   telefono: '',
   email: '',
   direccion: '',
+  certificaciones: '',
   estado: 'activo'
 };
 
@@ -48,8 +49,8 @@ export function FormularioProveedor() {
           <input name="nit" value={form.nit} onChange={handleChange} required />
         </div>
         <div className="campo">
-          <label>Contacto</label>
-          <input name="contacto" value={form.contacto} onChange={handleChange} required />
+          <label>Nombre contacto</label>
+          <input name="nombre_contacto" value={form.nombre_contacto} onChange={handleChange} required />
         </div>
         <div className="campo">
           <label>Telefono</label>
@@ -71,6 +72,11 @@ export function FormularioProveedor() {
       <div className="campo" style={{ marginTop: 16 }}>
         <label>Direccion</label>
         <input name="direccion" value={form.direccion} onChange={handleChange} required />
+      </div>
+
+      <div className="campo" style={{ marginTop: 12 }}>
+        <label>Certificaciones</label>
+        <textarea name="certificaciones" value={form.certificaciones} onChange={handleChange} />
       </div>
 
       <div className="acciones">
