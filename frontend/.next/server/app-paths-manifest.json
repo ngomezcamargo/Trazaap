@@ -1,0 +1,8 @@
+{
+  "/page": "app/page.js",
+  "/panel/page": "app/panel/page.js",
+  "/proveedores/page": "app/proveedores/page.js",
+  "/iniciar-sesion/page": "app/iniciar-sesion/page.js",
+  "/recepciones/inspeccion/page": "app/recepciones/inspeccion/page.js",
+  "/recepciones/nueva/page": "app/recepciones/nueva/page.js"
+}
