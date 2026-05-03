@@ -24,9 +24,35 @@ Trazaap queda refactorizado como una base academica limpia para Sprint 2, enfoca
 - Base de datos: PostgreSQL
 - Autenticacion: JWT
 - Blockchain: modulo desacoplado con hash SHA-256
-- Integracion objetivo: Hyperledger Fabric (adapter preparado)
+- Integracion objetivo: Hyperledger Fabric (`backend/src/modulos/blockchain/fabric.client.js` preparado)
 
-Sin MongoDB, sin MinIO, sin QR y sin modulos futuros no usados.
+Sin MongoDB. La red real de Fabric queda para siguientes sprints.
+
+## Arquitectura backend (modular por dominio)
+
+El backend sigue una arquitectura modular por dominio:
+
+`Frontend Web -> Middlewares globales -> Modulos de dominio (routes/controller/service/repository)`.
+
+Estructura objetivo aplicada en `backend/src`:
+
+```text
+src/
+  configuracion/
+  middlewares/
+  utilidades/
+  modulos/
+    autenticacion/
+    proveedores/
+    materias_primas/
+    recepciones/
+    produccion/
+    liberacion/
+    trazabilidad/
+    blockchain/
+  app.js
+  server.js
+```
 
 ## Estructura del proyecto
 
@@ -40,8 +66,10 @@ Sin MongoDB, sin MinIO, sin QR y sin modulos futuros no usados.
 |   |   |   |-- autenticacion/
 |   |   |   |-- blockchain/
 |   |   |   |-- proveedores/
+|   |   |   |-- produccion/
 |   |   |   |-- recepciones/
 |   |   |   |-- materias_primas/
+|   |   |   |-- liberacion/
 |   |   |   `-- trazabilidad/
 |   |   |-- app.js
 |   |   `-- server.js
@@ -80,7 +108,7 @@ Base URL backend: `http://localhost:4000/api`
 - `POST /produccion/ordenes`
 - `POST /produccion/ordenes/:id/materias`
 - `POST /produccion/ordenes/:id/tiempos`
-- `POST /produccion/ordenes/:id/lote-terminado`
+- `POST /produccion/ordenes/:id/mojes`
 - `GET /liberacion`
 - `POST /liberacion`
 

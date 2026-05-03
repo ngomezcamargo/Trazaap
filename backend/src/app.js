@@ -3,8 +3,7 @@ import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { entorno } from './configuracion/entorno.js';
-import { manejoErrores } from './middlewares/manejoErrores.js';
-import { noEncontrado } from './middlewares/noEncontrado.js';
+import { erroresMiddleware, noEncontradoMiddleware } from './middlewares/errores.middleware.js';
 import rutasAutenticacion from './modulos/autenticacion/autenticacion.routes.js';
 import rutasProveedores from './modulos/proveedores/proveedores.routes.js';
 import rutasRecepciones from './modulos/recepciones/recepciones.routes.js';
@@ -37,8 +36,8 @@ export function createApp() {
 
   app.use(entorno.apiPrefix, api);
 
-  app.use(noEncontrado);
-  app.use(manejoErrores);
+  app.use(noEncontradoMiddleware);
+  app.use(erroresMiddleware);
 
   return app;
 }
