@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { poolPostgres } from '../src/configuracion/postgresql.js';
 
 async function seedRoles() {
-  const roles = ['admin', 'gerencia', 'operario'];
+  const roles = ['administrador', 'gerente', 'operario'];
   for (const role of roles) {
     await poolPostgres.query('INSERT INTO roles (name) VALUES ($1) ON CONFLICT (name) DO NOTHING', [role]);
   }
@@ -15,7 +15,7 @@ async function seedAdminUser() {
     VALUES (
       $1,
       $2,
-      (SELECT id FROM roles WHERE name = 'admin')
+      (SELECT id FROM roles WHERE name = 'administrador')
     )
     ON CONFLICT (email) DO NOTHING
   `;
@@ -40,21 +40,29 @@ async function seedOperarioUser() {
 
 async function seedProviders() {
   await poolPostgres.query(
-    `INSERT INTO providers (nombre, nit, contacto, telefono, email, direccion, estado)
+    `INSERT INTO providers (nombre, nit, contacto, nombre_contacto, telefono, email, direccion, certificaciones, estado)
      VALUES
-       ('Molinos Andinos', '900123456-1', 'Laura Diaz', '3001234567', 'contacto@molinosandinos.local', 'Zona Industrial Km 4', 'activo'),
-       ('Lacteos Norte', '800222111-3', 'Carlos Ruiz', '3109876543', 'ventas@lacteosnorte.local', 'Parque Empresarial Bodega 12', 'activo')
+       ('Molinos Andinos', '900123456-1', 'Laura Diaz', 'Laura Diaz', '3001234567', 'contacto@molinosandinos.local', 'Zona Industrial Km 4', 'BPM vigente', 'activo'),
+       ('Lacteos Norte', '800222111-3', 'Carlos Ruiz', 'Carlos Ruiz', '3109876543', 'ventas@lacteosnorte.local', 'Parque Empresarial Bodega 12', 'BPM vigente', 'activo')
      ON CONFLICT (nit) DO NOTHING`
   );
 }
 
 async function seedRawMaterials() {
   await poolPostgres.query(
-    `INSERT INTO raw_materials (nombre, descripcion)
+    `INSERT INTO raw_materials (
+      nombre,
+      descripcion,
+      unidad_medida,
+      unidad_medida_base,
+      descripcion_unidad_personalizada,
+      tipo_insumo,
+      condiciones_almacenamiento
+    )
      VALUES
-       ('Harina de trigo', 'Harina para produccion de pan'),
-       ('Levadura instantanea', 'Levadura seca para panificacion'),
-       ('Azucar refinada', 'Azucar para formulaciones de panaderia')
+       ('Harina de trigo', 'Harina para produccion de pan', 'kilogramos', 'kilogramos', '', 'solido', 'Ambiente seco'),
+       ('Levadura instantanea', 'Levadura seca para panificacion', 'gramos', 'gramos', '', 'solido', 'Ambiente seco'),
+       ('Azucar refinada', 'Azucar para formulaciones de panaderia', 'kilogramos', 'kilogramos', '', 'solido', 'Ambiente seco')
      ON CONFLICT (nombre) DO NOTHING`
   );
 }
@@ -66,8 +74,11 @@ async function seedReceptionSample() {
       proveedor_id,
       materia_prima_id,
       cantidad,
+      unidad_medida,
       unidad_presentacion,
+      presentacion,
       lote_proveedor,
+      numero_lote,
       fecha_vencimiento,
       temperatura_recepcion,
       peso_recibido,
@@ -80,7 +91,10 @@ async function seedReceptionSample() {
       p.id,
       rm.id,
       1000,
+      'kilogramos',
       'sacos 50kg',
+      'sacos',
+      'LOT-HAR-2026-001',
       'LOT-HAR-2026-001',
       CURRENT_DATE + INTERVAL '120 days',
       22.5,
@@ -120,10 +134,9 @@ async function seedProduccionYLiberacion() {
 
   await poolPostgres.query(
     `INSERT INTO ordenes_produccion_productos (
-      orden_produccion_id, producto, codigo_producto, tamano_presentacion,
-      cantidad_programada, cantidad_real_producida, unidad_medida, lote_producto_terminado
+      orden_produccion_id, producto, tamano_presentacion, cantidad_programada, observaciones
     )
-    SELECT op.id, 'Bagel clasico', 'BAG-001', 'mediano', 500, 0, 'unidades', 'LOT-BAG-2026-001'
+    SELECT op.id, 'Bagel clasico', 'mediano', 500, 'Producto de ejemplo sprint 2'
     FROM ordenes_produccion op
     WHERE op.codigo_orden = 'OP-SEMILLA-001'
       AND NOT EXISTS (

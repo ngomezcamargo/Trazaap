@@ -59,10 +59,6 @@ export async function consultarTrazabilidadPorLote(lote) {
           orden: orden,
           productos: detalle.productos,
           ingredientes: detalle.materias,
-          mojes: detalle.mojes.map((moje) => ({
-            ...moje,
-            ingredientes: detalle.mojesIngredientes.filter((item) => item.moje_id === moje.id)
-          })),
           tiempos: detalle.tiempos,
           lote_terminado: detalle.loteTerminado
         }

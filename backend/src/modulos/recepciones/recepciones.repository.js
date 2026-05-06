@@ -1,4 +1,5 @@
 import { poolPostgres } from '../../configuracion/postgresql.js';
+import { ErrorHttp } from '../../middlewares/errorHttp.js';
 
 async function obtenerColumnasTabla(client, tableName) {
   const { rows } = await client.query(
@@ -20,10 +21,21 @@ export async function crearRecepcion(data) {
 
     const columnasRecepciones = await obtenerColumnasTabla(client, 'receptions');
     const columnasInspeccion = await obtenerColumnasTabla(client, 'reception_inspections');
+    const columnasMaterias = await obtenerColumnasTabla(client, 'raw_materials');
 
     const tienePresentacion = columnasRecepciones.has('presentacion');
     const tieneNumeroLote = columnasRecepciones.has('numero_lote');
     const tienePesoRecibido = columnasRecepciones.has('peso_recibido');
+    const tieneUnidadMedida = columnasRecepciones.has('unidad_medida');
+
+    const unidadMateriaPrimaQuery = `
+      SELECT ${columnasMaterias.has('unidad_medida_base') ? 'unidad_medida_base' : 'unidad_medida'} AS unidad
+      FROM raw_materials
+      WHERE id = $1
+    `;
+    const unidadMateriaPrimaRes = await client.query(unidadMateriaPrimaQuery, [data.materia_prima_id]);
+    const unidadBase = unidadMateriaPrimaRes.rows[0]?.unidad;
+    data.unidad_medida = unidadBase || data.unidad_medida || 'unidad';
 
     const camposRecepcion = [
       'fecha_recepcion',
@@ -66,6 +78,11 @@ export async function crearRecepcion(data) {
     if (tieneNumeroLote) {
       camposRecepcion.push('numero_lote');
       values.push(data.numero_lote);
+    }
+
+    if (tieneUnidadMedida) {
+      camposRecepcion.push('unidad_medida');
+      values.push(data.unidad_medida);
     }
 
     const placeholders = camposRecepcion.map((_, index) => `$${index + 1}`).join(',');
@@ -147,6 +164,48 @@ export async function crearRecepcion(data) {
     `;
 
     const inspeccionRes = await client.query(inspeccionQuery, inspeccionValues);
+
+    if (data.estado_recepcion === 'aceptado') {
+      const inventarioExistente = await client.query(
+        'SELECT unidad_medida FROM inventario_materias_primas WHERE materia_prima_id = $1',
+        [data.materia_prima_id]
+      );
+
+      if (
+        inventarioExistente.rows[0]?.unidad_medida
+        && inventarioExistente.rows[0].unidad_medida !== data.unidad_medida
+      ) {
+        throw new ErrorHttp(400, 'La unidad de medida de la recepcion no coincide con la unidad registrada en inventario para esta materia prima.');
+      }
+
+      const inventarioQuery = `
+        INSERT INTO inventario_materias_primas (materia_prima_id, cantidad_disponible, unidad_medida, fecha_actualizacion)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (materia_prima_id)
+        DO UPDATE SET
+          cantidad_disponible = inventario_materias_primas.cantidad_disponible + EXCLUDED.cantidad_disponible,
+          unidad_medida = EXCLUDED.unidad_medida,
+          fecha_actualizacion = NOW()
+      `;
+
+      await client.query(inventarioQuery, [data.materia_prima_id, data.cantidad, data.unidad_medida]);
+
+      await client.query(
+        `INSERT INTO inventario_movimientos (
+          materia_prima_id, tipo_movimiento, cantidad, unidad_medida,
+          referencia_tipo, referencia_id, observaciones, creado_por
+        ) VALUES ($1, 'entrada', $2, $3, 'recepcion', $4, $5, $6)`,
+        [
+          data.materia_prima_id,
+          data.cantidad,
+          data.unidad_medida,
+          recepcion.id,
+          `Entrada por recepcion ${data.numero_lote}`,
+          String(data.recibido_por)
+        ]
+      );
+    }
+
     await client.query('COMMIT');
     return { recepcion, inspeccion: inspeccionRes.rows[0] };
   } catch (error) {
@@ -168,6 +227,76 @@ export async function listarRecepciones() {
 
   const { rows } = await poolPostgres.query(query);
   return rows;
+}
+
+export async function obtenerDetalleRecepcion(id) {
+  const client = await poolPostgres.connect();
+  try {
+    const columnasRecepciones = await obtenerColumnasTabla(client, 'receptions');
+    const columnasInspeccion = await obtenerColumnasTabla(client, 'reception_inspections');
+
+    const numeroLoteExpr = columnasRecepciones.has('numero_lote')
+      ? 'COALESCE(r.numero_lote, r.lote_proveedor)'
+      : 'r.lote_proveedor';
+    const presentacionExpr = columnasRecepciones.has('presentacion')
+      ? 'COALESCE(r.presentacion, r.unidad_presentacion)'
+      : 'r.unidad_presentacion';
+
+    const detalleQuery = `
+      SELECT
+        r.id,
+        r.fecha_recepcion,
+        p.nombre AS proveedor,
+        rm.nombre AS materia_prima,
+        r.cantidad,
+        ${columnasRecepciones.has('unidad_medida') ? 'r.unidad_medida' : 'NULL::varchar AS unidad_medida'},
+        ${presentacionExpr} AS presentacion,
+        ${numeroLoteExpr} AS numero_lote,
+        r.temperatura_recepcion AS temperatura,
+        r.fecha_vencimiento,
+        r.recibido_por,
+        r.estado_recepcion,
+        r.observaciones,
+        i.olor,
+        i.color,
+        i.textura,
+        i.estado_empaque,
+        i.certificado_calidad,
+        i.decision_final,
+        ${columnasInspeccion.has('observaciones_producto') ? 'i.observaciones_producto' : 'NULL::text AS observaciones_producto'},
+        ${columnasInspeccion.has('vehiculo') ? 'i.vehiculo' : 'NULL::varchar AS vehiculo'},
+        ${columnasInspeccion.has('conductor') ? 'i.conductor' : 'NULL::varchar AS conductor'},
+        ${columnasInspeccion.has('placa') ? 'i.placa' : 'NULL::varchar AS placa'},
+        ${columnasInspeccion.has('limpieza_vehiculo') ? 'i.limpieza_vehiculo' : 'NULL::boolean AS limpieza_vehiculo'},
+        ${columnasInspeccion.has('transporte_vehiculo') ? 'i.transporte_vehiculo' : 'NULL::boolean AS transporte_vehiculo'},
+        ${columnasInspeccion.has('observaciones_vehiculo') ? 'i.observaciones_vehiculo' : 'NULL::text AS observaciones_vehiculo'}
+      FROM receptions r
+      JOIN providers p ON p.id = r.proveedor_id
+      JOIN raw_materials rm ON rm.id = r.materia_prima_id
+      LEFT JOIN reception_inspections i ON i.reception_id = r.id
+      WHERE r.id = $1
+    `;
+
+    const detalleRes = await client.query(detalleQuery, [id]);
+    const detalle = detalleRes.rows[0] || null;
+    if (!detalle) return null;
+
+    const blockchainQuery = `
+      SELECT hash, tipo_evento, fecha_evento
+      FROM eventos_blockchain
+      WHERE lote = $1
+      ORDER BY fecha_evento DESC
+      LIMIT 5
+    `;
+    const blockchainRes = await client.query(blockchainQuery, [detalle.numero_lote]);
+
+    return {
+      ...detalle,
+      blockchain: blockchainRes.rows
+    };
+  } finally {
+    client.release();
+  }
 }
 
 export async function buscarRecepcionPorId(id) {
@@ -195,6 +324,7 @@ export async function buscarContextoRecepcionBlockchain(id) {
       ${numeroLoteExpr} AS numero_lote,
       r.fecha_vencimiento,
       r.cantidad,
+      ${columnasRecepciones.has('unidad_medida') ? 'r.unidad_medida' : 'NULL::varchar AS unidad_medida'},
       ${presentacionExpr} AS presentacion,
       r.temperatura_recepcion,
       i.decision_final,

@@ -1,10 +1,12 @@
+'use client';
+
 import { BarraLateral } from './BarraLateral';
 import { obtenerUsuario } from '@/utilidades/sesion';
-import { normalizarRol } from '@/utilidades/roles';
 
 export function ContenedorApp({ titulo, subtitulo, children }) {
   const usuario = obtenerUsuario();
-  const rol = normalizarRol(usuario?.role);
+  const rolSesion = String(usuario?.role || '').trim() || 'sin rol';
+  const identificadorSesion = usuario?.email || usuario?.id || 'sin sesion';
 
   return (
     <div className="shell">
@@ -16,8 +18,8 @@ export function ContenedorApp({ titulo, subtitulo, children }) {
             {subtitulo ? <p>{subtitulo}</p> : null}
           </div>
           <div className="usuario-activo">
-            <span>{usuario?.email || 'sin sesion'}</span>
-            <strong>{rol}</strong>
+            <span>{identificadorSesion}</span>
+            <strong>{rolSesion}</strong>
           </div>
         </header>
         {children}

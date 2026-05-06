@@ -37,7 +37,7 @@ export async function buscarOrdenPorLoteFinalOLoteRecepcion(lote) {
 }
 
 export async function obtenerDetalleProduccion(ordenId) {
-  const [productosRes, materiasRes, tiemposRes, mojesRes, mojesIngRes, loteRes, liberacionRes] = await Promise.all([
+  const [productosRes, materiasRes, tiemposRes, loteRes, liberacionRes] = await Promise.all([
     poolPostgres.query('SELECT * FROM ordenes_produccion_productos WHERE orden_produccion_id = $1 ORDER BY id', [ordenId]),
     poolPostgres.query(
       `SELECT opm.*, r.lote_proveedor
@@ -48,15 +48,6 @@ export async function obtenerDetalleProduccion(ordenId) {
       [ordenId]
     ),
     poolPostgres.query('SELECT * FROM tiempos_produccion WHERE orden_produccion_id = $1 ORDER BY id', [ordenId]),
-    poolPostgres.query('SELECT * FROM ordenes_produccion_mojes WHERE orden_produccion_id = $1 ORDER BY id', [ordenId]),
-    poolPostgres.query(
-      `SELECT omi.*
-       FROM ordenes_produccion_mojes_ingredientes omi
-       JOIN ordenes_produccion_mojes om ON om.id = omi.moje_id
-       WHERE om.orden_produccion_id = $1
-       ORDER BY omi.id`,
-      [ordenId]
-    ),
     poolPostgres.query('SELECT * FROM lotes_producto_terminado WHERE orden_produccion_id = $1 LIMIT 1', [ordenId]),
     poolPostgres.query(
       `SELECT lp.*, lpt.lote_producto
@@ -72,8 +63,6 @@ export async function obtenerDetalleProduccion(ordenId) {
     productos: productosRes.rows,
     materias: materiasRes.rows,
     tiempos: tiemposRes.rows,
-    mojes: mojesRes.rows,
-    mojesIngredientes: mojesIngRes.rows,
     loteTerminado: loteRes.rows[0] || null,
     liberacion: liberacionRes.rows[0] || null
   };

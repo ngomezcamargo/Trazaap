@@ -92,6 +92,7 @@ Base URL backend: `http://localhost:4000/api`
 
 - `POST /auth/login`
 - `GET /auth/me`
+- `GET /auth/operarios`
 - `GET /providers`
 - `POST /providers`
 - `GET /providers/:id`
@@ -99,16 +100,25 @@ Base URL backend: `http://localhost:4000/api`
 - `DELETE /providers/:id`
 - `GET /receptions`
 - `POST /receptions`
+- `GET /receptions/:id/detalle`
+- `GET /inventario-insumos`
 - `GET /materias-primas`
 - `POST /materias-primas`
 - `PUT /materias-primas/:id`
 - `GET /traceability/lote/:lote`
 - `GET /produccion/ordenes`
+- `GET /produccion/ordenes/:id`
+- `GET /produccion/productos`
+- `GET /produccion/productos/:productoId`
 - `GET /produccion/recepciones-disponibles`
 - `POST /produccion/ordenes`
+- `POST /produccion/productos`
+- `PUT /produccion/productos/:productoId`
+- `POST /produccion/calcular-insumos`
+- `PUT /produccion/ordenes/:id/estado`
 - `POST /produccion/ordenes/:id/materias`
+- `PUT /produccion/ordenes/:id/materias/:materiaId`
 - `POST /produccion/ordenes/:id/tiempos`
-- `POST /produccion/ordenes/:id/mojes`
 - `GET /liberacion`
 - `POST /liberacion`
 
@@ -125,7 +135,7 @@ Base URL backend: `http://localhost:4000/api`
 
 - email: `admin@trazaap.local`
 - password: `Admin123*`
-- role: `admin`
+- role: `administrador`
 
 ## Variables de entorno
 
@@ -164,7 +174,7 @@ npm install
 
 2. Crear base de datos `trazaap` en PostgreSQL.
 
-3. Ejecutar migraciones y seed:
+3. Ejecutar migracion unica del esquema actual y datos semilla:
 
 ```bash
 cd backend
@@ -200,11 +210,19 @@ Tablas base de Sprint 2:
 - `users`
 - `providers`
 - `raw_materials`
+  - incluye `unidad_medida_base` (obligatoria), `tipo_insumo` (opcional) y `descripcion_unidad_personalizada`
 - `receptions`
+  - incluye `unidad_medida` para registrar cantidades en contexto (ej: `30 unidad`, `30 g`, `30 kg`)
 - `reception_inspections`
+- `inventario_materias_primas`
+- `inventario_movimientos`
 - `trazabilidad_eventos`
 - `eventos_blockchain`
 - `ordenes_produccion`
+- `ordenes_produccion_productos` (incluye `observaciones` por producto para planificacion)
+- `productos_fabricados`
+- `producto_variantes`
+- `producto_variante_materia_prima`
 - `ordenes_produccion_materias`
 - `tiempos_produccion`
 - `lotes_producto_terminado`

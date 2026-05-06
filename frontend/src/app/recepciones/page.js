@@ -10,6 +10,8 @@ import { ROLES } from '@/utilidades/roles';
 export default function RecepcionesPage() {
   const [items, setItems] = useState([]);
   const [busqueda, setBusqueda] = useState('');
+  const [detalle, setDetalle] = useState(null);
+  const [errorDetalle, setErrorDetalle] = useState('');
 
   useEffect(() => {
     recepcionesServicio.listar().then(setItems).catch(() => setItems([]));
@@ -33,10 +35,46 @@ export default function RecepcionesPage() {
             <label>Buscar por proveedor, materia prima o lote</label>
             <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
           </div>
-          <table className="tabla"><thead><tr><th>ID</th><th>Fecha</th><th>Proveedor</th><th>Materia prima</th><th>Cantidad</th><th>Lote</th><th>Estado</th></tr></thead><tbody>{filtradas.map((r) => <tr key={r.id}><td>{r.id}</td><td>{new Date(r.fecha_recepcion).toLocaleString()}</td><td>{r.proveedor_nombre}</td><td>{r.materia_prima_nombre}</td><td>{r.cantidad}</td><td>{r.numero_lote || r.lote_proveedor}</td><td>{r.estado_recepcion}</td></tr>)}</tbody></table>
+          <table className="tabla"><thead><tr><th>ID</th><th>Fecha</th><th>Proveedor</th><th>Materia prima</th><th>Cantidad</th><th>Unidad</th><th>Lote</th><th>Estado</th><th>Accion</th></tr></thead><tbody>{filtradas.map((r) => <tr key={r.id}><td>{r.id}</td><td>{new Date(r.fecha_recepcion).toLocaleString()}</td><td>{r.proveedor_nombre}</td><td>{r.materia_prima_nombre}</td><td>{r.cantidad}</td><td>{r.unidad_medida || '-'}</td><td>{r.numero_lote || r.lote_proveedor}</td><td>{r.estado_recepcion}</td><td><button type="button" className="boton secundario" onClick={async () => { setErrorDetalle(''); try { const data = await recepcionesServicio.obtenerDetalle(r.id); setDetalle(data); } catch (err) { setErrorDetalle(err.message); } }}>Ver detalle</button></td></tr>)}</tbody></table>
+          {errorDetalle && <div className="alerta error">{errorDetalle}</div>}
         </div>
       </ContenedorApp>
       </GuardiaRol>
+      {detalle && (
+        <div className="modal-fondo" onClick={() => setDetalle(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-encabezado-fijo">
+              <h3>Detalle del lote: {detalle.numero_lote || '-'}</h3>
+              <button className="boton secundario" type="button" onClick={() => setDetalle(null)}>Cerrar</button>
+            </div>
+            <div className="grid grid-2">
+              <p><strong>Fecha recepcion:</strong> {new Date(detalle.fecha_recepcion).toLocaleString()}</p><p><strong>Proveedor:</strong> {detalle.proveedor}</p>
+              <p><strong>Materia prima:</strong> {detalle.materia_prima}</p><p><strong>Cantidad:</strong> {detalle.cantidad}</p>
+              <p><strong>Unidad de medida:</strong> {detalle.unidad_medida || '-'}</p>
+              <p><strong>Presentacion:</strong> {detalle.presentacion}</p><p><strong>Numero de lote:</strong> {detalle.numero_lote}</p>
+              <p><strong>Temperatura:</strong> {detalle.temperatura}</p><p><strong>Fecha vencimiento:</strong> {String(detalle.fecha_vencimiento).slice(0, 10)}</p>
+              <p><strong>Recibido por:</strong> {detalle.recibido_por}</p><p><strong>Estado final:</strong> {detalle.estado_recepcion}</p>
+            </div>
+            <div className="campo" style={{ marginTop: 8 }}><label>Observaciones</label><textarea value={detalle.observaciones || ''} readOnly /></div>
+            <h4>Inspeccion de producto</h4>
+            <div className="grid grid-2">
+              <p><strong>Olor:</strong> {String(detalle.olor)}</p><p><strong>Color:</strong> {String(detalle.color)}</p>
+              <p><strong>Textura:</strong> {String(detalle.textura)}</p><p><strong>Estado empaque:</strong> {String(detalle.estado_empaque)}</p>
+              <p><strong>Certificado calidad:</strong> {String(detalle.certificado_calidad)}</p><p><strong>Decision:</strong> {detalle.decision_final}</p>
+            </div>
+            <div className="campo" style={{ marginTop: 8 }}><label>Observaciones producto</label><textarea value={detalle.observaciones_producto || ''} readOnly /></div>
+            <h4>Inspeccion de vehiculo</h4>
+            <div className="grid grid-2">
+              <p><strong>Vehiculo:</strong> {detalle.vehiculo || '-'}</p><p><strong>Conductor:</strong> {detalle.conductor || '-'}</p>
+              <p><strong>Placa:</strong> {detalle.placa || '-'}</p><p><strong>Cumple limpieza:</strong> {String(detalle.limpieza_vehiculo)}</p>
+              <p><strong>Cumple transporte:</strong> {String(detalle.transporte_vehiculo)}</p>
+            </div>
+            <div className="campo" style={{ marginTop: 8 }}><label>Observaciones vehiculo</label><textarea value={detalle.observaciones_vehiculo || ''} readOnly /></div>
+            <h4>Blockchain</h4>
+            <table className="tabla"><thead><tr><th>Hash</th><th>Tipo evento</th><th>Fecha evento</th></tr></thead><tbody>{(detalle.blockchain || []).length ? detalle.blockchain.map((b) => <tr key={b.hash}><td>{b.hash}</td><td>{b.tipo_evento}</td><td>{new Date(b.fecha_evento).toLocaleString()}</td></tr>) : <tr><td colSpan={3}>Sin registros blockchain</td></tr>}</tbody></table>
+          </div>
+        </div>
+      )}
     </GuardiaSesion>
   );
 }

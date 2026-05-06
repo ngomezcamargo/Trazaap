@@ -2,7 +2,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { entorno } from '../../configuracion/entorno.js';
 import { ErrorHttp } from '../../middlewares/errorHttp.js';
-import { buscarUsuarioPorEmail, buscarUsuarioPorId } from './autenticacion.repository.js';
+import { normalizarRol } from '../../utilidades/roles.util.js';
+import { buscarUsuarioPorEmail, buscarUsuarioPorId, listarUsuariosOperarios } from './autenticacion.repository.js';
 
 export async function iniciarSesion(email, password) {
   const usuario = await buscarUsuarioPorEmail(email);
@@ -20,7 +21,7 @@ export async function iniciarSesion(email, password) {
     {
       sub: usuario.id,
       email: usuario.email,
-      role: usuario.role
+      role: normalizarRol(usuario.role)
     },
     entorno.jwtSecret,
     { expiresIn: entorno.jwtExpiresIn }
@@ -31,7 +32,7 @@ export async function iniciarSesion(email, password) {
     user: {
       id: usuario.id,
       email: usuario.email,
-      role: usuario.role
+      role: normalizarRol(usuario.role)
     }
   };
 }
@@ -42,5 +43,10 @@ export async function consultarPerfil(userId) {
     throw new ErrorHttp(404, 'Usuario no encontrado');
   }
 
-  return usuario;
+  return { ...usuario, role: normalizarRol(usuario.role) };
+}
+
+export async function listarOperariosService() {
+  const operarios = await listarUsuariosOperarios();
+  return operarios.map((usuario) => ({ ...usuario, role: normalizarRol(usuario.role) }));
 }
