@@ -1,0 +1,73 @@
+peer:
+  id: peer0.org1.trazaap.local
+  networkId: trazaap
+  listenAddress: 0.0.0.0:7051
+  address: peer0.org1.trazaap.local:7051
+  addressAutoDetect: false
+  gateway:
+    enabled: true
+  keepalive:
+    minInterval: 60s
+    client:
+      interval: 60s
+      timeout: 20s
+    deliveryClient:
+      interval: 60s
+      timeout: 20s
+  gossip:
+    bootstrap: peer0.org1.trazaap.local:7051
+    externalEndpoint: peer0.org1.trazaap.local:7051
+    useLeaderElection: false
+    orgLeader: true
+  tls:
+    enabled: true
+    cert:
+      file: ../organizations/peerOrganizations/org1.trazaap.local/peers/peer0.org1.trazaap.local/tls/server.crt
+    key:
+      file: ../organizations/peerOrganizations/org1.trazaap.local/peers/peer0.org1.trazaap.local/tls/server.key
+    rootcert:
+      file: ../organizations/peerOrganizations/org1.trazaap.local/peers/peer0.org1.trazaap.local/tls/ca.crt
+  localMspId: Org1MSP
+  mspConfigPath: ../organizations/peerOrganizations/org1.trazaap.local/users/Admin@org1.trazaap.local/msp
+  fileSystemPath: /tmp/hyperledger/production
+
+vm:
+  endpoint: unix:///var/run/docker.sock
+
+chaincode:
+  id:
+    path:
+    name:
+  builder: $(DOCKER_NS)/fabric-ccenv:$(TWO_DIGIT_VERSION)
+  pull: false
+  golang:
+    runtime: $(DOCKER_NS)/fabric-baseos:$(TWO_DIGIT_VERSION)
+  java:
+    runtime: $(DOCKER_NS)/fabric-javaenv:$(TWO_DIGIT_VERSION)
+  node:
+    runtime: $(DOCKER_NS)/fabric-nodeenv:$(TWO_DIGIT_VERSION)
+  externalBuilders: []
+
+ledger:
+  blockchain:
+  state:
+    stateDatabase: goleveldb
+  history:
+    enableHistoryDatabase: true
+
+operations:
+  listenAddress: 127.0.0.1:9443
+
+metrics:
+  provider: disabled
+
+logging:
+  level: info
+
+BCCSP:
+  Default: SW
+  SW:
+    Hash: SHA2
+    Security: 256
+    FileKeyStore:
+      KeyStore:

@@ -30,5 +30,16 @@ export const entorno = {
     database: process.env.POSTGRES_DB,
     user: process.env.POSTGRES_USER,
     password: process.env.POSTGRES_PASSWORD
+  },
+  fabric: {
+    enabled: process.env.FABRIC_ENABLED !== 'false',
+    mspId: process.env.FABRIC_MSP_ID || 'Org1MSP',
+    channelName: process.env.FABRIC_CHANNEL_NAME || 'trazabilidad-channel',
+    chaincodeName: process.env.FABRIC_CHAINCODE_NAME || 'traceability',
+    peerEndpoint: process.env.FABRIC_PEER_ENDPOINT || 'localhost:7051',
+    peerHostAlias: process.env.FABRIC_PEER_HOST_ALIAS || 'peer0.org1.trazaap.local',
+    tlsCertPath: process.env.FABRIC_TLS_CERT_PATH || '../fabric/organizations/peerOrganizations/org1.trazaap.local/peers/peer0.org1.trazaap.local/tls/ca.crt',
+    certPath: process.env.FABRIC_CERT_PATH || '../fabric/organizations/peerOrganizations/org1.trazaap.local/users/Admin@org1.trazaap.local/msp/signcerts/cert.pem',
+    keyPath: process.env.FABRIC_KEY_PATH || '../fabric/organizations/peerOrganizations/org1.trazaap.local/users/Admin@org1.trazaap.local/msp/keystore/priv_sk'
   }
 };

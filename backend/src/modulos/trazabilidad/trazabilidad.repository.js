@@ -90,3 +90,88 @@ export async function listarEventosPorLote(lote) {
   );
   return rows;
 }
+
+export async function buscarUltimoEventoAuditablePorLote(codigoLote) {
+  const { rows } = await poolPostgres.query(
+    `SELECT *
+     FROM traceability_events
+     WHERE codigo_lote = $1
+     ORDER BY fecha_evento DESC, created_at DESC
+     LIMIT 1`,
+    [codigoLote]
+  );
+  return rows[0] || null;
+}
+
+export async function crearEventoAuditable(data) {
+  const { rows } = await poolPostgres.query(
+    `INSERT INTO traceability_events (
+      id,
+      codigo_lote,
+      tipo_evento,
+      descripcion,
+      responsable,
+      fecha_evento,
+      datos_evento,
+      hash_evento,
+      hash_anterior,
+      fabric_tx_id,
+      fabric_block_number,
+      fabric_status,
+      fabric_error
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    RETURNING *`,
+    [
+      data.id,
+      data.codigo_lote,
+      data.tipo_evento,
+      data.descripcion,
+      data.responsable,
+      data.fecha_evento,
+      JSON.stringify(data.datos_evento || {}),
+      data.hash_evento,
+      data.hash_anterior,
+      data.fabric_tx_id || null,
+      data.fabric_block_number || null,
+      data.fabric_status || 'pendiente',
+      data.fabric_error || null
+    ]
+  );
+  return rows[0];
+}
+
+export async function actualizarResultadoFabricEvento(id, data) {
+  const { rows } = await poolPostgres.query(
+    `UPDATE traceability_events
+     SET fabric_tx_id = $2,
+         fabric_block_number = $3,
+         fabric_status = $4,
+         fabric_error = $5
+     WHERE id = $1
+     RETURNING *`,
+    [
+      id,
+      data.fabric_tx_id || null,
+      data.fabric_block_number || null,
+      data.fabric_status,
+      data.fabric_error || null
+    ]
+  );
+  return rows[0] || null;
+}
+
+export async function buscarEventoAuditablePorId(id) {
+  const { rows } = await poolPostgres.query('SELECT * FROM traceability_events WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
+export async function listarEventosAuditablesPorLote(codigoLote) {
+  const { rows } = await poolPostgres.query(
+    `SELECT *
+     FROM traceability_events
+     WHERE codigo_lote = $1
+     ORDER BY fecha_evento ASC, created_at ASC`,
+    [codigoLote]
+  );
+  return rows;
+}

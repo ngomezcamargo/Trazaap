@@ -23,10 +23,10 @@ Trazaap queda refactorizado como una base academica limpia para Sprint 2, enfoca
 - Backend: Node.js + Express
 - Base de datos: PostgreSQL
 - Autenticacion: JWT
-- Blockchain: modulo desacoplado con hash SHA-256
-- Integracion objetivo: Hyperledger Fabric (`backend/src/modulos/blockchain/fabric.client.js` preparado)
+- Blockchain: Hyperledger Fabric local como capa de auditoria minima
+- Integracion Fabric: backend con Fabric Gateway SDK hacia chaincode `traceability`
 
-Sin MongoDB. La red real de Fabric queda para siguientes sprints.
+Sin MongoDB. PostgreSQL sigue guardando los datos completos del sistema.
 
 ## Arquitectura backend (modular por dominio)
 
@@ -83,6 +83,11 @@ src/
 |       |-- servicios/
 |       `-- utilidades/
 |-- docker-compose.yml
+|-- fabric/
+|   |-- chaincode/traceability/
+|   |-- configtx/
+|   |-- docker-compose.fabric.yml
+|   `-- scripts/
 `-- .env.example
 ```
 
@@ -103,6 +108,10 @@ Base URL backend: `http://localhost:4000/api`
 - `POST /materias-primas`
 - `PUT /materias-primas/:id`
 - `GET /traceability/lote/:lote`
+- `POST /traceability/events`
+- `GET /traceability/lots/:codigoLote/events`
+- `GET /traceability/events/:eventId/fabric`
+- `GET /traceability/lots/:codigoLote/verify`
 - `GET /produccion/ordenes`
 - `GET /produccion/recepciones-disponibles`
 - `POST /produccion/ordenes`
@@ -112,14 +121,75 @@ Base URL backend: `http://localhost:4000/api`
 - `GET /liberacion`
 - `POST /liberacion`
 
-## Blockchain en Sprint 2
+## Blockchain Hyperledger Fabric
 
-- Eventos criticos registrados: recepcion (incluye inspecciones), produccion y liberacion.
-- Produccion incluye: productos, materias primas, lotes usados, cantidades reales, unidades y tiempos/temperaturas.
-- Liberacion incluye: producto, lote, vencimiento, unidades, peso neto, estado y responsable.
-- Cada evento genera hash `SHA-256` sobre el payload completo.
-- Persistencia en PostgreSQL en `eventos_blockchain`.
-- `backend/src/modulos/blockchain/blockchain.adapter.js` es el punto de integracion futura con el SDK de Hyperledger Fabric.
+La arquitectura de auditoria es:
+
+```text
+Frontend -> Backend -> FabricTraceabilityService -> Hyperledger Fabric
+```
+
+PostgreSQL conserva el evento completo en `traceability_events`. Fabric conserva solo evidencia minima:
+
+- `eventId`
+- `codigoLote`
+- `tipoEvento`
+- `hashEvento`
+- `hashAnterior`
+- `timestamp`
+- `responsable`
+
+El backend calcula `hashEvento` con SHA-256 sobre una representacion estable de:
+
+- `codigoLote`
+- `tipoEvento`
+- `descripcion`
+- `responsable`
+- `fechaEvento`
+- `datosEvento`
+- `hashAnterior`
+
+`hashAnterior` es el ultimo `hashEvento` registrado para el mismo lote. Para el primer evento del lote es `null`.
+
+### Red Fabric local
+
+La red de desarrollo esta en `fabric/` y usa:
+
+- 1 CA: `ca.trazaap.local`
+- 1 orderer: `orderer.trazaap.local`
+- 1 peer: `peer0.org1.trazaap.local`
+- 1 organizacion: `Org1MSP`
+- 1 canal: `trazabilidad-channel`
+- 1 chaincode: `traceability`
+
+Requisitos previos:
+
+- Docker y Docker Compose
+- Node.js 18+
+- Binarios de Hyperledger Fabric en PATH: `peer`, `configtxgen`, `osnadmin`, `fabric-ca-client`
+
+Comandos:
+
+```bash
+cd fabric
+./scripts/start.sh
+./scripts/create-channel.sh
+./scripts/deploy-chaincode.sh
+```
+
+Detener red:
+
+```bash
+cd fabric
+./scripts/stop.sh
+```
+
+Limpiar volumenes y artefactos de desarrollo:
+
+```bash
+cd fabric
+./scripts/clean.sh
+```
 
 ## Usuario semilla
 
@@ -143,6 +213,16 @@ POSTGRES_PORT=5432
 POSTGRES_DB=trazaap
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
+
+FABRIC_ENABLED=true
+FABRIC_MSP_ID=Org1MSP
+FABRIC_CHANNEL_NAME=trazabilidad-channel
+FABRIC_CHAINCODE_NAME=traceability
+FABRIC_PEER_ENDPOINT=localhost:7051
+FABRIC_PEER_HOST_ALIAS=peer0.org1.trazaap.local
+FABRIC_TLS_CERT_PATH=../fabric/organizations/peerOrganizations/org1.trazaap.local/peers/peer0.org1.trazaap.local/tls/ca.crt
+FABRIC_CERT_PATH=../fabric/organizations/peerOrganizations/org1.trazaap.local/users/Admin@org1.trazaap.local/msp/signcerts/cert.pem
+FABRIC_KEY_PATH=../fabric/organizations/peerOrganizations/org1.trazaap.local/users/Admin@org1.trazaap.local/msp/keystore/priv_sk
 ```
 
 `frontend/.env.local`:
@@ -179,6 +259,8 @@ cd backend
 npm run dev
 ```
 
+Para probar la integracion Fabric, levanta antes la red Fabric y despliega el chaincode.
+
 5. Levantar frontend:
 
 ```bash
@@ -190,7 +272,68 @@ npm run dev
 
 ## Docker local
 
-El `docker-compose.yml` incluye solo PostgreSQL.
+El `docker-compose.yml` incluye PostgreSQL. La red Fabric local se levanta con `fabric/docker-compose.fabric.yml` mediante los scripts de `fabric/scripts`.
+
+## Ejemplos API Fabric
+
+Primero inicia sesion y conserva el token:
+
+```bash
+curl -s -X POST http://localhost:4000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@trazaap.local","password":"Admin123*"}'
+```
+
+Crear evento auditable:
+
+```bash
+curl -X POST http://localhost:4000/api/traceability/events \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "codigoLote": "L-2026-001",
+    "tipoEvento": "RECEPCION_MATERIA_PRIMA",
+    "descripcion": "Recepcion de harina de trigo",
+    "responsable": "admin@trazaap.local",
+    "datosEvento": {
+      "proveedor": "Proveedor demo",
+      "cantidad": 25,
+      "unidad": "kg"
+    }
+  }'
+```
+
+Consultar eventos del lote desde base de datos y, si Fabric esta disponible, tambien desde Fabric:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:4000/api/traceability/lots/L-2026-001/events
+```
+
+Consultar evidencia directa desde Fabric:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:4000/api/traceability/events/$EVENT_ID/fabric
+```
+
+Verificar integridad del lote:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:4000/api/traceability/lots/L-2026-001/verify
+```
+
+Respuesta esperada:
+
+```json
+{
+  "codigoLote": "L-2026-001",
+  "integridadValida": true,
+  "eventosVerificados": 4,
+  "errores": []
+}
+```
 
 ## Modelo de datos
 
@@ -204,6 +347,7 @@ Tablas base de Sprint 2:
 - `reception_inspections`
 - `trazabilidad_eventos`
 - `eventos_blockchain`
+- `traceability_events`
 - `ordenes_produccion`
 - `ordenes_produccion_materias`
 - `tiempos_produccion`

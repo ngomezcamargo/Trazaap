@@ -1,11 +1,82 @@
+import crypto from 'crypto';
+import { randomUUID } from 'crypto';
 import { ErrorHttp } from '../../middlewares/errorHttp.js';
 import { listarEventosBlockchainPorLote } from '../blockchain/blockchain.repository.js';
+import { fabricTraceabilityService } from '../blockchain/fabric-traceability.service.js';
 import {
+  actualizarResultadoFabricEvento,
+  buscarEventoAuditablePorId,
   buscarOrdenPorLoteFinalOLoteRecepcion,
   buscarTrazabilidadRecepcionPorLote,
+  buscarUltimoEventoAuditablePorLote,
+  crearEventoAuditable,
+  listarEventosAuditablesPorLote,
   listarEventosPorLote,
   obtenerDetalleProduccion
 } from './trazabilidad.repository.js';
+
+function ordenarValor(value) {
+  if (Array.isArray(value)) return value.map(ordenarValor);
+  if (value && typeof value === 'object' && value.constructor === Object) {
+    return Object.keys(value)
+      .sort()
+      .reduce((acc, key) => {
+        acc[key] = ordenarValor(value[key]);
+        return acc;
+      }, {});
+  }
+  return value;
+}
+
+function serializarEstable(value) {
+  return JSON.stringify(ordenarValor(value));
+}
+
+export function calcularHashEvento(data) {
+  const base = {
+    codigoLote: data.codigoLote,
+    tipoEvento: data.tipoEvento,
+    descripcion: data.descripcion,
+    responsable: data.responsable,
+    fechaEvento: data.fechaEvento,
+    datosEvento: data.datosEvento || {},
+    hashAnterior: data.hashAnterior || null
+  };
+
+  return crypto.createHash('sha256').update(serializarEstable(base)).digest('hex');
+}
+
+function mapearEventoAuditable(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    codigoLote: row.codigo_lote,
+    tipoEvento: row.tipo_evento,
+    descripcion: row.descripcion,
+    responsable: row.responsable,
+    fechaEvento: row.fecha_evento,
+    datosEvento: row.datos_evento,
+    hashEvento: row.hash_evento,
+    hashAnterior: row.hash_anterior,
+    fabricTxId: row.fabric_tx_id,
+    fabricBlockNumber: row.fabric_block_number,
+    fabricStatus: row.fabric_status,
+    fabricError: row.fabric_error,
+    createdAt: row.created_at
+  };
+}
+
+function evidenciaFabricDesdeEvento(evento) {
+  return {
+    eventId: evento.id,
+    codigoLote: evento.codigo_lote,
+    tipoEvento: evento.tipo_evento,
+    hashEvento: evento.hash_evento,
+    hashAnterior: evento.hash_anterior,
+    timestamp: new Date(evento.fecha_evento).toISOString(),
+    responsable: evento.responsable
+  };
+}
 
 export async function consultarTrazabilidadPorLote(lote) {
   const recepcion = await buscarTrazabilidadRecepcionPorLote(lote);
@@ -77,5 +148,162 @@ export async function consultarTrazabilidadPorLote(lote) {
       usuario: e.usuario,
       payload: e.payload_json
     }))
+  };
+}
+
+export async function crearEventoTrazabilidadAuditable(data) {
+  const fechaEvento = new Date(data.fechaEvento || Date.now()).toISOString();
+  const ultimoEvento = await buscarUltimoEventoAuditablePorLote(data.codigoLote);
+  const hashAnterior = ultimoEvento?.hash_evento || null;
+  const hashEvento = calcularHashEvento({
+    codigoLote: data.codigoLote,
+    tipoEvento: data.tipoEvento,
+    descripcion: data.descripcion,
+    responsable: data.responsable,
+    fechaEvento,
+    datosEvento: data.datosEvento || {},
+    hashAnterior
+  });
+
+  const evento = await crearEventoAuditable({
+    id: randomUUID(),
+    codigo_lote: data.codigoLote,
+    tipo_evento: data.tipoEvento,
+    descripcion: data.descripcion,
+    responsable: data.responsable,
+    fecha_evento: fechaEvento,
+    datos_evento: data.datosEvento || {},
+    hash_evento: hashEvento,
+    hash_anterior: hashAnterior,
+    fabric_status: 'pendiente'
+  });
+
+  try {
+    const resultadoFabric = await fabricTraceabilityService.registerEventOnFabric(evidenciaFabricDesdeEvento(evento));
+    const actualizado = await actualizarResultadoFabricEvento(evento.id, {
+      fabric_tx_id: resultadoFabric.transactionId,
+      fabric_block_number: resultadoFabric.blockNumber,
+      fabric_status: 'registrado',
+      fabric_error: null
+    });
+    return mapearEventoAuditable(actualizado);
+  } catch (error) {
+    const actualizado = await actualizarResultadoFabricEvento(evento.id, {
+      fabric_tx_id: null,
+      fabric_block_number: null,
+      fabric_status: 'error',
+      fabric_error: error.message
+    });
+    return mapearEventoAuditable(actualizado);
+  }
+}
+
+export async function listarEventosTrazabilidadAuditablePorLote(codigoLote) {
+  const eventos = await listarEventosAuditablesPorLote(codigoLote);
+  let eventosFabric = [];
+
+  try {
+    eventosFabric = await fabricTraceabilityService.getEventsByLotFromFabric(codigoLote);
+  } catch {
+    eventosFabric = [];
+  }
+
+  return {
+    codigoLote,
+    eventos: eventos.map(mapearEventoAuditable),
+    eventosFabric
+  };
+}
+
+export async function consultarEventoFabric(eventId) {
+  const evento = await buscarEventoAuditablePorId(eventId);
+  if (!evento) throw new ErrorHttp(404, 'Evento de trazabilidad no encontrado');
+  return fabricTraceabilityService.getEventFromFabric(eventId);
+}
+
+export async function verificarEventoContraFabric(eventId) {
+  const evento = await buscarEventoAuditablePorId(eventId);
+  if (!evento) throw new ErrorHttp(404, 'Evento de trazabilidad no encontrado');
+
+  const evidenciaFabric = await fabricTraceabilityService.getEventFromFabric(eventId);
+  return {
+    eventId,
+    valido:
+      evidenciaFabric.hashEvento === evento.hash_evento &&
+      evidenciaFabric.hashAnterior === evento.hash_anterior &&
+      evidenciaFabric.codigoLote === evento.codigo_lote,
+    baseDatos: mapearEventoAuditable(evento),
+    fabric: evidenciaFabric
+  };
+}
+
+export async function verificarIntegridadLote(codigoLote) {
+  const eventos = await listarEventosAuditablesPorLote(codigoLote);
+  const errores = [];
+  let hashAnteriorEsperado = null;
+
+  for (const evento of eventos) {
+    const hashRecalculado = calcularHashEvento({
+      codigoLote: evento.codigo_lote,
+      tipoEvento: evento.tipo_evento,
+      descripcion: evento.descripcion,
+      responsable: evento.responsable,
+      fechaEvento: new Date(evento.fecha_evento).toISOString(),
+      datosEvento: evento.datos_evento || {},
+      hashAnterior: evento.hash_anterior
+    });
+
+    if (evento.hash_anterior !== hashAnteriorEsperado) {
+      errores.push({
+        eventId: evento.id,
+        tipo: 'HASH_ANTERIOR_INVALIDO',
+        esperado: hashAnteriorEsperado,
+        actual: evento.hash_anterior
+      });
+    }
+
+    if (hashRecalculado !== evento.hash_evento) {
+      errores.push({
+        eventId: evento.id,
+        tipo: 'HASH_EVENTO_INVALIDO',
+        esperado: hashRecalculado,
+        actual: evento.hash_evento
+      });
+    }
+
+    try {
+      const evidenciaFabric = await fabricTraceabilityService.getEventFromFabric(evento.id);
+      if (evidenciaFabric.hashEvento !== evento.hash_evento) {
+        errores.push({
+          eventId: evento.id,
+          tipo: 'HASH_FABRIC_NO_COINCIDE',
+          esperado: evento.hash_evento,
+          actual: evidenciaFabric.hashEvento
+        });
+      }
+      if (evidenciaFabric.hashAnterior !== evento.hash_anterior) {
+        errores.push({
+          eventId: evento.id,
+          tipo: 'HASH_ANTERIOR_FABRIC_NO_COINCIDE',
+          esperado: evento.hash_anterior,
+          actual: evidenciaFabric.hashAnterior
+        });
+      }
+    } catch (error) {
+      errores.push({
+        eventId: evento.id,
+        tipo: 'FABRIC_NO_DISPONIBLE',
+        mensaje: error.message
+      });
+    }
+
+    hashAnteriorEsperado = evento.hash_evento;
+  }
+
+  return {
+    codigoLote,
+    integridadValida: errores.length === 0,
+    eventosVerificados: eventos.length,
+    errores
   };
 }

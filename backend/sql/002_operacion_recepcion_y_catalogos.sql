@@ -44,12 +44,12 @@ BEGIN
       AND column_name = 'olor'
       AND data_type <> 'boolean'
   ) THEN
-    EXECUTE $$
+    EXECUTE $sql$
       ALTER TABLE reception_inspections
       ALTER COLUMN olor TYPE BOOLEAN USING (
         CASE WHEN lower(trim(olor)) IN ('si', 'true', '1', 'ok', 'cumple', 'aprobado', 'conforme') THEN true ELSE false END
       )
-    $$;
+    $sql$;
   END IF;
 
   IF EXISTS (
@@ -59,12 +59,12 @@ BEGIN
       AND column_name = 'color'
       AND data_type <> 'boolean'
   ) THEN
-    EXECUTE $$
+    EXECUTE $sql$
       ALTER TABLE reception_inspections
       ALTER COLUMN color TYPE BOOLEAN USING (
         CASE WHEN lower(trim(color)) IN ('si', 'true', '1', 'ok', 'cumple', 'aprobado', 'conforme') THEN true ELSE false END
       )
-    $$;
+    $sql$;
   END IF;
 
   IF EXISTS (
@@ -74,12 +74,12 @@ BEGIN
       AND column_name = 'textura'
       AND data_type <> 'boolean'
   ) THEN
-    EXECUTE $$
+    EXECUTE $sql$
       ALTER TABLE reception_inspections
       ALTER COLUMN textura TYPE BOOLEAN USING (
         CASE WHEN lower(trim(textura)) IN ('si', 'true', '1', 'ok', 'cumple', 'aprobado', 'conforme') THEN true ELSE false END
       )
-    $$;
+    $sql$;
   END IF;
 
   IF EXISTS (
@@ -89,12 +89,12 @@ BEGIN
       AND column_name = 'estado_empaque'
       AND data_type <> 'boolean'
   ) THEN
-    EXECUTE $$
+    EXECUTE $sql$
       ALTER TABLE reception_inspections
       ALTER COLUMN estado_empaque TYPE BOOLEAN USING (
         CASE WHEN lower(trim(estado_empaque)) IN ('si', 'true', '1', 'ok', 'cumple', 'aprobado', 'conforme') THEN true ELSE false END
       )
-    $$;
+    $sql$;
   END IF;
 END
 $$;
