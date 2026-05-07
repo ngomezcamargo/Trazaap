@@ -33,6 +33,12 @@ export async function crearLiberacionService(data, actor) {
     unidadesLiberadas: liberacion.unidades_liberadas,
     pesoNeto: liberacion.peso_neto,
     fechaVencimiento: liberacion.fecha_vencimiento,
+    numeroFactura: liberacion.numero_factura,
+    clienteDestino: liberacion.cliente_destino,
+    conductor: liberacion.conductor,
+    placaVehiculo: liberacion.placa_vehiculo,
+    limpiezaVehiculo: liberacion.limpieza_vehiculo,
+    documentacionDotacion: liberacion.documentacion_dotacion,
     estadoLiberacion: liberacion.estado_liberacion
   });
 

@@ -14,13 +14,10 @@ const inspeccionProductoSchema = z.object({
   })
 });
 
-const inspeccionVehiculoSchema = z.object({
-  vehiculo: z.string().trim().min(1, 'Debe registrar el vehiculo.'),
-  conductor: z.string().trim().min(1, 'Debe registrar el conductor.'),
-  placa: z.string().optional().default(''),
-  limpieza_vehiculo: z.coerce.boolean({ message: 'Debe validar las condiciones del vehiculo.' }),
-  transporte_vehiculo: z.coerce.boolean({ message: 'Debe validar las condiciones del vehiculo.' }),
-  observaciones_vehiculo: z.string().optional().default('')
+const inspeccionTransporteSchema = z.object({
+  condiciones_vehiculo: z.coerce.boolean({ message: 'Debe validar las condiciones del vehiculo.' }),
+  higiene_conductor: z.coerce.boolean({ message: 'Debe validar la higiene del conductor.' }),
+  observaciones_transporte: z.string().optional().default('')
 });
 
 export const crearRecepcionSchema = z.object({
@@ -37,7 +34,7 @@ export const crearRecepcionSchema = z.object({
   recibido_por: z.coerce.number().int().positive(),
   estado_recepcion: z.enum(estados),
   inspeccion_producto: inspeccionProductoSchema.optional(),
-  inspeccion_vehiculo: inspeccionVehiculoSchema.optional()
+  inspeccion_transporte: inspeccionTransporteSchema.optional()
 }).superRefine((data, ctx) => {
   if (!data.inspeccion_producto) {
     ctx.addIssue({
@@ -47,11 +44,11 @@ export const crearRecepcionSchema = z.object({
     });
   }
 
-  if (!data.inspeccion_vehiculo) {
+  if (!data.inspeccion_transporte) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: 'Debe completar la inspeccion del vehiculo antes de guardar la recepcion.',
-      path: ['inspeccion_vehiculo']
+      message: 'Debe completar la inspeccion de transporte antes de guardar la recepcion.',
+      path: ['inspeccion_transporte']
     });
   }
 });

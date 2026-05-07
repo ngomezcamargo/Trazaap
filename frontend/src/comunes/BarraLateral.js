@@ -13,7 +13,6 @@ const linksGerente = [
   { href: '/recepciones', label: 'Recepciones' },
   { href: '/produccion', label: 'Produccion' },
   { href: '/trazabilidad', label: 'Trazabilidad' },
-  { href: '/blockchain', label: 'Blockchain' },
   { href: '/inventario', label: 'Inventario' },
   { href: '/reportes', label: 'Reportes' }
 ];

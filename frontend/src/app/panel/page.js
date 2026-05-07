@@ -107,7 +107,6 @@ export default function PanelPage() {
                 </ul>
                 <div className="acciones" style={{ marginTop: 12 }}>
                   <Link href="/trazabilidad" className="boton">Ir a trazabilidad</Link>
-                  <Link href="/blockchain" className="boton secundario">Eventos blockchain</Link>
                 </div>
               </div>
             </div>

@@ -63,15 +63,12 @@ export default function RecepcionesPage() {
               <p><strong>Certificado calidad:</strong> {String(detalle.certificado_calidad)}</p><p><strong>Decision:</strong> {detalle.decision_final}</p>
             </div>
             <div className="campo" style={{ marginTop: 8 }}><label>Observaciones producto</label><textarea value={detalle.observaciones_producto || ''} readOnly /></div>
-            <h4>Inspeccion de vehiculo</h4>
+            <h4>Inspeccion de transporte</h4>
             <div className="grid grid-2">
-              <p><strong>Vehiculo:</strong> {detalle.vehiculo || '-'}</p><p><strong>Conductor:</strong> {detalle.conductor || '-'}</p>
-              <p><strong>Placa:</strong> {detalle.placa || '-'}</p><p><strong>Cumple limpieza:</strong> {String(detalle.limpieza_vehiculo)}</p>
-              <p><strong>Cumple transporte:</strong> {String(detalle.transporte_vehiculo)}</p>
+              <p><strong>Condiciones del vehiculo:</strong> {String(detalle.condiciones_vehiculo)}</p>
+              <p><strong>Higiene del conductor:</strong> {String(detalle.higiene_conductor)}</p>
             </div>
-            <div className="campo" style={{ marginTop: 8 }}><label>Observaciones vehiculo</label><textarea value={detalle.observaciones_vehiculo || ''} readOnly /></div>
-            <h4>Blockchain</h4>
-            <table className="tabla"><thead><tr><th>Hash</th><th>Tipo evento</th><th>Fecha evento</th></tr></thead><tbody>{(detalle.blockchain || []).length ? detalle.blockchain.map((b) => <tr key={b.hash}><td>{b.hash}</td><td>{b.tipo_evento}</td><td>{new Date(b.fecha_evento).toLocaleString()}</td></tr>) : <tr><td colSpan={3}>Sin registros blockchain</td></tr>}</tbody></table>
+            <div className="campo" style={{ marginTop: 8 }}><label>Observaciones de transporte</label><textarea value={detalle.observaciones_transporte || ''} readOnly /></div>
           </div>
         </div>
       )}

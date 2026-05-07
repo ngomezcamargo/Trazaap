@@ -21,10 +21,15 @@
       "static/chunks/main-app.js",
       "static/chunks/app/iniciar-sesion/page.js"
     ],
-    "/inventario/page": [
+    "/recepciones/nueva/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/inventario/page.js"
+      "static/chunks/app/recepciones/nueva/page.js"
+    ],
+    "/produccion/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/produccion/page.js"
     ],
     "/proveedores/page": [
       "static/chunks/webpack.js",
@@ -40,6 +45,11 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/recepciones/page.js"
+    ],
+    "/inventario/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/inventario/page.js"
     ]
   }
 }

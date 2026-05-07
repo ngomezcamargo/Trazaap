@@ -6,6 +6,20 @@ function generarHash(evento) {
   return crypto.createHash('sha256').update(JSON.stringify(evento)).digest('hex');
 }
 
+async function registrarEvento(evento) {
+  const hash = generarHash(evento);
+  await blockchainAdapter.registrarEvento(hash, evento);
+
+  return guardarEventoBlockchain({
+    tipo_evento: evento.tipoEvento,
+    lote: evento.lote,
+    hash,
+    fecha_evento: evento.fechaEvento,
+    usuario: evento.usuario,
+    payload_json: evento
+  });
+}
+
 export async function registrarEventoRecepcion(data) {
   const evento = {
     tipoEvento: 'recepcion_materia_prima',
@@ -23,22 +37,12 @@ export async function registrarEventoRecepcion(data) {
       fechaVencimiento: data.fechaVencimiento,
       recibidoPor: data.recibidoPor,
       inspeccionProducto: data.resultadoInspeccionProducto,
-      inspeccionVehiculo: data.resultadoInspeccionVehiculo,
+      inspeccionTransporte: data.resultadoInspeccionTransporte,
       estadoRecepcion: data.estadoRecepcion
     }
   };
 
-  const hash = generarHash(evento);
-  await blockchainAdapter.registrarEvento(hash, evento);
-
-  return guardarEventoBlockchain({
-    tipo_evento: evento.tipoEvento,
-    lote: evento.lote,
-    hash,
-    fecha_evento: evento.fechaEvento,
-    usuario: evento.usuario,
-    payload_json: evento
-  });
+  return registrarEvento(evento);
 }
 
 export async function registrarEventoInspeccion(data) {
@@ -50,17 +54,7 @@ export async function registrarEventoInspeccion(data) {
     datosRelevantes: data
   };
 
-  const hash = generarHash(evento);
-  await blockchainAdapter.registrarEvento(hash, evento);
-
-  return guardarEventoBlockchain({
-    tipo_evento: evento.tipoEvento,
-    lote: evento.lote,
-    hash,
-    fecha_evento: evento.fechaEvento,
-    usuario: evento.usuario,
-    payload_json: evento
-  });
+  return registrarEvento(evento);
 }
 
 export async function registrarEventoProduccion(data) {
@@ -80,17 +74,7 @@ export async function registrarEventoProduccion(data) {
     }
   };
 
-  const hash = generarHash(evento);
-  await blockchainAdapter.registrarEvento(hash, evento);
-
-  return guardarEventoBlockchain({
-    tipo_evento: evento.tipoEvento,
-    lote: evento.lote,
-    hash,
-    fecha_evento: evento.fechaEvento,
-    usuario: evento.usuario,
-    payload_json: evento
-  });
+  return registrarEvento(evento);
 }
 
 export async function registrarEventoLiberacion(data) {
@@ -108,15 +92,5 @@ export async function registrarEventoLiberacion(data) {
     }
   };
 
-  const hash = generarHash(evento);
-  await blockchainAdapter.registrarEvento(hash, evento);
-
-  return guardarEventoBlockchain({
-    tipo_evento: evento.tipoEvento,
-    lote: evento.lote,
-    hash,
-    fecha_evento: evento.fechaEvento,
-    usuario: evento.usuario,
-    payload_json: evento
-  });
+  return registrarEvento(evento);
 }

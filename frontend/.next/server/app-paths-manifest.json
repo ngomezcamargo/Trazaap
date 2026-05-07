@@ -1,9 +1,8 @@
 {
-  "/page": "app/page.js",
-  "/inventario/page": "app/inventario/page.js",
-  "/panel/page": "app/panel/page.js",
+  "/recepciones/nueva/page": "app/recepciones/nueva/page.js",
   "/iniciar-sesion/page": "app/iniciar-sesion/page.js",
+  "/inventario/page": "app/inventario/page.js",
+  "/recepciones/page": "app/recepciones/page.js",
   "/proveedores/page": "app/proveedores/page.js",
-  "/materias-primas/page": "app/materias-primas/page.js",
-  "/recepciones/page": "app/recepciones/page.js"
+  "/materias-primas/page": "app/materias-primas/page.js"
 }

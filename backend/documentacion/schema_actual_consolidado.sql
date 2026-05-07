@@ -98,20 +98,77 @@ CREATE TABLE IF NOT EXISTS reception_inspections (
   textura BOOLEAN NOT NULL,
   estado_empaque BOOLEAN NOT NULL,
   certificado_calidad BOOLEAN NOT NULL,
-  inspeccion_vehiculo BOOLEAN NOT NULL,
+  inspeccion_transporte BOOLEAN NOT NULL,
   observaciones TEXT,
   observaciones_producto TEXT,
-  vehiculo VARCHAR(120),
-  conductor VARCHAR(120),
-  placa VARCHAR(20),
-  limpieza_vehiculo BOOLEAN,
-  transporte_vehiculo BOOLEAN,
-  observaciones_vehiculo TEXT,
+  condiciones_vehiculo BOOLEAN,
+  higiene_conductor BOOLEAN,
+  observaciones_transporte TEXT,
   decision_final VARCHAR(20) NOT NULL CHECK (decision_final IN ('aceptado', 'rechazado', 'retenido')),
   inspeccionado_por BIGINT NOT NULL REFERENCES users(id),
   inspeccionado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE reception_inspections DROP COLUMN IF EXISTS vehiculo;
+ALTER TABLE reception_inspections DROP COLUMN IF EXISTS conductor;
+ALTER TABLE reception_inspections DROP COLUMN IF EXISTS placa;
+ALTER TABLE reception_inspections ADD COLUMN IF NOT EXISTS inspeccion_transporte BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE reception_inspections ADD COLUMN IF NOT EXISTS condiciones_vehiculo BOOLEAN;
+ALTER TABLE reception_inspections ADD COLUMN IF NOT EXISTS higiene_conductor BOOLEAN;
+ALTER TABLE reception_inspections ADD COLUMN IF NOT EXISTS observaciones_transporte TEXT;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'reception_inspections'
+      AND column_name = 'inspeccion_vehiculo'
+  ) THEN
+    UPDATE reception_inspections
+    SET inspeccion_transporte = inspeccion_vehiculo
+    WHERE inspeccion_transporte = false;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'reception_inspections'
+      AND column_name = 'limpieza_vehiculo'
+  ) THEN
+    UPDATE reception_inspections
+    SET condiciones_vehiculo = limpieza_vehiculo
+    WHERE condiciones_vehiculo IS NULL;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'reception_inspections'
+      AND column_name = 'transporte_vehiculo'
+  ) THEN
+    UPDATE reception_inspections
+    SET higiene_conductor = transporte_vehiculo
+    WHERE higiene_conductor IS NULL;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'reception_inspections'
+      AND column_name = 'observaciones_vehiculo'
+  ) THEN
+    UPDATE reception_inspections
+    SET observaciones_transporte = observaciones_vehiculo
+    WHERE observaciones_transporte IS NULL;
+  END IF;
+END $$;
+
+ALTER TABLE reception_inspections DROP COLUMN IF EXISTS inspeccion_vehiculo;
+ALTER TABLE reception_inspections DROP COLUMN IF EXISTS limpieza_vehiculo;
+ALTER TABLE reception_inspections DROP COLUMN IF EXISTS transporte_vehiculo;
+ALTER TABLE reception_inspections DROP COLUMN IF EXISTS observaciones_vehiculo;
 
 CREATE TABLE IF NOT EXISTS inventario_materias_primas (
   id BIGSERIAL PRIMARY KEY,
@@ -154,6 +211,12 @@ CREATE TABLE IF NOT EXISTS eventos_blockchain (
   payload_json JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE eventos_blockchain DROP COLUMN IF EXISTS rf_id;
+ALTER TABLE eventos_blockchain DROP COLUMN IF EXISTS fabric_estado;
+ALTER TABLE eventos_blockchain DROP COLUMN IF EXISTS fabric_tx_id;
+ALTER TABLE eventos_blockchain DROP COLUMN IF EXISTS fabric_resultado;
+ALTER TABLE eventos_blockchain DROP COLUMN IF EXISTS fabric_error;
 
 CREATE TABLE IF NOT EXISTS productos_fabricados (
   id BIGSERIAL PRIMARY KEY,

@@ -1,4 +1,4 @@
-import { registrarEventoRecepcion } from '../blockchain/blockchain.service.js';
+import { registrarEventoInspeccion, registrarEventoRecepcion } from '../blockchain/blockchain.service.js';
 import {
   buscarContextoRecepcionBlockchain,
   crearRecepcion,
@@ -27,11 +27,9 @@ export async function crearRecepcionService(data, actor) {
       temperatura: recepcion.temperatura_recepcion,
       fecha_vencimiento: recepcion.fecha_vencimiento,
       recibido_por: recepcion.recibido_por,
-      resultado_inspeccion_vehiculo: {
-        vehiculo: data.inspeccion_vehiculo?.vehiculo,
-        conductor: data.inspeccion_vehiculo?.conductor,
-        limpieza_vehiculo: data.inspeccion_vehiculo?.limpieza_vehiculo,
-        transporte_vehiculo: data.inspeccion_vehiculo?.transporte_vehiculo
+      resultado_inspeccion_transporte: {
+        condiciones_vehiculo: data.inspeccion_transporte?.condiciones_vehiculo,
+        higiene_conductor: data.inspeccion_transporte?.higiene_conductor
       },
       estado_recepcion: recepcion.estado_recepcion,
       decision_producto: inspeccion.decision_final
@@ -53,14 +51,34 @@ export async function crearRecepcionService(data, actor) {
       temperaturaRecepcion: contexto.temperatura_recepcion,
       recibidoPor: recepcion.recibido_por,
       resultadoInspeccionProducto: contexto.decision_final,
-      resultadoInspeccionVehiculo: {
-        vehiculo: contexto.vehiculo,
-        conductor: contexto.conductor,
-        placa: contexto.placa,
-        limpieza: contexto.limpieza_vehiculo,
-        transporte: contexto.transporte_vehiculo
+      resultadoInspeccionTransporte: {
+        condicionesVehiculo: contexto.condiciones_vehiculo,
+        higieneConductor: contexto.higiene_conductor
       },
       estadoRecepcion: contexto.estado_recepcion
+    });
+
+    await registrarEventoInspeccion({
+      lote: contexto.numero_lote,
+      usuario: actor,
+      proveedor: contexto.proveedor_nombre,
+      materiaPrima: contexto.materia_prima_nombre,
+      numeroLote: contexto.numero_lote,
+      fechaRecepcion: contexto.fecha_recepcion,
+      decisionAceptacion: contexto.decision_final,
+      estadoRecepcion: contexto.estado_recepcion,
+      inspeccionProducto: {
+        aspecto: contexto.aspecto,
+        color: contexto.color,
+        olor: contexto.olor,
+        textura: contexto.textura,
+        temperaturaProducto: contexto.temperatura_producto,
+        decisionFinal: contexto.decision_final
+      },
+      inspeccionTransporte: {
+        condicionesVehiculo: contexto.condiciones_vehiculo,
+        higieneConductor: contexto.higiene_conductor
+      }
     });
   }
 

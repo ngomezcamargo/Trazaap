@@ -116,6 +116,13 @@ button, input, select, textarea { font: inherit; }
 }
 .tarjeta h3 { margin-top: 0; }
 
+.seccion-formulario {
+  border-top: 1px solid var(--linea);
+  padding-top: 18px;
+}
+
+.seccion-formulario h3 { margin-top: 0; }
+
 .grid { display: grid; gap: 16px; }
 .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }

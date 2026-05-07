@@ -69,7 +69,7 @@ export function BuscadorTrazabilidad() {
           <div className="tarjeta" style={{ marginTop: 12 }}>
             <h4>Linea de tiempo del lote</h4>
             <div className="flujo" style={{ fontSize: '0.95rem' }}>
-              Recepcion <span>{'->'}</span> Inspeccion <span>{'->'}</span> Produccion <span>{'->'}</span> Liberacion <span>{'->'}</span> Blockchain
+              Recepcion <span>{'->'}</span> Inspeccion <span>{'->'}</span> Produccion <span>{'->'}</span> Liberacion
             </div>
           </div>
 
@@ -102,32 +102,6 @@ export function BuscadorTrazabilidad() {
             </tbody>
           </table>
 
-          <h4 style={{ marginTop: 18 }}>Eventos blockchain</h4>
-          <table className="tabla">
-            <thead>
-              <tr>
-                <th>Tipo</th>
-                <th>Hash</th>
-                <th>Usuario</th>
-                <th>Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(data.eventosBlockchain || []).map((event) => (
-                <tr key={event.id}>
-                  <td>{event.tipoEvento}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{event.hash}</td>
-                  <td>{event.usuario}</td>
-                  <td>{new Date(event.fechaEvento).toLocaleString()}</td>
-                </tr>
-              ))}
-              {(data.eventosBlockchain || []).length === 0 ? (
-                <tr>
-                  <td colSpan={4}>Sin eventos blockchain para este lote.</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
         </div>
       )}
     </div>

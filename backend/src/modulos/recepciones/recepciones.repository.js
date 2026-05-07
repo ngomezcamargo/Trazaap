@@ -102,7 +102,7 @@ export async function crearRecepcion(data) {
       'textura',
       'estado_empaque',
       'certificado_calidad',
-      'inspeccion_vehiculo',
+      'inspeccion_transporte',
       'observaciones',
       'decision_final',
       'inspeccionado_por'
@@ -115,7 +115,7 @@ export async function crearRecepcion(data) {
       data.inspeccion_producto.textura,
       data.inspeccion_producto.estado_empaque,
       data.inspeccion_producto.certificado_calidad,
-      data.inspeccion_vehiculo.limpieza_vehiculo && data.inspeccion_vehiculo.transporte_vehiculo,
+      data.inspeccion_transporte.condiciones_vehiculo && data.inspeccion_transporte.higiene_conductor,
       data.observaciones,
       data.inspeccion_producto.decision_producto,
       data.recibido_por
@@ -126,34 +126,19 @@ export async function crearRecepcion(data) {
       inspeccionValues.push(data.inspeccion_producto.observaciones_producto);
     }
 
-    if (columnasInspeccion.has('observaciones_vehiculo')) {
-      camposInspeccion.push('observaciones_vehiculo');
-      inspeccionValues.push(data.inspeccion_vehiculo.observaciones_vehiculo);
+    if (columnasInspeccion.has('observaciones_transporte')) {
+      camposInspeccion.push('observaciones_transporte');
+      inspeccionValues.push(data.inspeccion_transporte.observaciones_transporte);
     }
 
-    if (columnasInspeccion.has('vehiculo')) {
-      camposInspeccion.push('vehiculo');
-      inspeccionValues.push(data.inspeccion_vehiculo.vehiculo);
+    if (columnasInspeccion.has('condiciones_vehiculo')) {
+      camposInspeccion.push('condiciones_vehiculo');
+      inspeccionValues.push(data.inspeccion_transporte.condiciones_vehiculo);
     }
 
-    if (columnasInspeccion.has('conductor')) {
-      camposInspeccion.push('conductor');
-      inspeccionValues.push(data.inspeccion_vehiculo.conductor);
-    }
-
-    if (columnasInspeccion.has('placa')) {
-      camposInspeccion.push('placa');
-      inspeccionValues.push(data.inspeccion_vehiculo.placa);
-    }
-
-    if (columnasInspeccion.has('limpieza_vehiculo')) {
-      camposInspeccion.push('limpieza_vehiculo');
-      inspeccionValues.push(data.inspeccion_vehiculo.limpieza_vehiculo);
-    }
-
-    if (columnasInspeccion.has('transporte_vehiculo')) {
-      camposInspeccion.push('transporte_vehiculo');
-      inspeccionValues.push(data.inspeccion_vehiculo.transporte_vehiculo);
+    if (columnasInspeccion.has('higiene_conductor')) {
+      camposInspeccion.push('higiene_conductor');
+      inspeccionValues.push(data.inspeccion_transporte.higiene_conductor);
     }
 
     const placeholdersInspeccion = camposInspeccion.map((_, index) => `$${index + 1}`).join(',');
@@ -264,12 +249,9 @@ export async function obtenerDetalleRecepcion(id) {
         i.certificado_calidad,
         i.decision_final,
         ${columnasInspeccion.has('observaciones_producto') ? 'i.observaciones_producto' : 'NULL::text AS observaciones_producto'},
-        ${columnasInspeccion.has('vehiculo') ? 'i.vehiculo' : 'NULL::varchar AS vehiculo'},
-        ${columnasInspeccion.has('conductor') ? 'i.conductor' : 'NULL::varchar AS conductor'},
-        ${columnasInspeccion.has('placa') ? 'i.placa' : 'NULL::varchar AS placa'},
-        ${columnasInspeccion.has('limpieza_vehiculo') ? 'i.limpieza_vehiculo' : 'NULL::boolean AS limpieza_vehiculo'},
-        ${columnasInspeccion.has('transporte_vehiculo') ? 'i.transporte_vehiculo' : 'NULL::boolean AS transporte_vehiculo'},
-        ${columnasInspeccion.has('observaciones_vehiculo') ? 'i.observaciones_vehiculo' : 'NULL::text AS observaciones_vehiculo'}
+        ${columnasInspeccion.has('condiciones_vehiculo') ? 'i.condiciones_vehiculo' : 'NULL::boolean AS condiciones_vehiculo'},
+        ${columnasInspeccion.has('higiene_conductor') ? 'i.higiene_conductor' : 'NULL::boolean AS higiene_conductor'},
+        ${columnasInspeccion.has('observaciones_transporte') ? 'i.observaciones_transporte' : 'NULL::text AS observaciones_transporte'}
       FROM receptions r
       JOIN providers p ON p.id = r.proveedor_id
       JOIN raw_materials rm ON rm.id = r.materia_prima_id
@@ -328,11 +310,8 @@ export async function buscarContextoRecepcionBlockchain(id) {
       ${presentacionExpr} AS presentacion,
       r.temperatura_recepcion,
       i.decision_final,
-      ${columnasInspeccion.has('vehiculo') ? 'i.vehiculo' : 'NULL::varchar AS vehiculo'},
-      ${columnasInspeccion.has('conductor') ? 'i.conductor' : 'NULL::varchar AS conductor'},
-      ${columnasInspeccion.has('placa') ? 'i.placa' : 'NULL::varchar AS placa'},
-      ${columnasInspeccion.has('limpieza_vehiculo') ? 'i.limpieza_vehiculo' : 'NULL::boolean AS limpieza_vehiculo'},
-      ${columnasInspeccion.has('transporte_vehiculo') ? 'i.transporte_vehiculo' : 'NULL::boolean AS transporte_vehiculo'},
+      ${columnasInspeccion.has('condiciones_vehiculo') ? 'i.condiciones_vehiculo' : 'NULL::boolean AS condiciones_vehiculo'},
+      ${columnasInspeccion.has('higiene_conductor') ? 'i.higiene_conductor' : 'NULL::boolean AS higiene_conductor'},
       r.estado_recepcion,
       p.nombre AS proveedor_nombre,
       rm.nombre AS materia_prima_nombre
