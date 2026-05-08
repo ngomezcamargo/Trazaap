@@ -9,6 +9,10 @@ function normalizarEventoFabric(buffer) {
   return text ? JSON.parse(text) : null;
 }
 
+function normalizarBooleanFabric(buffer) {
+  return Buffer.from(buffer).toString('utf8') === 'true';
+}
+
 export class FabricTraceabilityService {
   constructor(config = entorno.fabric) {
     this.config = config;
@@ -19,13 +23,24 @@ export class FabricTraceabilityService {
       throw new Error('Integracion Fabric deshabilitada por configuracion');
     }
 
-    const tlsRootCert = await fs.readFile(this.config.tlsCertPath);
+    let tlsRootCert;
+    let cert;
+    let privateKeyPem;
+
+    try {
+      [tlsRootCert, cert, privateKeyPem] = await Promise.all([
+        fs.readFile(this.config.tlsCertPath),
+        fs.readFile(this.config.certPath),
+        fs.readFile(this.config.keyPath)
+      ]);
+    } catch (error) {
+      throw new Error(`No se pudo cargar la identidad Fabric configurada: ${error.message}`);
+    }
+
     const client = new grpc.Client(this.config.peerEndpoint, grpc.credentials.createSsl(tlsRootCert), {
       'grpc.ssl_target_name_override': this.config.peerHostAlias
     });
 
-    const cert = await fs.readFile(this.config.certPath);
-    const privateKeyPem = await fs.readFile(this.config.keyPath);
     const privateKey = crypto.createPrivateKey(privateKeyPem);
 
     const gateway = connect({
@@ -42,14 +57,18 @@ export class FabricTraceabilityService {
   }
 
   async usarContrato(callback) {
-    const { gateway, client } = await this.crearGateway();
+    let gateway;
+    let client;
     try {
+      ({ gateway, client } = await this.crearGateway());
       const network = gateway.getNetwork(this.config.channelName);
       const contract = network.getContract(this.config.chaincodeName);
       return await callback(contract);
+    } catch (error) {
+      throw new Error(`Operacion Fabric fallida: ${error.message}`);
     } finally {
-      gateway.close();
-      client.close();
+      gateway?.close();
+      client?.close();
     }
   }
 
@@ -69,6 +88,10 @@ export class FabricTraceabilityService {
 
       const status = await submitted.getStatus();
       await submitted.getResult();
+
+      if (!status.successful) {
+        throw new Error(`Transaccion Fabric no valida. Codigo de commit: ${status.code}`);
+      }
 
       return {
         transactionId: submitted.getTransactionId(),
@@ -90,6 +113,13 @@ export class FabricTraceabilityService {
     return this.usarContrato(async (contract) => {
       const result = await contract.evaluateTransaction('GetEventsByLot', codigoLote);
       return normalizarEventoFabric(result) || [];
+    });
+  }
+
+  async eventExists(eventId) {
+    return this.usarContrato(async (contract) => {
+      const result = await contract.evaluateTransaction('EventExists', eventId);
+      return normalizarBooleanFabric(result);
     });
   }
 

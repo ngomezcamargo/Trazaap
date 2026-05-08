@@ -40,10 +40,10 @@ async function seedOperarioUser() {
 
 async function seedProviders() {
   await poolPostgres.query(
-    `INSERT INTO providers (nombre, nit, contacto, telefono, email, direccion, estado)
+    `INSERT INTO providers (nombre, nit, contacto, nombre_contacto, telefono, email, direccion, estado)
      VALUES
-       ('Molinos Andinos', '900123456-1', 'Laura Diaz', '3001234567', 'contacto@molinosandinos.local', 'Zona Industrial Km 4', 'activo'),
-       ('Lacteos Norte', '800222111-3', 'Carlos Ruiz', '3109876543', 'ventas@lacteosnorte.local', 'Parque Empresarial Bodega 12', 'activo')
+       ('Molinos Andinos', '900123456-1', 'Laura Diaz', 'Laura Diaz', '3001234567', 'contacto@molinosandinos.local', 'Zona Industrial Km 4', 'activo'),
+       ('Lacteos Norte', '800222111-3', 'Carlos Ruiz', 'Carlos Ruiz', '3109876543', 'ventas@lacteosnorte.local', 'Parque Empresarial Bodega 12', 'activo')
      ON CONFLICT (nit) DO NOTHING`
   );
 }

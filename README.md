@@ -123,6 +123,8 @@ Base URL backend: `http://localhost:4000/api`
 
 ## Blockchain Hyperledger Fabric
 
+Guia de demo paso a paso: [docs/demo-hyperledger-fabric.md](docs/demo-hyperledger-fabric.md).
+
 La arquitectura de auditoria es:
 
 ```text
@@ -199,37 +201,14 @@ cd fabric
 
 ## Variables de entorno
 
-`backend/.env`:
+Usa `.env.example` como referencia para crear los archivos locales de entorno.
 
-```bash
-NODE_ENV=development
-PORT=4000
-API_PREFIX=/api
-JWT_SECRET=change_this_jwt_secret
-JWT_EXPIRES_IN=8h
+Archivos locales esperados:
 
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=trazaap
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
+- Backend: `backend/.env`
+- Frontend: `frontend/.env.local`
 
-FABRIC_ENABLED=true
-FABRIC_MSP_ID=Org1MSP
-FABRIC_CHANNEL_NAME=trazabilidad-channel
-FABRIC_CHAINCODE_NAME=traceability
-FABRIC_PEER_ENDPOINT=localhost:7051
-FABRIC_PEER_HOST_ALIAS=peer0.org1.trazaap.local
-FABRIC_TLS_CERT_PATH=../fabric/organizations/peerOrganizations/org1.trazaap.local/peers/peer0.org1.trazaap.local/tls/ca.crt
-FABRIC_CERT_PATH=../fabric/organizations/peerOrganizations/org1.trazaap.local/users/Admin@org1.trazaap.local/msp/signcerts/cert.pem
-FABRIC_KEY_PATH=../fabric/organizations/peerOrganizations/org1.trazaap.local/users/Admin@org1.trazaap.local/msp/keystore/priv_sk
-```
-
-`frontend/.env.local`:
-
-```bash
-NEXT_PUBLIC_API_URL=http://localhost:4000/api
-```
+No se deben versionar archivos `.env`, certificados, claves privadas ni artefactos generados por Fabric.
 
 ## Puesta en marcha
 

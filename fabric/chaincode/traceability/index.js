@@ -85,6 +85,26 @@ class TraceabilityContract extends Contract {
     return JSON.stringify(events);
   }
 
+  async GetAllEvents(ctx) {
+    const iterator = await ctx.stub.getStateByRange('', '');
+    const events = [];
+
+    try {
+      while (true) {
+        const result = await iterator.next();
+        if (result.value && result.value.key && result.value.key.startsWith('traceabilityEvent:')) {
+          events.push(JSON.parse(result.value.value.toString()));
+        }
+
+        if (result.done) break;
+      }
+    } finally {
+      await iterator.close();
+    }
+
+    return JSON.stringify(events);
+  }
+
   _eventKey(eventId) {
     return `traceabilityEvent:${eventId}`;
   }
