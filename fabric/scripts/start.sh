@@ -1,16 +1,20 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-source "$(dirname "$0")/env.sh"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+export FABRIC_SCRIPT_DIR="${SCRIPT_DIR}"
+. "${SCRIPT_DIR}/env.sh"
 
 docker compose -f "${FABRIC_DIR}/docker-compose.fabric.yml" up -d ca.trazaap.local
 echo "Esperando CA..."
 
-for attempt in {1..20}; do
+attempt=1
+while [ "${attempt}" -le 20 ]; do
   if [ -f "${FABRIC_DIR}/fabric-ca/tls-cert.pem" ] && fabric-ca-client getcainfo -u https://localhost:7054 --caname ca-trazaap --tls.certfiles "${FABRIC_DIR}/fabric-ca/tls-cert.pem" >/dev/null 2>&1; then
     break
   fi
   sleep 1
+  attempt=$((attempt + 1))
 done
 
 if [ ! -f "${FABRIC_DIR}/fabric-ca/tls-cert.pem" ] || ! fabric-ca-client getcainfo -u https://localhost:7054 --caname ca-trazaap --tls.certfiles "${FABRIC_DIR}/fabric-ca/tls-cert.pem" >/dev/null 2>&1; then

@@ -9,10 +9,6 @@ function normalizarEventoFabric(buffer) {
   return text ? JSON.parse(text) : null;
 }
 
-function normalizarBooleanFabric(buffer) {
-  return Buffer.from(buffer).toString('utf8') === 'true';
-}
-
 export class FabricTraceabilityService {
   constructor(config = entorno.fabric) {
     this.config = config;
@@ -72,22 +68,21 @@ export class FabricTraceabilityService {
     }
   }
 
-  async registerEventOnFabric(eventEvidence) {
+  async registrarEvento(evento) {
     return this.usarContrato(async (contract) => {
-      const submitted = await contract.submitAsync('RegisterTraceabilityEvent', {
+      const submitted = await contract.submitAsync('registrarEvento', {
         arguments: [
-          eventEvidence.eventId,
-          eventEvidence.codigoLote,
-          eventEvidence.tipoEvento,
-          eventEvidence.hashEvento,
-          eventEvidence.hashAnterior || '',
-          eventEvidence.timestamp,
-          eventEvidence.responsable
+          evento.tipoEvento,
+          String(evento.idEntidad),
+          String(evento.lote || ''),
+          String(evento.actor || 'sistema'),
+          evento.fechaEvento,
+          JSON.stringify(evento.payload || {})
         ]
       });
 
       const status = await submitted.getStatus();
-      await submitted.getResult();
+      const result = await submitted.getResult();
 
       if (!status.successful) {
         throw new Error(`Transaccion Fabric no valida. Codigo de commit: ${status.code}`);
@@ -97,35 +92,56 @@ export class FabricTraceabilityService {
         transactionId: submitted.getTransactionId(),
         blockNumber: status.blockNumber ? Number(status.blockNumber) : null,
         successful: status.successful,
-        code: status.code
+        code: status.code,
+        evento: normalizarEventoFabric(result)
       };
     });
   }
 
-  async getEventFromFabric(eventId) {
+  async validarEvento(tipoEvento, idEntidad, payloadActual) {
     return this.usarContrato(async (contract) => {
-      const result = await contract.evaluateTransaction('GetTraceabilityEvent', eventId);
+      const result = await contract.evaluateTransaction(
+        'validarEvento',
+        tipoEvento,
+        String(idEntidad),
+        JSON.stringify(payloadActual || {})
+      );
       return normalizarEventoFabric(result);
     });
   }
 
-  async getEventsByLotFromFabric(codigoLote) {
+  async consultarEvento(tipoEvento, idEntidad) {
     return this.usarContrato(async (contract) => {
-      const result = await contract.evaluateTransaction('GetEventsByLot', codigoLote);
+      const result = await contract.evaluateTransaction('consultarEvento', tipoEvento, String(idEntidad));
+      return normalizarEventoFabric(result);
+    });
+  }
+
+  async consultarEventosPorLote(lote) {
+    return this.usarContrato(async (contract) => {
+      const result = await contract.evaluateTransaction('consultarEventosPorLote', lote);
       return normalizarEventoFabric(result) || [];
     });
   }
 
-  async eventExists(eventId) {
-    return this.usarContrato(async (contract) => {
-      const result = await contract.evaluateTransaction('EventExists', eventId);
-      return normalizarBooleanFabric(result);
+  async registerEventOnFabric(eventEvidence) {
+    return this.registrarEvento({
+      tipoEvento: eventEvidence.tipoEvento,
+      idEntidad: eventEvidence.idEntidad || eventEvidence.eventId,
+      lote: eventEvidence.lote || eventEvidence.codigoLote,
+      payload: eventEvidence.payload || eventEvidence.payloadNormalizado || {},
+      fechaEvento: eventEvidence.fechaEvento || eventEvidence.timestamp,
+      actor: eventEvidence.actor || eventEvidence.responsable
     });
   }
 
-  async verifyEventAgainstFabric(eventId) {
-    const event = await this.getEventFromFabric(eventId);
-    return { eventId, exists: Boolean(event), event };
+  async getEventFromFabric(eventId) {
+    const [tipoEvento, ...rest] = String(eventId).split(':');
+    return this.consultarEvento(tipoEvento, rest.join(':'));
+  }
+
+  async getEventsByLotFromFabric(codigoLote) {
+    return this.consultarEventosPorLote(codigoLote);
   }
 }
 

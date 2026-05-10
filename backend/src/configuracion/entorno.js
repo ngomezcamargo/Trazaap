@@ -34,8 +34,8 @@ export const entorno = {
   fabric: {
     enabled: process.env.FABRIC_ENABLED !== 'false',
     mspId: process.env.FABRIC_MSP_ID || 'Org1MSP',
-    channelName: process.env.FABRIC_CHANNEL_NAME || 'trazabilidad-channel',
-    chaincodeName: process.env.FABRIC_CHAINCODE_NAME || 'traceability',
+    channelName: process.env.FABRIC_CHANNEL_NAME || 'trazaapchannel',
+    chaincodeName: process.env.FABRIC_CHAINCODE_NAME || 'trazaap',
     peerEndpoint: process.env.FABRIC_PEER_ENDPOINT || 'localhost:7051',
     peerHostAlias: process.env.FABRIC_PEER_HOST_ALIAS || 'peer0.org1.trazaap.local',
     tlsCertPath: process.env.FABRIC_TLS_CERT_PATH || '../fabric/organizations/peerOrganizations/org1.trazaap.local/peers/peer0.org1.trazaap.local/tls/ca.crt',

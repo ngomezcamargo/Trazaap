@@ -1,7 +1,9 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-source "$(dirname "$0")/env.sh"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+export FABRIC_SCRIPT_DIR="${SCRIPT_DIR}"
+. "${SCRIPT_DIR}/env.sh"
 
 docker compose -f "${FABRIC_DIR}/docker-compose.fabric.yml" down
 

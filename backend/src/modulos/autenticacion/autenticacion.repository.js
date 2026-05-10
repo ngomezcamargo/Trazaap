@@ -23,3 +23,16 @@ export async function buscarUsuarioPorId(id) {
   const { rows } = await poolPostgres.query(query, [id]);
   return rows[0] || null;
 }
+
+export async function listarUsuariosOperarios() {
+  const query = `
+    SELECT u.id, u.email, r.name AS role
+    FROM users u
+    JOIN roles r ON r.id = u.role_id
+    WHERE u.is_active = true AND lower(r.name) = 'operario'
+    ORDER BY u.email ASC
+  `;
+
+  const { rows } = await poolPostgres.query(query);
+  return rows;
+}

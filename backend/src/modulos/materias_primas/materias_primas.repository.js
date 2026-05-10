@@ -14,15 +14,33 @@ export async function listarMateriasPrimas() {
 
 export async function crearMateriaPrima(data) {
   const query = `
-    INSERT INTO raw_materials (nombre, descripcion, unidad_medida, condiciones_almacenamiento, proveedor_id, is_active)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    INSERT INTO raw_materials (
+      nombre,
+      descripcion,
+      unidad_medida,
+      unidad_medida_base,
+      descripcion_unidad_personalizada,
+      tipo_insumo,
+      condiciones_almacenamiento,
+      proveedor_id,
+      is_active
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     RETURNING *
   `;
+
+  const unidadBase = data.unidad_medida_base;
+  const unidadNormalizada = unidadBase === 'otro'
+    ? data.descripcion_unidad_personalizada.trim().toLowerCase()
+    : unidadBase;
 
   const values = [
     data.nombre,
     data.descripcion || '',
-    data.unidad_medida,
+    unidadNormalizada,
+    unidadBase,
+    data.descripcion_unidad_personalizada || '',
+    data.tipo_insumo || null,
     data.condiciones_almacenamiento || '',
     data.proveedor_id || null,
     data.is_active
@@ -38,18 +56,29 @@ export async function actualizarMateriaPrima(id, data) {
     SET nombre = $1,
         descripcion = $2,
         unidad_medida = $3,
-        condiciones_almacenamiento = $4,
-        proveedor_id = $5,
-        is_active = $6,
+        unidad_medida_base = $4,
+        descripcion_unidad_personalizada = $5,
+        tipo_insumo = $6,
+        condiciones_almacenamiento = $7,
+        proveedor_id = $8,
+        is_active = $9,
         updated_at = NOW()
-    WHERE id = $7
+    WHERE id = $10
     RETURNING *
   `;
+
+  const unidadBase = data.unidad_medida_base;
+  const unidadNormalizada = unidadBase === 'otro'
+    ? data.descripcion_unidad_personalizada.trim().toLowerCase()
+    : unidadBase;
 
   const values = [
     data.nombre,
     data.descripcion || '',
-    data.unidad_medida,
+    unidadNormalizada,
+    unidadBase,
+    data.descripcion_unidad_personalizada || '',
+    data.tipo_insumo || null,
     data.condiciones_almacenamiento || '',
     data.proveedor_id || null,
     data.is_active,

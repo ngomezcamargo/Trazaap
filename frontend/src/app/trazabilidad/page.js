@@ -8,8 +8,8 @@ export default function TrazabilidadPage() {
   return (
     <GuardiaSesion>
       <ContenedorApp
-        titulo="Consulta de trazabilidad por lote"
-        subtitulo="Vista simple de recepcion, inspeccion y eventos del lote."
+        titulo="Consulta de trazabilidad de lote producido"
+        subtitulo="Reconstruye la cadena desde el lote terminado hasta las materias primas de origen."
       >
         <BuscadorTrazabilidad />
       </ContenedorApp>

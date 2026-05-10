@@ -3,18 +3,27 @@ import { poolPostgres } from '../../configuracion/postgresql.js';
 export async function buscarTrazabilidadRecepcionPorLote(lote) {
   const { rows } = await poolPostgres.query(
     `SELECT
-      r.id AS recepcion_id, r.fecha_recepcion, r.lote_proveedor, r.estado_recepcion, r.cantidad,
-      r.unidad_presentacion, r.temperatura_recepcion, r.peso_recibido, r.observaciones AS recepcion_observaciones,
+      r.id AS recepcion_id, r.fecha_recepcion, r.lote_proveedor, r.numero_lote,
+      r.estado_recepcion, r.cantidad, r.unidad_presentacion, r.unidad_medida,
+      r.presentacion, r.fecha_vencimiento, r.recibido_por,
+      r.temperatura_recepcion, r.peso_recibido, r.observaciones AS recepcion_observaciones,
       p.id AS proveedor_id, p.nombre AS proveedor_nombre, p.nit AS proveedor_nit,
-      rm.nombre AS materia_prima,
+      rm.id AS materia_prima_id, rm.nombre AS materia_prima,
       i.id AS inspeccion_id, i.olor, i.color, i.textura, i.estado_empaque,
-      i.certificado_calidad, i.inspeccion_vehiculo, i.observaciones AS inspeccion_observaciones,
+      i.certificado_calidad,
+      i.inspeccion_transporte,
+      i.condiciones_vehiculo,
+      i.higiene_conductor,
+      i.observaciones AS inspeccion_observaciones,
+      i.observaciones_producto,
+      i.observaciones_transporte,
+      i.inspeccionado_por,
       i.decision_final, i.inspeccionado_en
      FROM receptions r
      JOIN providers p ON p.id = r.proveedor_id
      JOIN raw_materials rm ON rm.id = r.materia_prima_id
      LEFT JOIN reception_inspections i ON i.reception_id = r.id
-     WHERE r.lote_proveedor = $1
+     WHERE r.lote_proveedor = $1 OR r.numero_lote = $1
      ORDER BY r.id DESC LIMIT 1`,
     [lote]
   );
@@ -25,10 +34,10 @@ export async function buscarOrdenPorLoteFinalOLoteRecepcion(lote) {
   const { rows } = await poolPostgres.query(
     `SELECT DISTINCT op.*
      FROM ordenes_produccion op
-     LEFT JOIN lotes_producto_terminado lpt ON lpt.orden_produccion_id = op.id
+     LEFT JOIN registro_manufactura rm ON rm.id_orden_produccion = op.id
      LEFT JOIN ordenes_produccion_materias opm ON opm.orden_produccion_id = op.id
      LEFT JOIN receptions r ON r.id = opm.recepcion_id
-     WHERE lpt.lote_producto = $1 OR r.lote_proveedor = $1
+     WHERE rm.lote_producido = $1 OR r.lote_proveedor = $1 OR r.numero_lote = $1
      ORDER BY op.id DESC
      LIMIT 1`,
     [lote]
@@ -36,33 +45,71 @@ export async function buscarOrdenPorLoteFinalOLoteRecepcion(lote) {
   return rows[0] || null;
 }
 
-export async function obtenerDetalleProduccion(ordenId) {
-  const [productosRes, materiasRes, tiemposRes, mojesRes, mojesIngRes, loteRes, liberacionRes] = await Promise.all([
+export async function obtenerDetalleProduccion(ordenId, lote = '') {
+  const [productosRes, materiasRes, tiemposRes, manufacturaRes, liberacionRes] = await Promise.all([
     poolPostgres.query('SELECT * FROM ordenes_produccion_productos WHERE orden_produccion_id = $1 ORDER BY id', [ordenId]),
     poolPostgres.query(
-      `SELECT opm.*, r.lote_proveedor
+      `SELECT
+         opm.*,
+         r.id AS recepcion_id,
+         r.fecha_recepcion,
+         r.lote_proveedor,
+         r.numero_lote,
+         r.estado_recepcion,
+         r.cantidad AS recepcion_cantidad,
+         r.unidad_presentacion,
+         r.unidad_medida,
+         r.presentacion,
+         r.fecha_vencimiento,
+         r.recibido_por,
+         r.temperatura_recepcion,
+         r.peso_recibido,
+         r.observaciones AS recepcion_observaciones,
+         p.id AS proveedor_id,
+         p.nombre AS proveedor_nombre,
+         p.nit AS proveedor_nit,
+         rm.id AS materia_prima_id,
+         rm.nombre AS materia_prima,
+         i.id AS inspeccion_id,
+         i.olor,
+         i.color,
+         i.textura,
+         i.estado_empaque,
+         i.certificado_calidad,
+         i.inspeccion_transporte,
+         i.condiciones_vehiculo,
+         i.higiene_conductor,
+         i.observaciones AS inspeccion_observaciones,
+         i.observaciones_producto,
+         i.observaciones_transporte,
+         i.inspeccionado_por,
+         i.decision_final,
+         i.inspeccionado_en
        FROM ordenes_produccion_materias opm
        JOIN receptions r ON r.id = opm.recepcion_id
+       JOIN providers p ON p.id = r.proveedor_id
+       JOIN raw_materials rm ON rm.id = r.materia_prima_id
+       LEFT JOIN reception_inspections i ON i.reception_id = r.id
        WHERE opm.orden_produccion_id = $1
        ORDER BY opm.id`,
       [ordenId]
     ),
     poolPostgres.query('SELECT * FROM tiempos_produccion WHERE orden_produccion_id = $1 ORDER BY id', [ordenId]),
-    poolPostgres.query('SELECT * FROM ordenes_produccion_mojes WHERE orden_produccion_id = $1 ORDER BY id', [ordenId]),
     poolPostgres.query(
-      `SELECT omi.*
-       FROM ordenes_produccion_mojes_ingredientes omi
-       JOIN ordenes_produccion_mojes om ON om.id = omi.moje_id
-       WHERE om.orden_produccion_id = $1
-       ORDER BY omi.id`,
-      [ordenId]
+      `SELECT rm.*, rm.lote_producido AS lote_producto, rm.unidades_producidas AS peso_total, op.fecha_produccion
+       FROM registro_manufactura rm
+       JOIN ordenes_produccion op ON op.id = rm.id_orden_produccion
+       WHERE rm.id_orden_produccion = $1
+       ORDER BY CASE WHEN rm.lote_producido = $2 THEN 0 ELSE 1 END, rm.id_manufactura
+       LIMIT 1`,
+      [ordenId, lote]
     ),
-    poolPostgres.query('SELECT * FROM lotes_producto_terminado WHERE orden_produccion_id = $1 LIMIT 1', [ordenId]),
     poolPostgres.query(
-      `SELECT lp.*, lpt.lote_producto
-       FROM liberaciones_producto lp
-       JOIN lotes_producto_terminado lpt ON lpt.id = lp.lote_producto_id
-       WHERE lpt.orden_produccion_id = $1
+      `SELECT lp.*, rm.lote_producido AS lote_producto, ipt.id_inventario AS inventario_producto_terminado_id
+       FROM liberacion_producto lp
+       JOIN registro_manufactura rm ON rm.id_manufactura = lp.id_manufactura
+       LEFT JOIN inventario_producto_terminado ipt ON ipt.id_liberacion = lp.id_liberacion
+       WHERE rm.id_orden_produccion = $1
        LIMIT 1`,
       [ordenId]
     )
@@ -72,9 +119,7 @@ export async function obtenerDetalleProduccion(ordenId) {
     productos: productosRes.rows,
     materias: materiasRes.rows,
     tiempos: tiemposRes.rows,
-    mojes: mojesRes.rows,
-    mojesIngredientes: mojesIngRes.rows,
-    loteTerminado: loteRes.rows[0] || null,
+    manufactura: manufacturaRes.rows[0] || null,
     liberacion: liberacionRes.rows[0] || null
   };
 }
@@ -87,91 +132,6 @@ export async function listarEventosPorLote(lote) {
      ORDER BY creado_en DESC
      LIMIT 50`,
     [lote]
-  );
-  return rows;
-}
-
-export async function buscarUltimoEventoAuditablePorLote(codigoLote) {
-  const { rows } = await poolPostgres.query(
-    `SELECT *
-     FROM traceability_events
-     WHERE codigo_lote = $1
-     ORDER BY fecha_evento DESC, created_at DESC
-     LIMIT 1`,
-    [codigoLote]
-  );
-  return rows[0] || null;
-}
-
-export async function crearEventoAuditable(data) {
-  const { rows } = await poolPostgres.query(
-    `INSERT INTO traceability_events (
-      id,
-      codigo_lote,
-      tipo_evento,
-      descripcion,
-      responsable,
-      fecha_evento,
-      datos_evento,
-      hash_evento,
-      hash_anterior,
-      fabric_tx_id,
-      fabric_block_number,
-      fabric_status,
-      fabric_error
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-    RETURNING *`,
-    [
-      data.id,
-      data.codigo_lote,
-      data.tipo_evento,
-      data.descripcion,
-      data.responsable,
-      data.fecha_evento,
-      JSON.stringify(data.datos_evento || {}),
-      data.hash_evento,
-      data.hash_anterior,
-      data.fabric_tx_id || null,
-      data.fabric_block_number || null,
-      data.fabric_status || 'pendiente',
-      data.fabric_error || null
-    ]
-  );
-  return rows[0];
-}
-
-export async function actualizarResultadoFabricEvento(id, data) {
-  const { rows } = await poolPostgres.query(
-    `UPDATE traceability_events
-     SET fabric_tx_id = $2,
-         fabric_block_number = $3,
-         fabric_status = $4,
-         fabric_error = $5
-     WHERE id = $1
-     RETURNING *`,
-    [
-      id,
-      data.fabric_tx_id || null,
-      data.fabric_block_number || null,
-      data.fabric_status,
-      data.fabric_error || null
-    ]
-  );
-  return rows[0] || null;
-}
-
-export async function buscarEventoAuditablePorId(id) {
-  const { rows } = await poolPostgres.query('SELECT * FROM traceability_events WHERE id = $1', [id]);
-  return rows[0] || null;
-}
-
-export async function listarEventosAuditablesPorLote(codigoLote) {
-  const { rows } = await poolPostgres.query(
-    `SELECT *
-     FROM traceability_events
-     WHERE codigo_lote = $1
-     ORDER BY fecha_evento ASC, created_at ASC`,
-    [codigoLote]
   );
   return rows;
 }

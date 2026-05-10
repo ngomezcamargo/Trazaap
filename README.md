@@ -11,9 +11,9 @@ Trazaap queda refactorizado como una base academica limpia para Sprint 2, enfoca
 - Gestionar catalogo de materias primas
 - Gestionar ordenes de produccion diarias
 - Orden de produccion basada en formato real de Angela's Bagels (encabezado, productos, ingredientes y mojes)
-- Registrar consumo planificado/real y tiempos de produccion
-- Registro de tiempos por carro/escabiladero con rangos de control
-- Generar lote de producto terminado
+- Registrar manufactura real por producto producido
+- Comparar tiempos y temperaturas estandar contra valores reales
+- Generar lote producido desde el registro de manufactura
 - Registrar liberacion de producto
 - Consultar trazabilidad extendida por lote (recepcion, inspeccion, produccion, liberacion, blockchain)
 
@@ -97,6 +97,7 @@ Base URL backend: `http://localhost:4000/api`
 
 - `POST /auth/login`
 - `GET /auth/me`
+- `GET /auth/operarios`
 - `GET /providers`
 - `POST /providers`
 - `GET /providers/:id`
@@ -104,6 +105,8 @@ Base URL backend: `http://localhost:4000/api`
 - `DELETE /providers/:id`
 - `GET /receptions`
 - `POST /receptions`
+- `GET /receptions/:id/detalle`
+- `GET /inventario-insumos`
 - `GET /materias-primas`
 - `POST /materias-primas`
 - `PUT /materias-primas/:id`
@@ -113,11 +116,21 @@ Base URL backend: `http://localhost:4000/api`
 - `GET /traceability/events/:eventId/fabric`
 - `GET /traceability/lots/:codigoLote/verify`
 - `GET /produccion/ordenes`
+- `GET /produccion/ordenes/:id`
+- `GET /produccion/productos`
+- `GET /produccion/productos/:productoId`
 - `GET /produccion/recepciones-disponibles`
 - `POST /produccion/ordenes`
+- `POST /produccion/productos`
+- `PUT /produccion/productos/:productoId`
+- `POST /produccion/calcular-insumos`
+- `PUT /produccion/ordenes/:id/estado`
+- `GET /produccion/manufactura/ordenes`
+- `GET /produccion/ordenes/:id/productos/:productoId/manufactura`
+- `POST /produccion/ordenes/:id/productos/:productoId/manufactura`
 - `POST /produccion/ordenes/:id/materias`
+- `PUT /produccion/ordenes/:id/materias/:materiaId`
 - `POST /produccion/ordenes/:id/tiempos`
-- `POST /produccion/ordenes/:id/mojes`
 - `GET /liberacion`
 - `POST /liberacion`
 
@@ -125,33 +138,30 @@ Base URL backend: `http://localhost:4000/api`
 
 Guia de demo paso a paso: [docs/demo-hyperledger-fabric.md](docs/demo-hyperledger-fabric.md).
 
-La arquitectura de auditoria es:
+La arquitectura de integridad es:
 
 ```text
-Frontend -> Backend -> FabricTraceabilityService -> Hyperledger Fabric
+PostgreSQL operativo -> Backend -> Hash SHA-256 normalizado -> Hyperledger Fabric
 ```
 
-PostgreSQL conserva el evento completo en `traceability_events`. Fabric conserva solo evidencia minima:
+PostgreSQL conserva solo la informacion operativa del sistema. No guarda hashes, bloques ni evidencia blockchain. Fabric conserva la evidencia criptografica minima:
 
-- `eventId`
-- `codigoLote`
 - `tipoEvento`
-- `hashEvento`
-- `hashAnterior`
-- `timestamp`
-- `responsable`
-
-El backend calcula `hashEvento` con SHA-256 sobre una representacion estable de:
-
-- `codigoLote`
-- `tipoEvento`
-- `descripcion`
-- `responsable`
+- `idEntidad`
+- `lote`
+- `hashRegistro`
 - `fechaEvento`
-- `datosEvento`
-- `hashAnterior`
+- `actor`
+- `timestampBlockchain`
 
-`hashAnterior` es el ultimo `hashEvento` registrado para el mismo lote. Para el primer evento del lote es `null`.
+El backend calcula `hashRegistro` con SHA-256 sobre una representacion estable y normalizada del registro operativo. El chaincode expone:
+
+- `registrarEvento`
+- `validarEvento`
+- `consultarEvento`
+- `consultarEventosPorLote`
+
+En la consulta de trazabilidad, el backend recalcula el hash actual y Fabric responde si el registro esta `VERIFICADO`, `ALTERADO`, `PENDIENTE` o `NO_ENCONTRADO`.
 
 ### Red Fabric local
 
@@ -161,8 +171,8 @@ La red de desarrollo esta en `fabric/` y usa:
 - 1 orderer: `orderer.trazaap.local`
 - 1 peer: `peer0.org1.trazaap.local`
 - 1 organizacion: `Org1MSP`
-- 1 canal: `trazabilidad-channel`
-- 1 chaincode: `traceability`
+- 1 canal: `trazaapchannel`
+- 1 chaincode: `trazaap`
 
 Requisitos previos:
 
@@ -197,7 +207,7 @@ cd fabric
 
 - email: `admin@trazaap.local`
 - password: `Admin123*`
-- role: `admin`
+- role: `administrador`
 
 ## Variables de entorno
 
@@ -223,7 +233,7 @@ npm install
 
 2. Crear base de datos `trazaap` en PostgreSQL.
 
-3. Ejecutar migraciones y seed:
+3. Ejecutar migracion unica del esquema actual y datos semilla:
 
 ```bash
 cd backend
@@ -322,13 +332,19 @@ Tablas base de Sprint 2:
 - `users`
 - `providers`
 - `raw_materials`
+  - incluye `unidad_medida_base` (obligatoria), `tipo_insumo` (opcional) y `descripcion_unidad_personalizada`
 - `receptions`
+  - incluye `unidad_medida` para registrar cantidades en contexto (ej: `30 unidad`, `30 g`, `30 kg`)
 - `reception_inspections`
+- `inventario_materias_primas`
+- `inventario_movimientos`
 - `trazabilidad_eventos`
-- `eventos_blockchain`
-- `traceability_events`
 - `ordenes_produccion`
+- `ordenes_produccion_productos` (incluye `observaciones` por producto para planificacion)
+- `productos_fabricados`
+- `producto_variantes`
+- `producto_variante_materia_prima`
 - `ordenes_produccion_materias`
+- `registro_manufactura`
 - `tiempos_produccion`
-- `lotes_producto_terminado`
 - `liberaciones_producto`

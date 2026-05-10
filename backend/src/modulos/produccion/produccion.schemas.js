@@ -1,25 +1,60 @@
 import { z } from 'zod';
 
-const estadosOrden = ['pendiente', 'en_proceso', 'finalizada', 'cancelada'];
+const estadosOrden = ['pendiente', 'en_proceso', 'lista_para_liberacion', 'finalizada', 'cancelada'];
 const tamanos = ['grande', 'mediano', 'pequeno', 'personal', 'mini', 'cocktail'];
+const estadosProducto = ['activo', 'inactivo'];
+
+export const recetaMateriaSchema = z.object({
+  materia_prima_id: z.coerce.number().int().positive(),
+  cantidad_requerida: z.coerce.number().positive(),
+  observaciones: z.string().optional().default('')
+});
+
+export const varianteProductoSchema = z.object({
+  id: z.coerce.number().int().positive().optional(),
+  tamano_presentacion: z.enum(tamanos).default('mediano'),
+  peso_estimado_unidad: z.coerce.number().positive().optional().nullable(),
+  unidad_medida: z.string().optional().default('unidad'),
+  estado: z.enum(estadosProducto).default('activo'),
+  receta: z.array(recetaMateriaSchema).min(1)
+});
+
+export const productoFabricadoSchema = z.object({
+  nombre: z.string().min(2),
+  categoria: z.string().optional().default(''),
+  descripcion: z.string().optional().default(''),
+  vida_util_dias: z.coerce.number().int().positive(),
+  condiciones_almacenamiento: z.string().optional().default(''),
+  requiere_inmersion: z.coerce.boolean().default(false),
+  tiempo_fermentacion_minutos: z.coerce.number().nonnegative().default(0),
+  temperatura_fermentacion_c: z.coerce.number().default(0),
+  tiempo_horneado_minutos: z.coerce.number().nonnegative().default(0),
+  temperatura_horneado_c: z.coerce.number().default(0),
+  tiempo_inmersion_minutos: z.coerce.number().nonnegative().optional().default(0),
+  temperatura_inmersion_c: z.coerce.number().optional().default(0),
+  estado: z.enum(estadosProducto).default('activo'),
+  variantes: z.array(varianteProductoSchema).min(1)
+}).superRefine((data, ctx) => {
+  if (data.requiere_inmersion && (!data.tiempo_inmersion_minutos || !data.temperatura_inmersion_c)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['tiempo_inmersion_minutos'], message: 'Debe registrar tiempos de inmersion cuando aplica.' });
+  }
+});
 
 export const crearOrdenProduccionSchema = z.object({
   fecha_produccion: z.string().date(),
   codigo_orden: z.string().min(2),
-  responsable_produccion: z.coerce.number().int().positive(),
   estado: z.enum(estadosOrden).default('pendiente'),
   observaciones: z.string().optional().default(''),
-  creado_por: z.coerce.number().int().positive(),
+  creado_por: z.coerce.number().int().positive().optional(),
   productos: z
     .array(
       z.object({
-        producto: z.string().min(2),
-        codigo_producto: z.string().optional().default(''),
-        tamano_presentacion: z.enum(tamanos),
+        producto_id: z.coerce.number().int().positive(),
+        variante_id: z.coerce.number().int().positive(),
+        producto: z.string().optional().default(''),
+        tamano_presentacion: z.enum(tamanos).optional(),
         cantidad_programada: z.coerce.number().positive(),
-        cantidad_real_producida: z.coerce.number().nonnegative(),
-        unidad_medida: z.string().min(1),
-        lote_producto_terminado: z.string().optional().default('')
+        observaciones: z.string().optional().default('')
       })
     )
     .min(1)
@@ -41,32 +76,10 @@ export const asociarMateriasSchema = z.object({
     .min(1)
 });
 
-export const registrarMojesSchema = z.object({
-  mojes: z
-    .array(
-      z.object({
-        producto_receta: z.string().min(2),
-        cantidad_total_moje_gramos: z.coerce.number().positive(),
-        ingredientes: z
-          .array(
-            z.object({
-              recepcion_id: z.coerce.number().int().positive(),
-              ingrediente: z.string().min(2),
-              lote_ingrediente: z.string().min(2),
-              cantidad_gramos: z.coerce.number().positive()
-            })
-          )
-          .min(1)
-      })
-    )
-    .min(1)
-});
-
 export const registrarTiemposSchema = z.object({
   registros: z
     .array(
       z.object({
-        numero_carro_escabiladero: z.string().min(1),
         producto: z.string().min(2),
         es_bagel: z.coerce.boolean().default(false),
         unidades_producidas: z.coerce.number().int().nonnegative(),
@@ -82,4 +95,40 @@ export const registrarTiemposSchema = z.object({
       })
     )
     .min(1)
+});
+
+export const registroManufacturaSchema = z.object({
+  responsable_usuario_id: z.coerce.number().int().positive(),
+  lote_producido: z.string().min(2),
+  unidades_producidas: z.coerce.number().int().nonnegative(),
+  tiempo_real_fermentacion_minutos: z.coerce.number().nonnegative().default(0),
+  temperatura_real_fermentacion_c: z.coerce.number().default(0),
+  tiempo_real_horneado_minutos: z.coerce.number().nonnegative().default(0),
+  temperatura_real_horneado_c: z.coerce.number().default(0),
+  tiempo_real_inmersion_minutos: z.coerce.number().nonnegative().optional().nullable(),
+  temperatura_real_inmersion_c: z.coerce.number().optional().nullable(),
+  hora_inicio: z.string().datetime(),
+  hora_fin: z.string().datetime(),
+  observaciones: z.string().optional().default('')
+}).superRefine((data, ctx) => {
+  if (new Date(data.hora_fin).getTime() < new Date(data.hora_inicio).getTime()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['hora_fin'], message: 'La hora de fin no puede ser anterior a la hora de inicio.' });
+  }
+});
+
+export const actualizarEstadoOrdenSchema = z.object({
+  estado: z.enum(estadosOrden)
+});
+
+export const actualizarCantidadRealMateriaSchema = z.object({
+  cantidad_real: z.coerce.number().positive()
+});
+
+export const calcularInsumosSchema = z.object({
+  productos: z.array(z.object({
+    producto_id: z.coerce.number().int().positive(),
+    variante_id: z.coerce.number().int().positive(),
+    cantidad_programada: z.coerce.number().positive(),
+    producto: z.string().optional().default('')
+  })).min(1)
 });

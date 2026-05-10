@@ -1,20 +1,49 @@
 import { z } from 'zod';
 
 export const crearLiberacionSchema = z.object({
-  producto: z.string().min(2),
-  lote_producto: z.string().min(3),
-  fecha_vencimiento: z.string().date(),
-  unidades_liberadas: z.coerce.number().int().nonnegative(),
-  peso_neto: z.coerce.number().positive(),
-  verificacion_etiqueta: z.coerce.boolean(),
-  verificacion_envase: z.coerce.boolean(),
-  numero_factura: z.string().optional().default(''),
-  cliente_destino: z.string().optional().default(''),
-  conductor: z.string().optional().default(''),
-  placa_vehiculo: z.string().optional().default(''),
+  id_manufactura: z.coerce.number().int().positive(),
+  responsable_liberacion_usuario_id: z.coerce.number().int().positive(),
+  tipo_empaque: z.string().min(2),
+  numero_factura: z.string().min(1),
+  conductor: z.string().min(2),
+  placa_vehiculo: z.string().min(2),
   limpieza_vehiculo: z.enum(['cumple', 'no_cumple']),
   documentacion_dotacion: z.enum(['cumple', 'no_cumple']),
-  responsable_liberacion: z.coerce.number().int().positive(),
-  estado_liberacion: z.enum(['liberado', 'retenido', 'rechazado']),
+  unidades_empacadas: z.coerce.number().int().positive(),
+  peso_neto: z.coerce.number().positive(),
+  fecha_vencimiento: z.string().date(),
+  etiqueta_verificada: z.coerce.boolean(),
+  verificacion_envase: z.coerce.boolean(),
+  estado_liberacion: z.enum(['aprobado', 'retenido', 'rechazado']),
+  motivo_retencion: z.string().optional().default(''),
+  motivo_rechazo: z.string().optional().default(''),
   observaciones: z.string().optional().default('')
+}).superRefine((data, ctx) => {
+  const checks = [
+    data.etiqueta_verificada,
+    data.verificacion_envase
+  ];
+
+  if (checks.some((item) => item !== true)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Debe completar todas las validaciones de liberacion.'
+    });
+  }
+
+  if (data.estado_liberacion === 'retenido' && !data.motivo_retencion.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['motivo_retencion'],
+      message: 'Debes registrar el motivo de retencion.'
+    });
+  }
+
+  if (data.estado_liberacion === 'rechazado' && !data.motivo_rechazo.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['motivo_rechazo'],
+      message: 'Debes registrar el motivo de rechazo.'
+    });
+  }
 });

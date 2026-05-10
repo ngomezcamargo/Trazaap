@@ -3,6 +3,18 @@
 import { useState } from 'react';
 import { trazabilidadServicio } from '@/servicios/trazabilidad.servicio';
 
+const etiquetasBlockchain = {
+  VERIFICADO: 'Verificado en blockchain',
+  ALTERADO: 'Registro alterado',
+  PENDIENTE: 'Pendiente de validacion',
+  NO_ENCONTRADO: 'No encontrado en blockchain'
+};
+
+function textoCortoHash(hash) {
+  if (!hash) return '-';
+  return hash.length > 18 ? `${hash.slice(0, 12)}...${hash.slice(-6)}` : hash;
+}
+
 export function BuscadorTrazabilidad() {
   const [lote, setLote] = useState('');
   const [filtroEvento, setFiltroEvento] = useState('');
@@ -33,7 +45,7 @@ export function BuscadorTrazabilidad() {
       <form onSubmit={handleSubmit}>
         <div className="grid grid-2">
           <div className="campo">
-            <label>Lote del proveedor</label>
+            <label>Lote producido</label>
             <input value={lote} onChange={(event) => setLote(event.target.value)} required />
           </div>
         </div>
@@ -49,28 +61,104 @@ export function BuscadorTrazabilidad() {
 
       {data && (
         <div style={{ marginTop: 16 }}>
-          <h3 style={{ marginBottom: 8 }}>Lote: {data.lote}</h3>
+          <h3 style={{ marginBottom: 8 }}>Lote producido: {data.produccion?.manufactura?.lote_producido || data.lote}</h3>
+          {data.tipoConsulta === 'lote_materia_prima' ? (
+            <p className="texto-secundario">No se encontro un lote producido con ese codigo; se muestra trazabilidad del lote de materia prima consultado.</p>
+          ) : null}
 
           <div className="grid grid-2">
             <div className="tarjeta">
-              <h4>Recepcion</h4>
-              <p><strong>Proveedor:</strong> {data.proveedor ? `${data.proveedor.nombre} (${data.proveedor.nit})` : 'sin registro directo'}</p>
-              <p><strong>Estado:</strong> <span className={`estado ${data.recepcion?.estado_recepcion || ''}`}>{data.recepcion?.estado_recepcion || 'sin registro'}</span></p>
-              <p><strong>Materia prima:</strong> {data.recepcion?.materia_prima || '-'}</p>
+              <h4>Produccion</h4>
+              <p><strong>Orden:</strong> {data.produccion?.orden?.codigo_orden || 'sin registro'}</p>
+              <p><strong>Lote producido:</strong> {data.produccion?.manufactura?.lote_producido || 'pendiente'}</p>
+              <p><strong>Producto:</strong> {(data.produccion?.productos || []).map((item) => item.producto).filter(Boolean).join(', ') || '-'}</p>
             </div>
             <div className="tarjeta">
-              <h4>Inspeccion y liberacion</h4>
-              <p><strong>Inspeccion:</strong> <span className={`estado ${data.inspeccion?.decision_final || 'retenido'}`}>{data.inspeccion ? data.inspeccion.decision_final : 'pendiente'}</span></p>
+              <h4>Liberacion y origen</h4>
               <p><strong>Liberacion:</strong> {data.liberacion ? `${data.liberacion.estado_liberacion} / peso neto ${data.liberacion.peso_neto}` : 'sin registro'}</p>
-              <p><strong>Produccion:</strong> {data.produccion ? `${data.produccion.orden.codigo_orden} / lote ${data.produccion.lote_terminado?.lote_producto || 'pendiente'}` : 'sin registro'}</p>
+              <p><strong>Materias primas:</strong> {(data.recepciones || []).length}</p>
+              <p><strong>Proveedor principal:</strong> {data.proveedor ? `${data.proveedor.nombre} (${data.proveedor.nit})` : 'sin registro directo'}</p>
             </div>
           </div>
 
           <div className="tarjeta" style={{ marginTop: 12 }}>
             <h4>Linea de tiempo del lote</h4>
             <div className="flujo" style={{ fontSize: '0.95rem' }}>
-              Recepcion <span>{'->'}</span> Inspeccion <span>{'->'}</span> Produccion <span>{'->'}</span> Liberacion <span>{'->'}</span> Blockchain
+              Recepcion de materias primas <span>{'->'}</span> Inspeccion <span>{'->'}</span> Produccion <span>{'->'}</span> Liberacion
             </div>
+          </div>
+
+          <div className="tarjeta" style={{ marginTop: 12 }}>
+            <h4>Materias primas de origen</h4>
+            <table className="tabla">
+              <thead>
+                <tr>
+                  <th>Lote proveedor</th>
+                  <th>Materia prima</th>
+                  <th>Proveedor</th>
+                  <th>Cantidad recibida</th>
+                  <th>Inspeccion</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data.recepciones || []).map((recepcion) => {
+                  const inspeccion = (data.inspecciones || []).find((item) => item.recepcion_id === recepcion.id);
+                  return (
+                    <tr key={recepcion.id}>
+                      <td>{recepcion.numero_lote || recepcion.lote_proveedor}</td>
+                      <td>{recepcion.materia_prima || '-'}</td>
+                      <td>{recepcion.proveedor ? `${recepcion.proveedor.nombre} (${recepcion.proveedor.nit})` : '-'}</td>
+                      <td>{recepcion.cantidad} {recepcion.unidad_medida || recepcion.unidad_presentacion || ''}</td>
+                      <td>
+                        <span className={`estado ${inspeccion?.decision_final || 'retenido'}`}>
+                          {inspeccion?.decision_final || 'pendiente'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {(data.recepciones || []).length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>No hay materias primas asociadas a este lote producido.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="tarjeta" style={{ marginTop: 12 }}>
+            <h4>Validacion blockchain</h4>
+            <table className="tabla">
+              <thead>
+                <tr>
+                  <th>Evento</th>
+                  <th>Entidad</th>
+                  <th>Estado</th>
+                  <th>Hash actual</th>
+                  <th>Hash Fabric</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data.validacionesBlockchain || []).map((item) => (
+                  <tr key={`${item.tipoEvento}-${item.idEntidad}`}>
+                    <td>{item.tipoEvento}</td>
+                    <td>{item.idEntidad}</td>
+                    <td>
+                      <span className={`estado ${item.estadoBlockchain?.toLowerCase() || ''}`}>
+                        {etiquetasBlockchain[item.estadoBlockchain] || item.estadoBlockchain || 'Pendiente de validacion'}
+                      </span>
+                    </td>
+                    <td title={item.hashActual}>{textoCortoHash(item.hashActual)}</td>
+                    <td title={item.hashBlockchain || ''}>{textoCortoHash(item.hashBlockchain)}</td>
+                  </tr>
+                ))}
+                {(data.validacionesBlockchain || []).length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>No hay eventos criticos para validar en blockchain.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
 
           <h4>Eventos</h4>
@@ -102,32 +190,6 @@ export function BuscadorTrazabilidad() {
             </tbody>
           </table>
 
-          <h4 style={{ marginTop: 18 }}>Eventos blockchain</h4>
-          <table className="tabla">
-            <thead>
-              <tr>
-                <th>Tipo</th>
-                <th>Hash</th>
-                <th>Usuario</th>
-                <th>Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(data.eventosBlockchain || []).map((event) => (
-                <tr key={event.id}>
-                  <td>{event.tipoEvento}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{event.hash}</td>
-                  <td>{event.usuario}</td>
-                  <td>{new Date(event.fechaEvento).toLocaleString()}</td>
-                </tr>
-              ))}
-              {(data.eventosBlockchain || []).length === 0 ? (
-                <tr>
-                  <td colSpan={4}>Sin eventos blockchain para este lote.</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { poolPostgres } from '../../configuracion/postgresql.js';
+import { ErrorHttp } from '../../middlewares/errorHttp.js';
 
 async function obtenerColumnasTabla(client, tableName) {
   const { rows } = await client.query(
@@ -20,10 +21,21 @@ export async function crearRecepcion(data) {
 
     const columnasRecepciones = await obtenerColumnasTabla(client, 'receptions');
     const columnasInspeccion = await obtenerColumnasTabla(client, 'reception_inspections');
+    const columnasMaterias = await obtenerColumnasTabla(client, 'raw_materials');
 
     const tienePresentacion = columnasRecepciones.has('presentacion');
     const tieneNumeroLote = columnasRecepciones.has('numero_lote');
     const tienePesoRecibido = columnasRecepciones.has('peso_recibido');
+    const tieneUnidadMedida = columnasRecepciones.has('unidad_medida');
+
+    const unidadMateriaPrimaQuery = `
+      SELECT ${columnasMaterias.has('unidad_medida_base') ? 'unidad_medida_base' : 'unidad_medida'} AS unidad
+      FROM raw_materials
+      WHERE id = $1
+    `;
+    const unidadMateriaPrimaRes = await client.query(unidadMateriaPrimaQuery, [data.materia_prima_id]);
+    const unidadBase = unidadMateriaPrimaRes.rows[0]?.unidad;
+    data.unidad_medida = unidadBase || data.unidad_medida || 'unidad';
 
     const camposRecepcion = [
       'fecha_recepcion',
@@ -68,6 +80,11 @@ export async function crearRecepcion(data) {
       values.push(data.numero_lote);
     }
 
+    if (tieneUnidadMedida) {
+      camposRecepcion.push('unidad_medida');
+      values.push(data.unidad_medida);
+    }
+
     const placeholders = camposRecepcion.map((_, index) => `$${index + 1}`).join(',');
     const query = `
       INSERT INTO receptions (${camposRecepcion.join(',')})
@@ -85,7 +102,7 @@ export async function crearRecepcion(data) {
       'textura',
       'estado_empaque',
       'certificado_calidad',
-      'inspeccion_vehiculo',
+      'inspeccion_transporte',
       'observaciones',
       'decision_final',
       'inspeccionado_por'
@@ -98,7 +115,7 @@ export async function crearRecepcion(data) {
       data.inspeccion_producto.textura,
       data.inspeccion_producto.estado_empaque,
       data.inspeccion_producto.certificado_calidad,
-      data.inspeccion_vehiculo.limpieza_vehiculo && data.inspeccion_vehiculo.transporte_vehiculo,
+      data.inspeccion_transporte.condiciones_vehiculo && data.inspeccion_transporte.higiene_conductor,
       data.observaciones,
       data.inspeccion_producto.decision_producto,
       data.recibido_por
@@ -109,34 +126,19 @@ export async function crearRecepcion(data) {
       inspeccionValues.push(data.inspeccion_producto.observaciones_producto);
     }
 
-    if (columnasInspeccion.has('observaciones_vehiculo')) {
-      camposInspeccion.push('observaciones_vehiculo');
-      inspeccionValues.push(data.inspeccion_vehiculo.observaciones_vehiculo);
+    if (columnasInspeccion.has('observaciones_transporte')) {
+      camposInspeccion.push('observaciones_transporte');
+      inspeccionValues.push(data.inspeccion_transporte.observaciones_transporte);
     }
 
-    if (columnasInspeccion.has('vehiculo')) {
-      camposInspeccion.push('vehiculo');
-      inspeccionValues.push(data.inspeccion_vehiculo.vehiculo);
+    if (columnasInspeccion.has('condiciones_vehiculo')) {
+      camposInspeccion.push('condiciones_vehiculo');
+      inspeccionValues.push(data.inspeccion_transporte.condiciones_vehiculo);
     }
 
-    if (columnasInspeccion.has('conductor')) {
-      camposInspeccion.push('conductor');
-      inspeccionValues.push(data.inspeccion_vehiculo.conductor);
-    }
-
-    if (columnasInspeccion.has('placa')) {
-      camposInspeccion.push('placa');
-      inspeccionValues.push(data.inspeccion_vehiculo.placa);
-    }
-
-    if (columnasInspeccion.has('limpieza_vehiculo')) {
-      camposInspeccion.push('limpieza_vehiculo');
-      inspeccionValues.push(data.inspeccion_vehiculo.limpieza_vehiculo);
-    }
-
-    if (columnasInspeccion.has('transporte_vehiculo')) {
-      camposInspeccion.push('transporte_vehiculo');
-      inspeccionValues.push(data.inspeccion_vehiculo.transporte_vehiculo);
+    if (columnasInspeccion.has('higiene_conductor')) {
+      camposInspeccion.push('higiene_conductor');
+      inspeccionValues.push(data.inspeccion_transporte.higiene_conductor);
     }
 
     const placeholdersInspeccion = camposInspeccion.map((_, index) => `$${index + 1}`).join(',');
@@ -147,6 +149,48 @@ export async function crearRecepcion(data) {
     `;
 
     const inspeccionRes = await client.query(inspeccionQuery, inspeccionValues);
+
+    if (data.estado_recepcion === 'aceptado') {
+      const inventarioExistente = await client.query(
+        'SELECT unidad_medida FROM inventario_materias_primas WHERE materia_prima_id = $1',
+        [data.materia_prima_id]
+      );
+
+      if (
+        inventarioExistente.rows[0]?.unidad_medida
+        && inventarioExistente.rows[0].unidad_medida !== data.unidad_medida
+      ) {
+        throw new ErrorHttp(400, 'La unidad de medida de la recepcion no coincide con la unidad registrada en inventario para esta materia prima.');
+      }
+
+      const inventarioQuery = `
+        INSERT INTO inventario_materias_primas (materia_prima_id, cantidad_disponible, unidad_medida, fecha_actualizacion)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (materia_prima_id)
+        DO UPDATE SET
+          cantidad_disponible = inventario_materias_primas.cantidad_disponible + EXCLUDED.cantidad_disponible,
+          unidad_medida = EXCLUDED.unidad_medida,
+          fecha_actualizacion = NOW()
+      `;
+
+      await client.query(inventarioQuery, [data.materia_prima_id, data.cantidad, data.unidad_medida]);
+
+      await client.query(
+        `INSERT INTO inventario_movimientos (
+          materia_prima_id, tipo_movimiento, cantidad, unidad_medida,
+          referencia_tipo, referencia_id, observaciones, creado_por
+        ) VALUES ($1, 'entrada', $2, $3, 'recepcion', $4, $5, $6)`,
+        [
+          data.materia_prima_id,
+          data.cantidad,
+          data.unidad_medida,
+          recepcion.id,
+          `Entrada por recepcion ${data.numero_lote}`,
+          String(data.recibido_por)
+        ]
+      );
+    }
+
     await client.query('COMMIT');
     return { recepcion, inspeccion: inspeccionRes.rows[0] };
   } catch (error) {
@@ -155,6 +199,26 @@ export async function crearRecepcion(data) {
   } finally {
     client.release();
   }
+}
+
+export async function buscarInventarioMateriaPorMateriaPrimaId(materiaPrimaId) {
+  const { rows } = await poolPostgres.query(
+    'SELECT * FROM inventario_materias_primas WHERE materia_prima_id = $1',
+    [materiaPrimaId]
+  );
+  return rows[0] || null;
+}
+
+export async function buscarMovimientoInventarioPorReferencia(referenciaTipo, referenciaId) {
+  const { rows } = await poolPostgres.query(
+    `SELECT *
+     FROM inventario_movimientos
+     WHERE referencia_tipo = $1 AND referencia_id = $2
+     ORDER BY id DESC
+     LIMIT 1`,
+    [referenciaTipo, referenciaId]
+  );
+  return rows[0] || null;
 }
 
 export async function listarRecepciones() {
@@ -168,6 +232,61 @@ export async function listarRecepciones() {
 
   const { rows } = await poolPostgres.query(query);
   return rows;
+}
+
+export async function obtenerDetalleRecepcion(id) {
+  const client = await poolPostgres.connect();
+  try {
+    const columnasRecepciones = await obtenerColumnasTabla(client, 'receptions');
+    const columnasInspeccion = await obtenerColumnasTabla(client, 'reception_inspections');
+
+    const numeroLoteExpr = columnasRecepciones.has('numero_lote')
+      ? 'COALESCE(r.numero_lote, r.lote_proveedor)'
+      : 'r.lote_proveedor';
+    const presentacionExpr = columnasRecepciones.has('presentacion')
+      ? 'COALESCE(r.presentacion, r.unidad_presentacion)'
+      : 'r.unidad_presentacion';
+
+    const detalleQuery = `
+      SELECT
+        r.id,
+        r.fecha_recepcion,
+        p.nombre AS proveedor,
+        rm.nombre AS materia_prima,
+        r.cantidad,
+        ${columnasRecepciones.has('unidad_medida') ? 'r.unidad_medida' : 'NULL::varchar AS unidad_medida'},
+        ${presentacionExpr} AS presentacion,
+        ${numeroLoteExpr} AS numero_lote,
+        r.temperatura_recepcion AS temperatura,
+        r.fecha_vencimiento,
+        r.recibido_por,
+        r.estado_recepcion,
+        r.observaciones,
+        i.olor,
+        i.color,
+        i.textura,
+        i.estado_empaque,
+        i.certificado_calidad,
+        i.decision_final,
+        ${columnasInspeccion.has('observaciones_producto') ? 'i.observaciones_producto' : 'NULL::text AS observaciones_producto'},
+        ${columnasInspeccion.has('condiciones_vehiculo') ? 'i.condiciones_vehiculo' : 'NULL::boolean AS condiciones_vehiculo'},
+        ${columnasInspeccion.has('higiene_conductor') ? 'i.higiene_conductor' : 'NULL::boolean AS higiene_conductor'},
+        ${columnasInspeccion.has('observaciones_transporte') ? 'i.observaciones_transporte' : 'NULL::text AS observaciones_transporte'}
+      FROM receptions r
+      JOIN providers p ON p.id = r.proveedor_id
+      JOIN raw_materials rm ON rm.id = r.materia_prima_id
+      LEFT JOIN reception_inspections i ON i.reception_id = r.id
+      WHERE r.id = $1
+    `;
+
+    const detalleRes = await client.query(detalleQuery, [id]);
+    const detalle = detalleRes.rows[0] || null;
+    if (!detalle) return null;
+
+    return detalle;
+  } finally {
+    client.release();
+  }
 }
 
 export async function buscarRecepcionPorId(id) {
@@ -191,20 +310,37 @@ export async function buscarContextoRecepcionBlockchain(id) {
   const query = `
     SELECT
       r.id,
+      r.proveedor_id,
+      r.materia_prima_id,
       r.fecha_recepcion,
+      r.lote_proveedor,
       ${numeroLoteExpr} AS numero_lote,
       r.fecha_vencimiento,
       r.cantidad,
+      ${columnasRecepciones.has('unidad_medida') ? 'r.unidad_medida' : 'NULL::varchar AS unidad_medida'},
       ${presentacionExpr} AS presentacion,
       r.temperatura_recepcion,
+      ${columnasRecepciones.has('peso_recibido') ? 'r.peso_recibido' : 'NULL::numeric AS peso_recibido'},
+      r.observaciones,
+      r.recibido_por,
+      i.id AS inspeccion_id,
+      i.olor,
+      i.color,
+      i.textura,
+      i.estado_empaque,
+      i.certificado_calidad,
+      i.inspeccion_transporte,
       i.decision_final,
-      ${columnasInspeccion.has('vehiculo') ? 'i.vehiculo' : 'NULL::varchar AS vehiculo'},
-      ${columnasInspeccion.has('conductor') ? 'i.conductor' : 'NULL::varchar AS conductor'},
-      ${columnasInspeccion.has('placa') ? 'i.placa' : 'NULL::varchar AS placa'},
-      ${columnasInspeccion.has('limpieza_vehiculo') ? 'i.limpieza_vehiculo' : 'NULL::boolean AS limpieza_vehiculo'},
-      ${columnasInspeccion.has('transporte_vehiculo') ? 'i.transporte_vehiculo' : 'NULL::boolean AS transporte_vehiculo'},
+      i.observaciones AS inspeccion_observaciones,
+      ${columnasInspeccion.has('observaciones_producto') ? 'i.observaciones_producto' : 'NULL::text AS observaciones_producto'},
+      ${columnasInspeccion.has('observaciones_transporte') ? 'i.observaciones_transporte' : 'NULL::text AS observaciones_transporte'},
+      ${columnasInspeccion.has('condiciones_vehiculo') ? 'i.condiciones_vehiculo' : 'NULL::boolean AS condiciones_vehiculo'},
+      ${columnasInspeccion.has('higiene_conductor') ? 'i.higiene_conductor' : 'NULL::boolean AS higiene_conductor'},
+      i.inspeccionado_por,
+      i.inspeccionado_en,
       r.estado_recepcion,
       p.nombre AS proveedor_nombre,
+      p.nit AS proveedor_nit,
       rm.nombre AS materia_prima_nombre
     FROM receptions r
     JOIN providers p ON p.id = r.proveedor_id

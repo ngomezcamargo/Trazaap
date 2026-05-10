@@ -1,12 +1,13 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 export CHANNEL_NAME="${CHANNEL_NAME:-trazabilidad-channel}"
 export CHAINCODE_NAME="${CHAINCODE_NAME:-traceability}"
 export CHAINCODE_VERSION="${CHAINCODE_VERSION:-1.0}"
 export CHAINCODE_SEQUENCE="${CHAINCODE_SEQUENCE:-1}"
 
-export FABRIC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="${FABRIC_SCRIPT_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
+export FABRIC_DIR="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"
 export FABRIC_CFG_PATH="${FABRIC_DIR}/configtx"
 
 if [ -d "${FABRIC_DIR}/bin" ]; then

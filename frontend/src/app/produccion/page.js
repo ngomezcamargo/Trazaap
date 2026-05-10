@@ -5,9 +5,7 @@ import { FormularioOrdenProduccion } from '@/modulos/produccion/FormularioOrdenP
 export default function ProduccionPage() {
   return (
     <GuardiaSesion>
-      <ContenedorApp>
-        <h2>Produccion</h2>
-        <p>Gestion de orden diaria, consumos, tiempos y lote terminado.</p>
+      <ContenedorApp titulo="Produccion" subtitulo="Ordenes, orden activa, productos y tiempos en subsecciones.">
         <FormularioOrdenProduccion />
       </ContenedorApp>
     </GuardiaSesion>

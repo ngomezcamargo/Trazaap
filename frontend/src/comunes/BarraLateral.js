@@ -12,8 +12,8 @@ const linksGerente = [
   { href: '/materias-primas', label: 'Materias primas' },
   { href: '/recepciones', label: 'Recepciones' },
   { href: '/produccion', label: 'Produccion' },
+  { href: '/liberacion', label: 'Liberacion' },
   { href: '/trazabilidad', label: 'Trazabilidad' },
-  { href: '/blockchain', label: 'Blockchain' },
   { href: '/inventario', label: 'Inventario' },
   { href: '/reportes', label: 'Reportes' }
 ];

@@ -14,8 +14,22 @@ const initialState = {
   estado: 'activo'
 };
 
-export function FormularioProveedor() {
-  const [form, setForm] = useState(initialState);
+function normalizarProveedor(proveedor) {
+  return {
+    nombre: proveedor?.nombre || '',
+    nit: proveedor?.nit || '',
+    nombre_contacto: proveedor?.nombre_contacto || proveedor?.contacto || '',
+    telefono: proveedor?.telefono || '',
+    email: proveedor?.email || '',
+    direccion: proveedor?.direccion || '',
+    certificaciones: proveedor?.certificaciones || '',
+    estado: proveedor?.estado || 'activo'
+  };
+}
+
+export function FormularioProveedor({ proveedor = null, onSaved }) {
+  const modoEditar = Boolean(proveedor?.id);
+  const [form, setForm] = useState(() => (modoEditar ? normalizarProveedor(proveedor) : initialState));
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -29,9 +43,12 @@ export function FormularioProveedor() {
     setError('');
 
     try {
-      await proveedoresServicio.crear(form);
-      setMessage('Proveedor creado correctamente');
-      setForm(initialState);
+      const guardado = modoEditar
+        ? await proveedoresServicio.actualizar(proveedor.id, form)
+        : await proveedoresServicio.crear(form);
+      setMessage(modoEditar ? 'Proveedor actualizado correctamente' : 'Proveedor creado correctamente');
+      if (!modoEditar) setForm(initialState);
+      if (onSaved) onSaved(guardado);
     } catch (err) {
       setError(err.message);
     }
@@ -81,7 +98,7 @@ export function FormularioProveedor() {
 
       <div className="acciones">
         <button className="boton" type="submit">
-          Guardar proveedor
+          {modoEditar ? 'Guardar cambios' : 'Guardar proveedor'}
         </button>
       </div>
 
