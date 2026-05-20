@@ -2,6 +2,7 @@ services:
   ca.trazaap.local:
     image: hyperledger/fabric-ca:1.5
     container_name: ca.trazaap.local
+    restart: unless-stopped
     command: sh -c 'fabric-ca-server start -b admin:adminpw -d'
     environment:
       FABRIC_CA_HOME: /etc/hyperledger/fabric-ca-server
@@ -18,6 +19,7 @@ services:
   orderer.trazaap.local:
     image: hyperledger/fabric-orderer:2.5
     container_name: orderer.trazaap.local
+    restart: unless-stopped
     environment:
       FABRIC_LOGGING_SPEC: INFO
       ORDERER_GENERAL_LISTENADDRESS: 0.0.0.0
@@ -52,6 +54,7 @@ services:
   peer0.org1.trazaap.local:
     image: hyperledger/fabric-peer:2.5
     container_name: peer0.org1.trazaap.local
+    restart: unless-stopped
     environment:
       FABRIC_LOGGING_SPEC: INFO
       CORE_PEER_ID: peer0.org1.trazaap.local
