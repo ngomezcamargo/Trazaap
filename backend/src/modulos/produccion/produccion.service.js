@@ -10,6 +10,7 @@ import {
   buscarMateriasPorOrdenId,
   buscarOrdenPorId,
   buscarMateriaOrdenPorId,
+  buscarMovimientoInventarioMateria,
   buscarProductoOrdenPorId,
   buscarProductoFabricadoPorId,
   buscarProductosOrden,
@@ -128,24 +129,6 @@ export async function crearOrdenProduccionService(data, actor) {
         unidad_medida: req.unidad,
         observaciones: req.item.observaciones || ''
       });
-
-      const inventario = await descontarInventarioMateria({
-        materia_prima_id: req.item.materia_prima_id,
-        cantidad: req.cantidadTotal,
-        unidad_medida: req.unidad,
-        orden_produccion_id: orden.id,
-        actor,
-        observaciones: `Consumo planificado por orden ${data.codigo_orden}`
-      });
-
-      if (!inventario) {
-        throw new ErrorHttp(400, `No fue posible descontar inventario de ${req.item.materia_prima}. Verifica cantidad y unidad.`);
-      }
-
-      await registrarEventoCritico('inventario_materia_prima', inventario.id, actor);
-      if (inventario.movimiento_id) {
-        await registrarEventoCritico('movimiento_inventario', inventario.movimiento_id, actor);
-      }
     }
   }
 
@@ -332,6 +315,85 @@ function construirComparacionManufactura(producto, registro) {
   }));
 }
 
+async function descontarMateriasPorManufactura(orden, productoOrdenId, registro, actor) {
+  const materias = await buscarMateriasPorProductoOrdenId(orden.id, productoOrdenId);
+  const consumos = [];
+
+  for (const materia of materias) {
+    const movimientoManufactura = await buscarMovimientoInventarioMateria({
+      materia_prima_id: materia.materia_prima_id,
+      tipo_movimiento: 'salida',
+      referencia_tipo: 'registro_manufactura',
+      referencia_id: registro.id_manufactura
+    });
+    if (movimientoManufactura) continue;
+
+    const movimientoOrdenAnterior = await buscarMovimientoInventarioMateria({
+      materia_prima_id: materia.materia_prima_id,
+      tipo_movimiento: 'salida',
+      referencia_tipo: 'orden_produccion',
+      referencia_id: orden.id
+    });
+    if (movimientoOrdenAnterior) continue;
+
+    const cantidad = Number(materia.cantidad_real);
+    const inventario = await descontarInventarioMateria({
+      materia_prima_id: materia.materia_prima_id,
+      cantidad,
+      unidad_medida: materia.unidad_medida,
+      referencia_tipo: 'registro_manufactura',
+      referencia_id: registro.id_manufactura,
+      actor,
+      observaciones: `Consumo real por manufactura ${registro.lote_producido} en orden ${orden.codigo_orden}`
+    });
+
+    if (!inventario) {
+      throw new ErrorHttp(
+        400,
+        `Inventario insuficiente para registrar consumo real de ${materia.nombre_ingrediente}. Requerido: ${cantidad} ${materia.unidad_medida}.`
+      );
+    }
+
+    await registrarEventoCritico('inventario_materia_prima', inventario.id, actor);
+    if (inventario.movimiento_id) {
+      await registrarEventoCritico('movimiento_inventario', inventario.movimiento_id, actor);
+    }
+
+    consumos.push({
+      materia_prima: materia.nombre_ingrediente,
+      cantidad,
+      unidad_medida: materia.unidad_medida,
+      inventario_id: inventario.id,
+      movimiento_id: inventario.movimiento_id
+    });
+  }
+
+  return consumos;
+}
+
+async function validarDisponibilidadManufactura(orden, productoOrdenId) {
+  const materias = await buscarMateriasPorProductoOrdenId(orden.id, productoOrdenId);
+
+  for (const materia of materias) {
+    const movimientoOrdenAnterior = await buscarMovimientoInventarioMateria({
+      materia_prima_id: materia.materia_prima_id,
+      tipo_movimiento: 'salida',
+      referencia_tipo: 'orden_produccion',
+      referencia_id: orden.id
+    });
+    if (movimientoOrdenAnterior) continue;
+
+    const disponible = Number(materia.inventario_disponible || 0);
+    const requerido = Number(materia.cantidad_real || 0);
+    if (disponible < requerido) {
+      throw new ErrorHttp(
+        400,
+        `Inventario insuficiente para registrar consumo real de ${materia.nombre_ingrediente}. Requerido: ${requerido} ${materia.unidad_medida}, disponible: ${disponible} ${materia.unidad_medida}.`
+      );
+    }
+  }
+}
+
 export async function registrarManufacturaService(ordenId, productoOrdenId, data, actor) {
   const orden = await buscarOrdenPorId(ordenId);
   if (!orden) throw new ErrorHttp(404, 'Orden de produccion no encontrada');
@@ -352,6 +414,8 @@ export async function registrarManufacturaService(ordenId, productoOrdenId, data
     throw new ErrorHttp(400, 'Selecciona un operario activo como responsable de la manufactura');
   }
 
+  await validarDisponibilidadManufactura(orden, productoOrdenId);
+
   const registro = await crearRegistroManufactura({
     ...data,
     id_orden_produccion: ordenId,
@@ -361,6 +425,7 @@ export async function registrarManufacturaService(ordenId, productoOrdenId, data
   });
 
   const comparacion = construirComparacionManufactura(producto, registro);
+  const consumosInventario = await descontarMateriasPorManufactura(orden, productoOrdenId, registro, actor);
   const tieneDesviaciones = comparacion.some((item) => item.desviado);
   await actualizarEstadoManufacturaProducto(productoOrdenId, tieneDesviaciones ? 'con_observaciones' : 'registrado');
 
@@ -385,6 +450,7 @@ export async function registrarManufacturaService(ordenId, productoOrdenId, data
       producto: producto.producto,
       lote_producido: registro.lote_producido,
       unidades_producidas: registro.unidades_producidas,
+      consumos_inventario: consumosInventario,
       responsable_usuario_id: responsable.id,
       responsable_manufactura: responsable.email,
       comparacion
@@ -400,6 +466,7 @@ export async function registrarManufacturaService(ordenId, productoOrdenId, data
     estado_manufactura: tieneDesviaciones ? 'con_observaciones' : 'registrado',
     orden_lista_para_liberacion: pendientes === 0,
     comparacion,
+    consumos_inventario: consumosInventario,
     blockchain: {
       preparado: true,
       tipoEvento: 'manufactura_producto'
@@ -418,14 +485,16 @@ export async function actualizarCantidadRealMateriaService(ordenId, materiaId, c
   if (!actualizada) throw new ErrorHttp(404, 'Materia asociada no encontrada en la orden');
 
   const diferencia = Number(cantidadReal) - Number(anterior.cantidad_real);
-  if (diferencia !== 0) {
+  const productoOrden = await buscarProductoOrdenPorId(ordenId, actualizada.orden_producto_id);
+  if (diferencia !== 0 && productoOrden?.id_manufactura) {
     const recepcion = await buscarRecepcionPorId(actualizada.recepcion_id);
     if (diferencia > 0) {
       const inventario = await descontarInventarioMateria({
         materia_prima_id: recepcion.materia_prima_id,
         cantidad: diferencia,
         unidad_medida: actualizada.unidad_medida,
-        orden_produccion_id: ordenId,
+        referencia_tipo: 'registro_manufactura',
+        referencia_id: productoOrden.id_manufactura,
         actor,
         observaciones: `Ajuste por aumento de cantidad real en orden ${orden.codigo_orden}`
       });
@@ -437,7 +506,8 @@ export async function actualizarCantidadRealMateriaService(ordenId, materiaId, c
         materia_prima_id: recepcion.materia_prima_id,
         cantidad: Math.abs(diferencia),
         unidad_medida: actualizada.unidad_medida,
-        orden_produccion_id: ordenId,
+        referencia_tipo: 'registro_manufactura',
+        referencia_id: productoOrden.id_manufactura,
         actor,
         observaciones: `Ajuste por reduccion de cantidad real en orden ${orden.codigo_orden}`
       });

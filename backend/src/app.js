@@ -12,6 +12,7 @@ import rutasTrazabilidad from './modulos/trazabilidad/trazabilidad.routes.js';
 import rutasProduccion from './modulos/produccion/produccion.routes.js';
 import rutasLiberacion from './modulos/liberacion/liberacion.routes.js';
 import rutasInventario from './modulos/inventario/inventario.routes.js';
+import rutasPublicas from './modulos/publico/publico.routes.js';
 
 export function createApp() {
   const app = express();
@@ -35,6 +36,7 @@ export function createApp() {
   api.use('/liberacion', rutasLiberacion);
   api.use('/inventario-insumos', rutasInventario);
   api.use('/traceability', rutasTrazabilidad);
+  api.use('/public', rutasPublicas);
 
   app.use(entorno.apiPrefix, api);
 

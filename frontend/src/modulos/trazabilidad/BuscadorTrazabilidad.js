@@ -40,6 +40,12 @@ export function BuscadorTrazabilidad() {
     return [event.event_type, event.actor].join(' ').toLowerCase().includes(filtro);
   });
 
+  const abrirReporte = () => {
+    const loteReporte = data?.produccion?.manufactura?.lote_producido || data?.lote || lote;
+    if (!loteReporte) return;
+    window.open(`/reportes/trazabilidad/${encodeURIComponent(loteReporte)}`, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div className="tarjeta">
       <form onSubmit={handleSubmit}>
@@ -62,6 +68,11 @@ export function BuscadorTrazabilidad() {
       {data && (
         <div style={{ marginTop: 16 }}>
           <h3 style={{ marginBottom: 8 }}>Lote producido: {data.produccion?.manufactura?.lote_producido || data.lote}</h3>
+          <div className="acciones" style={{ marginTop: 0, marginBottom: 12 }}>
+            <button className="boton" type="button" onClick={abrirReporte}>
+              Generar reporte PDF
+            </button>
+          </div>
           {data.tipoConsulta === 'lote_materia_prima' ? (
             <p className="texto-secundario">No se encontro un lote producido con ese codigo; se muestra trazabilidad del lote de materia prima consultado.</p>
           ) : null}

@@ -7,7 +7,6 @@ import {
   crearLiberacionProducto,
   listarPendientesLiberacion,
   listarLiberaciones,
-  registrarInventarioProductoTerminado,
   registrarEventoTrazabilidad
 } from './liberacion.repository.js';
 
@@ -48,21 +47,7 @@ export async function crearLiberacionService(data, usuario) {
     responsable_liberacion: responsableLiberacion.id
   });
 
-  let inventario = null;
-  if (liberacion.estado_liberacion === 'aprobado') {
-    inventario = await registrarInventarioProductoTerminado({
-      id_liberacion: liberacion.id_liberacion,
-      producto: manufactura.producto,
-      lote: manufactura.lote_producido,
-      unidades_disponibles: liberacion.unidades_empacadas,
-      fecha_vencimiento: liberacion.fecha_vencimiento
-    });
-  }
-
   const evidenciaLiberacion = await registrarEventoCritico('liberacion_producto', liberacion.id_liberacion, usuario.email);
-  const evidenciaInventario = inventario?.id_inventario
-    ? await registrarEventoCritico('inventario_producto_terminado', inventario.id_inventario, usuario.email)
-    : null;
 
   await registrarEventoTrazabilidad({
     recepcion_id: null,
@@ -99,10 +84,8 @@ export async function crearLiberacionService(data, usuario) {
     producto: manufactura.producto,
     codigo_orden: manufactura.codigo_orden,
     responsable_liberacion_email: responsableLiberacion.email,
-    inventario,
     blockchain: {
-      liberacion: evidenciaLiberacion,
-      inventario: evidenciaInventario
+      liberacion: evidenciaLiberacion
     }
   };
 }

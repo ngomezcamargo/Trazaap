@@ -132,28 +132,6 @@ export async function crearLiberacionProducto(data) {
   return rows[0];
 }
 
-export async function registrarInventarioProductoTerminado(data) {
-  const { rows } = await poolPostgres.query(
-    `INSERT INTO inventario_producto_terminado (
-      id_liberacion,
-      producto,
-      lote,
-      unidades_disponibles,
-      fecha_vencimiento,
-      estado
-    ) VALUES ($1, $2, $3, $4, $5, 'disponible')
-    RETURNING *`,
-    [
-      data.id_liberacion,
-      data.producto,
-      data.lote,
-      data.unidades_disponibles,
-      data.fecha_vencimiento
-    ]
-  );
-  return rows[0];
-}
-
 export async function listarLiberaciones() {
   const { rows } = await poolPostgres.query(
     `SELECT

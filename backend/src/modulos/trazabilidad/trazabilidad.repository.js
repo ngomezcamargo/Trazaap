@@ -105,10 +105,9 @@ export async function obtenerDetalleProduccion(ordenId, lote = '') {
       [ordenId, lote]
     ),
     poolPostgres.query(
-      `SELECT lp.*, rm.lote_producido AS lote_producto, ipt.id_inventario AS inventario_producto_terminado_id
+      `SELECT lp.*, rm.lote_producido AS lote_producto
        FROM liberacion_producto lp
        JOIN registro_manufactura rm ON rm.id_manufactura = lp.id_manufactura
-       LEFT JOIN inventario_producto_terminado ipt ON ipt.id_liberacion = lp.id_liberacion
        WHERE rm.id_orden_produccion = $1
        LIMIT 1`,
       [ordenId]

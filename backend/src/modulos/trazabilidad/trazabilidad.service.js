@@ -161,9 +161,6 @@ export async function consultarTrazabilidadPorLote(lote) {
         : null,
       detalle?.liberacion?.id_liberacion
         ? validarSeguro('liberacion_producto', detalle.liberacion.id_liberacion)
-        : null,
-      detalle?.liberacion?.inventario_producto_terminado_id
-        ? validarSeguro('inventario_producto_terminado', detalle.liberacion.inventario_producto_terminado_id)
         : null
     ].filter(Boolean)
   )).flat().filter(Boolean);

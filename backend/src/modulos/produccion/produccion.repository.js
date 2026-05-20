@@ -389,9 +389,17 @@ export async function buscarUsuarioOperarioPorId(id) {
 
 export async function buscarMateriasPorProductoOrdenId(ordenId, productoOrdenId) {
   const { rows } = await poolPostgres.query(
-    `SELECT m.*, r.lote_proveedor, r.numero_lote, r.unidad_medida AS unidad_recepcion
+    `SELECT m.*,
+       r.materia_prima_id,
+       r.lote_proveedor,
+       r.numero_lote,
+       r.unidad_medida AS unidad_recepcion,
+       i.cantidad_disponible AS inventario_disponible
      FROM ordenes_produccion_materias m
      JOIN receptions r ON r.id = m.recepcion_id
+     LEFT JOIN inventario_materias_primas i
+       ON i.materia_prima_id = r.materia_prima_id
+      AND i.unidad_medida = m.unidad_medida
      WHERE m.orden_produccion_id = $1 AND m.orden_producto_id = $2
      ORDER BY m.id ASC`,
     [ordenId, productoOrdenId]
@@ -547,6 +555,8 @@ export async function listarRecepcionesAceptadas() {
 }
 
 export async function descontarInventarioMateria(data) {
+  const referenciaTipo = data.referencia_tipo || 'orden_produccion';
+  const referenciaId = data.referencia_id ?? data.orden_produccion_id ?? null;
   const { rows } = await poolPostgres.query(
     `UPDATE inventario_materias_primas
      SET cantidad_disponible = cantidad_disponible - $2,
@@ -564,13 +574,14 @@ export async function descontarInventarioMateria(data) {
     `INSERT INTO inventario_movimientos (
       materia_prima_id, tipo_movimiento, cantidad, unidad_medida,
       referencia_tipo, referencia_id, observaciones, creado_por
-    ) VALUES ($1, 'salida', $2, $3, 'orden_produccion', $4, $5, $6)
+    ) VALUES ($1, 'salida', $2, $3, $4, $5, $6, $7)
     RETURNING id`,
     [
       data.materia_prima_id,
       data.cantidad,
       data.unidad_medida,
-      data.orden_produccion_id,
+      referenciaTipo,
+      referenciaId,
       data.observaciones || '',
       data.actor || null
     ]
@@ -580,6 +591,8 @@ export async function descontarInventarioMateria(data) {
 }
 
 export async function devolverInventarioMateria(data) {
+  const referenciaTipo = data.referencia_tipo || 'orden_produccion';
+  const referenciaId = data.referencia_id ?? data.orden_produccion_id ?? null;
   const { rows } = await poolPostgres.query(
     `INSERT INTO inventario_materias_primas (materia_prima_id, cantidad_disponible, unidad_medida, fecha_actualizacion)
      VALUES ($1, $2, $3, NOW())
@@ -595,19 +608,34 @@ export async function devolverInventarioMateria(data) {
     `INSERT INTO inventario_movimientos (
       materia_prima_id, tipo_movimiento, cantidad, unidad_medida,
       referencia_tipo, referencia_id, observaciones, creado_por
-    ) VALUES ($1, 'ajuste', $2, $3, 'orden_produccion', $4, $5, $6)
+    ) VALUES ($1, 'ajuste', $2, $3, $4, $5, $6, $7)
     RETURNING id`,
     [
       data.materia_prima_id,
       data.cantidad,
       data.unidad_medida,
-      data.orden_produccion_id,
+      referenciaTipo,
+      referenciaId,
       data.observaciones || '',
       data.actor || null
     ]
   );
 
   return { ...rows[0], movimiento_id: movimientoRes.rows[0]?.id || null };
+}
+
+export async function buscarMovimientoInventarioMateria(data) {
+  const { rows } = await poolPostgres.query(
+    `SELECT *
+     FROM inventario_movimientos
+     WHERE materia_prima_id = $1
+       AND tipo_movimiento = $2
+       AND referencia_tipo = $3
+       AND referencia_id = $4
+     LIMIT 1`,
+    [data.materia_prima_id, data.tipo_movimiento, data.referencia_tipo, data.referencia_id]
+  );
+  return rows[0] || null;
 }
 
 export async function asociarMateriaPrimaOrden(ordenId, materia) {

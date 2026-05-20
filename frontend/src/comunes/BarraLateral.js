@@ -41,8 +41,11 @@ export function BarraLateral() {
   return (
     <aside className="barra-lateral">
       <div className="marca">
-        <h1>Trazaap</h1>
-        <p>Trazabilidad alimentaria segura</p>
+        <img className="logo-marca" src="/trazaap-logo.jpeg" alt="Logo Trazaap" />
+        <div>
+          <h1>Trazaap</h1>
+          <p>Trazabilidad alimentaria segura</p>
+        </div>
       </div>
 
       <nav className="menu-lateral">
