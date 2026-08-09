@@ -6,7 +6,8 @@ import { GuardiaRol } from '@/comunes/GuardiaRol';
 import { GuardiaSesion } from '@/comunes/GuardiaSesion';
 import { materiasPrimasServicio } from '@/servicios/materias-primas.servicio';
 import { proveedoresServicio } from '@/servicios/proveedores.servicio';
-import { ROLES } from '@/utilidades/roles';
+import { obtenerUsuario } from '@/utilidades/sesion';
+import { puedeAdministrar, ROLES } from '@/utilidades/roles';
 
 const inicial = {
   id: null,
@@ -20,6 +21,8 @@ const inicial = {
 };
 
 export default function MateriasPrimasPage() {
+  const usuario = obtenerUsuario();
+  const puedeEditar = puedeAdministrar(usuario?.role);
   const [form, setForm] = useState(inicial);
   const [items, setItems] = useState([]);
   const [proveedores, setProveedores] = useState([]);
@@ -74,6 +77,7 @@ export default function MateriasPrimasPage() {
   const abrirCrear = () => {
     setDetalle(null);
     setError('');
+    setMessage('');
     setForm(inicial);
     setModoFormulario('crear');
     setModalAbierto(true);
@@ -82,6 +86,7 @@ export default function MateriasPrimasPage() {
   const abrirEditar = (item) => {
     setDetalle(null);
     setError('');
+    setMessage('');
     setForm({
       ...item,
       unidad_medida_base: item.unidad_medida_base || item.unidad_medida || '',
@@ -92,33 +97,44 @@ export default function MateriasPrimasPage() {
     setModalAbierto(true);
   };
 
+  const cerrarModalFormulario = () => {
+    setModalAbierto(false);
+    setForm(inicial);
+    setModoFormulario('crear');
+    setError('');
+  };
+
   return (
     <GuardiaSesion>
       <GuardiaRol permitido={[ROLES.GERENTE]}>
       <ContenedorApp titulo="Materias primas" subtitulo="Catalogo base para recepcion de productos recibidos.">
         <div className="tarjeta">
-          <div className="acciones" style={{ marginTop: 0, marginBottom: 12 }}>
-            <button className="boton" type="button" onClick={abrirCrear}>Nueva materia prima</button>
-          </div>
+          {puedeEditar && (
+            <div className="acciones" style={{ marginTop: 0, marginBottom: 12 }}>
+              <button className="boton" type="button" onClick={abrirCrear}>Nueva materia prima</button>
+            </div>
+          )}
           <div className="campo" style={{ marginBottom: 12 }}>
             <label>Buscar materia prima</label>
             <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Nombre, unidad o descripcion" />
           </div>
           <table className="tabla">
             <thead><tr><th>ID</th><th>Nombre</th><th>Unidad base</th><th>Proveedor</th><th>Estado</th><th>Acciones</th></tr></thead>
-            <tbody>{filtradas.map((item) => <tr key={item.id}><td>{item.id}</td><td>{item.nombre}</td><td>{item.unidad_medida_base || item.unidad_medida}</td><td>{item.proveedor_nombre || '-'}</td><td>{item.is_active ? 'activo' : 'inactivo'}</td><td><div className="acciones" style={{ marginTop: 0 }}><button className="boton secundario" onClick={() => abrirEditar(item)} type="button">Editar</button><button className="boton secundario" onClick={() => setDetalle(item)} type="button">Ver detalle</button></div></td></tr>)}</tbody>
+            <tbody>{filtradas.map((item) => <tr key={item.id}><td>{item.id}</td><td>{item.nombre}</td><td>{item.unidad_medida_base || item.unidad_medida}</td><td>{item.proveedor_nombre || '-'}</td><td>{item.is_active ? 'activo' : 'inactivo'}</td><td><div className="acciones" style={{ marginTop: 0 }}>{puedeEditar && <button className="boton secundario" onClick={() => abrirEditar(item)} type="button">Editar</button>}<button className="boton secundario" onClick={() => setDetalle(item)} type="button">Ver detalle</button></div></td></tr>)}</tbody>
           </table>
-          {message && <div className="alerta ok">{message}</div>}
-          {error && <div className="alerta error">{error}</div>}
+          {!modalAbierto && message && <div className="alerta ok">{message}</div>}
+          {!modalAbierto && error && <div className="alerta error">{error}</div>}
         </div>
 
-        {modalAbierto && (
-          <div className="modal-fondo" onClick={() => setModalAbierto(false)}>
+        {puedeEditar && modalAbierto && (
+          <div className="modal-fondo" onClick={cerrarModalFormulario}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-encabezado-form">
-                <button className="boton secundario modal-cancelar" type="button" onClick={() => setModalAbierto(false)}>Cancelar</button>
+                <button className="boton secundario modal-cancelar" type="button" onClick={cerrarModalFormulario}>Cancelar</button>
                 <h3>{modoFormulario === 'crear' ? 'Nueva materia prima' : 'Editar materia prima'}</h3>
               </div>
+              {message && <div className="alerta ok alerta-modal">{message}</div>}
+              {error && <div className="alerta error alerta-modal">{error}</div>}
               <form onSubmit={onSubmit}>
                 <div className="grid grid-2">
                   <div className="campo"><label>Nombre</label><input value={form.nombre} onChange={(e) => setForm((p) => ({ ...p, nombre: e.target.value }))} required /></div>

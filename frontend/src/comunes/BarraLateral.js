@@ -3,8 +3,20 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { limpiarSesion } from '@/utilidades/sesion';
-import { esGerente, normalizarRol } from '@/utilidades/roles';
+import { normalizarRol, ROLES } from '@/utilidades/roles';
 import { obtenerUsuario } from '@/utilidades/sesion';
+
+const linksAdministrador = [
+  { href: '/panel', label: 'Dashboard' },
+  { href: '/proveedores', label: 'Proveedores' },
+  { href: '/materias-primas', label: 'Materias primas' },
+  { href: '/recepciones', label: 'Recepciones' },
+  { href: '/produccion', label: 'Produccion' },
+  { href: '/liberacion', label: 'Liberacion' },
+  { href: '/trazabilidad', label: 'Trazabilidad' },
+  { href: '/inventario', label: 'Inventario' },
+  { href: '/reportes', label: 'Reportes' }
+];
 
 const linksGerente = [
   { href: '/panel', label: 'Dashboard' },
@@ -20,7 +32,8 @@ const linksGerente = [
 
 const linksOperario = [
   { href: '/panel', label: 'Dashboard' },
-  { href: '/recepciones/nueva', label: 'Recepcion' },
+  { href: '/recepciones', label: 'Recepciones' },
+  { href: '/recepciones/nueva', label: 'Nueva recepcion' },
   { href: '/produccion', label: 'Produccion' },
   { href: '/liberacion', label: 'Liberacion' },
   { href: '/trazabilidad', label: 'Trazabilidad' }
@@ -31,7 +44,11 @@ export function BarraLateral() {
   const router = useRouter();
   const usuario = obtenerUsuario();
   const rol = normalizarRol(usuario?.role);
-  const links = esGerente(rol) ? linksGerente : linksOperario;
+  const links = rol === ROLES.ADMINISTRADOR
+    ? linksAdministrador
+    : rol === ROLES.GERENTE
+      ? linksGerente
+      : linksOperario;
 
   const cerrarSesion = () => {
     limpiarSesion();

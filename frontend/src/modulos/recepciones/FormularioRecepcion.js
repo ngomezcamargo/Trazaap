@@ -48,7 +48,7 @@ const itemsProducto = [
   ['certificado_calidad', 'Certificado de calidad recibido']
 ];
 
-export function FormularioRecepcion() {
+export function FormularioRecepcion({ onSaved }) {
   const usuario = obtenerUsuario();
   const [form, setForm] = useState(() => nuevoFormulario(usuario));
   const [proveedores, setProveedores] = useState([]);
@@ -135,9 +135,10 @@ export function FormularioRecepcion() {
     };
 
     try {
-      await recepcionesServicio.crear(payload);
+      const guardado = await recepcionesServicio.crear(payload);
       setMessage('Recepcion registrada correctamente');
       setForm(nuevoFormulario(usuario));
+      onSaved?.(guardado);
     } catch (err) {
       setError(err.message);
     }

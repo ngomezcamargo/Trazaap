@@ -14,8 +14,8 @@ const router = Router();
 
 router.use(autenticarJwt);
 
-router.get('/', manejarAsync(listarRecepcionesController));
-router.get('/:id/detalle', rolesMiddleware('administrador', 'gerente'), manejarAsync(obtenerDetalleRecepcionController));
-router.post('/', validarSolicitud(crearRecepcionSchema), manejarAsync(crearRecepcionController));
+router.get('/', rolesMiddleware('gerente', 'operario'), manejarAsync(listarRecepcionesController));
+router.get('/:id/detalle', rolesMiddleware('gerente', 'operario'), manejarAsync(obtenerDetalleRecepcionController));
+router.post('/', rolesMiddleware('operario'), validarSolicitud(crearRecepcionSchema), manejarAsync(crearRecepcionController));
 
 export default router;

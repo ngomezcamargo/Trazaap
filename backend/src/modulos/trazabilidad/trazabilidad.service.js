@@ -1,5 +1,8 @@
 import { ErrorHttp } from '../../middlewares/errorHttp.js';
 import {
+  consultarHistorialCritico,
+  consultarEventosPorLote,
+  registrarCorreccionCritica,
   validarEventoCritico,
   validarEventoInspeccion,
   validarEventoRecepcion
@@ -10,6 +13,7 @@ import {
   listarEventosPorLote,
   obtenerDetalleProduccion
 } from './trazabilidad.repository.js';
+import { generarCodigosAcceso } from '../publico/codigos-acceso.util.js';
 
 async function construirValidacionesBlockchain(recepcion) {
   if (!recepcion) return [];
@@ -33,6 +37,16 @@ async function validarSeguro(tipoEvento, idEntidad) {
       valido: false,
       mensaje: `No fue posible validar evidencia blockchain: ${error.message}`
     };
+  }
+}
+
+async function consultarHistorialSeguro(validacion) {
+  if (!validacion?.tipoEvento || !validacion?.idEntidad) return [];
+  try {
+    const historial = await consultarHistorialCritico(validacion.tipoEvento, validacion.idEntidad);
+    return historial?.correcciones || [];
+  } catch {
+    return [];
   }
 }
 
@@ -82,6 +96,17 @@ function deduplicarRecepciones(recepciones) {
     if (!map.has(recepcion.recepcion_id)) map.set(recepcion.recepcion_id, recepcion);
   }
   return [...map.values()];
+}
+
+function deduplicarEventosFabric(eventos) {
+  const map = new Map();
+  for (const evento of eventos.flat().filter(Boolean)) {
+    const key = evento.txId || `${evento.tipoEvento}:${evento.idEntidad}`;
+    if (!map.has(key)) map.set(key, evento);
+  }
+  return [...map.values()].sort((a, b) => (
+    String(a.timestampBlockchain || '').localeCompare(String(b.timestampBlockchain || ''))
+  ));
 }
 
 function mapearRecepcion(recepcion, blockchainPorEntidad) {
@@ -148,7 +173,10 @@ export async function consultarTrazabilidadPorLote(lote) {
     ...new Set((detalle?.materias || []).map((m) => m.lote_proveedor).filter(Boolean))
   ];
 
-  const eventos = (await Promise.all(lotes.map((value) => listarEventosPorLote(value)))).flat();
+  const [eventos, eventosFabric] = await Promise.all([
+    Promise.all(lotes.map((value) => listarEventosPorLote(value))).then((items) => items.flat()),
+    Promise.all(lotes.map((value) => consultarEventosPorLote(value))).then(deduplicarEventosFabric)
+  ]);
   const validacionesBlockchain = (await Promise.all(
     [
       ...recepcionesOrigen.map((recepcion) => construirValidacionesBlockchain(recepcion)),
@@ -161,18 +189,36 @@ export async function consultarTrazabilidadPorLote(lote) {
         : null,
       detalle?.liberacion?.id_liberacion
         ? validarSeguro('liberacion_producto', detalle.liberacion.id_liberacion)
-        : null
+        : null,
+      detalle?.inventarioProductoTerminado?.id_inventario
+        ? validarSeguro('inventario_producto_terminado', detalle.inventarioProductoTerminado.id_inventario)
+        : null,
+      ...(detalle?.inventariosMateriaPrima || [])
+        .filter((inventario) => inventario.id)
+        .map((inventario) => validarSeguro('inventario_materia_prima', inventario.id)),
+      ...(detalle?.movimientosInventario || [])
+        .filter((movimiento) => movimiento.id)
+        .map((movimiento) => validarSeguro('movimiento_inventario', movimiento.id))
     ].filter(Boolean)
   )).flat().filter(Boolean);
   const blockchainPorEntidad = validacionesBlockchain.reduce((acc, item) => {
     acc[`${item.tipoEvento}:${item.idEntidad}`] = item;
     return acc;
   }, {});
+  const correccionesPorEntidad = (await Promise.all(
+    validacionesBlockchain
+      .filter((item) => item.estadoBlockchain === 'VERIFICADO_CORREGIDO')
+      .map(consultarHistorialSeguro)
+  )).flat();
+  const historialCorrecciones = deduplicarEventosFabric([
+    eventosFabric.filter((evento) => evento.tipoEvento === 'correccion_evento'),
+    correccionesPorEntidad
+  ]);
   const loteProducido = detalle?.manufactura?.lote_producido || null;
   const recepciones = recepcionesOrigen.map((recepcion) => mapearRecepcion(recepcion, blockchainPorEntidad));
   const inspecciones = recepcionesOrigen.map((recepcion) => mapearInspeccion(recepcion, blockchainPorEntidad)).filter(Boolean);
 
-  return {
+  const resultado = {
     lote: loteProducido || lote,
     loteConsultado: lote,
     tipoConsulta: loteProducido ? 'lote_producido' : 'lote_materia_prima',
@@ -193,7 +239,55 @@ export async function consultarTrazabilidadPorLote(lote) {
         }
       : null,
     liberacion: detalle?.liberacion || null,
+    inventarioProductoTerminado: detalle?.inventarioProductoTerminado
+      ? {
+          ...detalle.inventarioProductoTerminado,
+          blockchain: blockchainPorEntidad[`inventario_producto_terminado:${detalle.inventarioProductoTerminado.id_inventario}`] || null
+        }
+      : null,
+    inventariosMateriaPrima: (detalle?.inventariosMateriaPrima || []).map((inventario) => ({
+      ...inventario,
+      blockchain: blockchainPorEntidad[`inventario_materia_prima:${inventario.id}`] || null
+    })),
+    movimientosInventario: (detalle?.movimientosInventario || []).map((movimiento) => ({
+      ...movimiento,
+      blockchain: blockchainPorEntidad[`movimiento_inventario:${movimiento.id}`] || null
+    })),
     eventos: eventos.map((e) => ({ id: e.id, event_type: e.tipo_evento, actor: e.actor, payload: e.payload, timestamp: e.creado_en })),
-    validacionesBlockchain
+    validacionesBlockchain,
+    decisionesBlockchain: deduplicarEventosFabric([
+      eventosFabric.filter((evento) => [
+        'despacho_producto',
+        'confirmacion_recepcion_cliente',
+        'alerta_vencimiento'
+      ].includes(evento.tipoEvento)),
+      historialCorrecciones
+    ]),
+    despachoBlockchain: eventosFabric.find((evento) => evento.tipoEvento === 'despacho_producto') || null,
+    confirmacionCliente: eventosFabric.find((evento) => evento.tipoEvento === 'confirmacion_recepcion_cliente') || null,
+    alertasVencimiento: eventosFabric.filter((evento) => evento.tipoEvento === 'alerta_vencimiento'),
+    historialCorrecciones
   };
+
+  return {
+    ...resultado,
+    codigosAcceso: generarCodigosAcceso(resultado)
+  };
+}
+
+export async function registrarCorreccionTrazabilidad({ tipoEvento, idEntidad, motivo, actor }) {
+  if (!String(motivo || '').trim()) throw new ErrorHttp(400, 'El motivo de la correccion es obligatorio');
+  try {
+    return await registrarCorreccionCritica({
+      tipoEventoOriginal: tipoEvento,
+      idEntidadOriginal: idEntidad,
+      motivoCorreccion: motivo.trim(),
+      actor
+    });
+  } catch (error) {
+    if (error?.name === 'ErrorOperacionFabric') {
+      throw new ErrorHttp(error.status || 503, error.message, { codigo: error.codigo });
+    }
+    throw error;
+  }
 }

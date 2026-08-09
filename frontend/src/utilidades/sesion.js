@@ -1,5 +1,7 @@
 const TOKEN_KEY = 'trazaap_token';
 const USER_KEY = 'trazaap_user';
+const LAST_ACTIVITY_KEY = 'trazaap_last_activity';
+export const LIMITE_INACTIVIDAD_MS = 2 * 60 * 60 * 1000;
 
 export function obtenerToken() {
   if (typeof window === 'undefined') {
@@ -36,9 +38,32 @@ export function tokenValido() {
   return Date.now() < payload.exp * 1000;
 }
 
+export function registrarActividadSesion() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+}
+
+export function sesionActivaPorActividad() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const ultimaActividad = Number(localStorage.getItem(LAST_ACTIVITY_KEY) || 0);
+  if (!ultimaActividad) {
+    registrarActividadSesion();
+    return true;
+  }
+
+  return Date.now() - ultimaActividad <= LIMITE_INACTIVIDAD_MS;
+}
+
 export function guardarSesion(token, user) {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
+  registrarActividadSesion();
 }
 
 export function obtenerUsuario() {
@@ -53,4 +78,5 @@ export function obtenerUsuario() {
 export function limpiarSesion() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(LAST_ACTIVITY_KEY);
 }

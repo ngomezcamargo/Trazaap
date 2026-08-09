@@ -11,21 +11,32 @@ command -v peer >/dev/null 2>&1 || {
 }
 
 wait_for_peer() {
+  peer_name="$1"
   attempt=1
   while [ "${attempt}" -le 30 ]; do
     if peer node status >/dev/null 2>&1; then
       return 0
     fi
-    echo "Esperando peer en ${CORE_PEER_ADDRESS}... intento ${attempt}/30"
+    echo "Esperando ${peer_name} en ${CORE_PEER_ADDRESS}... intento ${attempt}/30"
     sleep 2
     attempt=$((attempt + 1))
   done
 
-  echo "El peer no respondio en ${CORE_PEER_ADDRESS}. Revisa: docker logs peer0.org1.trazaap.local --tail 100"
+  echo "${peer_name} no respondio en ${CORE_PEER_ADDRESS}. Revisa: docker logs ${peer_name} --tail 100"
   return 1
 }
 
-wait_for_peer
+install_chaincode_on_peer() {
+  peer_name="$1"
+  use_peer="$2"
+
+  "${use_peer}"
+  wait_for_peer "${peer_name}"
+
+  if ! peer lifecycle chaincode install "${PACKAGE_FILE}"; then
+    echo "${CHAINCODE_NAME} ya puede estar instalado en ${peer_name}; se continuara."
+  fi
+}
 
 mkdir -p "${FABRIC_DIR}/chaincode-packages"
 
@@ -36,7 +47,10 @@ peer lifecycle chaincode package "${PACKAGE_FILE}" \
   --lang node \
   --label "${CHAINCODE_NAME}_${CHAINCODE_VERSION}"
 
-peer lifecycle chaincode install "${PACKAGE_FILE}"
+install_chaincode_on_peer "peer0.org1.trazaap.local" use_peer0
+install_chaincode_on_peer "peer1.org1.trazaap.local" use_peer1
+
+use_peer0
 
 PACKAGE_ID="$(peer lifecycle chaincode queryinstalled | sed -n "s/^Package ID: \\(${CHAINCODE_NAME}_${CHAINCODE_VERSION}:[^,]*\\), Label:.*/\\1/p" | head -n 1)"
 
@@ -73,6 +87,8 @@ peer lifecycle chaincode commit \
   --version "${CHAINCODE_VERSION}" \
   --sequence "${CHAINCODE_SEQUENCE}" \
   --peerAddresses localhost:7051 \
-  --tlsRootCertFiles "${CORE_PEER_TLS_ROOTCERT_FILE}"
+  --tlsRootCertFiles "${FABRIC_DIR}/organizations/peerOrganizations/org1.trazaap.local/peers/peer0.org1.trazaap.local/tls/ca.crt" \
+  --peerAddresses localhost:8051 \
+  --tlsRootCertFiles "${FABRIC_DIR}/organizations/peerOrganizations/org1.trazaap.local/peers/peer1.org1.trazaap.local/tls/ca.crt"
 
 echo "Chaincode ${CHAINCODE_NAME} desplegado en ${CHANNEL_NAME}"

@@ -34,6 +34,8 @@ Organizations:
     AnchorPeers:
       - Host: peer0.org1.trazaap.local
         Port: 7051
+      - Host: peer1.org1.trazaap.local
+        Port: 8051
 
 Capabilities:
   Channel: &ChannelCapabilities

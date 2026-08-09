@@ -46,7 +46,16 @@ export async function buscarOrdenPorLoteFinalOLoteRecepcion(lote) {
 }
 
 export async function obtenerDetalleProduccion(ordenId, lote = '') {
-  const [productosRes, materiasRes, tiemposRes, manufacturaRes, liberacionRes] = await Promise.all([
+  const [
+    productosRes,
+    materiasRes,
+    tiemposRes,
+    manufacturaRes,
+    liberacionRes,
+    inventarioTerminadoRes,
+    movimientosInventarioRes,
+    inventariosMateriaPrimaRes
+  ] = await Promise.all([
     poolPostgres.query('SELECT * FROM ordenes_produccion_productos WHERE orden_produccion_id = $1 ORDER BY id', [ordenId]),
     poolPostgres.query(
       `SELECT
@@ -111,6 +120,48 @@ export async function obtenerDetalleProduccion(ordenId, lote = '') {
        WHERE rm.id_orden_produccion = $1
        LIMIT 1`,
       [ordenId]
+    ),
+    poolPostgres.query(
+      `SELECT ipt.*
+       FROM inventario_producto_terminado ipt
+       JOIN liberacion_producto lp ON lp.id_liberacion = ipt.id_liberacion
+       JOIN registro_manufactura rm ON rm.id_manufactura = lp.id_manufactura
+       WHERE rm.id_orden_produccion = $1
+       ORDER BY ipt.id_inventario
+       LIMIT 1`,
+      [ordenId]
+    ),
+    poolPostgres.query(
+      `SELECT im.*, rm.nombre AS materia_prima
+       FROM inventario_movimientos im
+       JOIN raw_materials rm ON rm.id = im.materia_prima_id
+       WHERE (
+           im.referencia_tipo = 'registro_manufactura'
+           AND im.referencia_id IN (
+             SELECT id_manufactura FROM registro_manufactura WHERE id_orden_produccion = $1
+           )
+         )
+         OR (
+           im.referencia_tipo = 'recepcion'
+           AND im.referencia_id IN (
+             SELECT recepcion_id FROM ordenes_produccion_materias WHERE orden_produccion_id = $1
+           )
+         )
+       ORDER BY im.creado_en, im.id`,
+      [ordenId]
+    ),
+    poolPostgres.query(
+      `SELECT DISTINCT imp.*, rm.nombre AS materia_prima
+       FROM inventario_materias_primas imp
+       JOIN raw_materials rm ON rm.id = imp.materia_prima_id
+       WHERE imp.materia_prima_id IN (
+         SELECT DISTINCT r.materia_prima_id
+         FROM ordenes_produccion_materias opm
+         JOIN receptions r ON r.id = opm.recepcion_id
+         WHERE opm.orden_produccion_id = $1
+       )
+       ORDER BY rm.nombre`,
+      [ordenId]
     )
   ]);
 
@@ -119,7 +170,10 @@ export async function obtenerDetalleProduccion(ordenId, lote = '') {
     materias: materiasRes.rows,
     tiempos: tiemposRes.rows,
     manufactura: manufacturaRes.rows[0] || null,
-    liberacion: liberacionRes.rows[0] || null
+    liberacion: liberacionRes.rows[0] || null,
+    inventarioProductoTerminado: inventarioTerminadoRes.rows[0] || null,
+    movimientosInventario: movimientosInventarioRes.rows,
+    inventariosMateriaPrima: inventariosMateriaPrimaRes.rows
   };
 }
 

@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { ContenedorApp } from '@/comunes/ContenedorApp';
+import { GuardiaRol } from '@/comunes/GuardiaRol';
 import { GuardiaSesion } from '@/comunes/GuardiaSesion';
 import { FormularioLiberacion } from '@/modulos/liberacion/FormularioLiberacion';
 import { liberacionServicio } from '@/servicios/liberacion.servicio';
+import { obtenerUsuario } from '@/utilidades/sesion';
+import { puedeOperar, ROLES } from '@/utilidades/roles';
 
 function badgeEstado(estado) {
   if (estado === 'aprobado') return 'Aprobado';
@@ -14,6 +17,8 @@ function badgeEstado(estado) {
 }
 
 export default function LiberacionPage() {
+  const usuario = obtenerUsuario();
+  const puedeRegistrar = puedeOperar(usuario?.role);
   const [pendientes, setPendientes] = useState([]);
   const [liberaciones, setLiberaciones] = useState([]);
   const [seleccionado, setSeleccionado] = useState(null);
@@ -39,10 +44,11 @@ export default function LiberacionPage() {
 
   return (
     <GuardiaSesion>
-      <ContenedorApp titulo="Liberacion de producto" subtitulo="Control final del producto terminado antes de despacho.">
-        {error && <div className="alerta error">{error}</div>}
+      <GuardiaRol permitido={[ROLES.GERENTE, ROLES.OPERARIO]}>
+        <ContenedorApp titulo="Liberacion de producto" subtitulo="Control final del producto terminado antes de despacho.">
+          {error && <div className="alerta error">{error}</div>}
 
-        <div className="tarjeta">
+        {puedeRegistrar && <div className="tarjeta">
           <h3>Productos pendientes de liberacion</h3>
           <table className="tabla">
             <thead>
@@ -75,7 +81,7 @@ export default function LiberacionPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </div>}
 
         <div className="tarjeta" style={{ marginTop: 16 }}>
           <h3>Historial de liberaciones</h3>
@@ -102,7 +108,7 @@ export default function LiberacionPage() {
           </table>
         </div>
 
-        {seleccionado && (
+        {puedeRegistrar && seleccionado && (
           <div className="modal-fondo" onClick={() => setSeleccionado(null)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-encabezado-form">
@@ -120,6 +126,7 @@ export default function LiberacionPage() {
           </div>
         )}
       </ContenedorApp>
+      </GuardiaRol>
     </GuardiaSesion>
   );
 }

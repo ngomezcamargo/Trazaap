@@ -1,4 +1,5 @@
 import { FormularioIngreso } from '@/modulos/autenticacion/FormularioIngreso';
+import { Suspense } from 'react';
 
 export default function IniciarSesionPage() {
   return (
@@ -11,7 +12,9 @@ export default function IniciarSesionPage() {
           <h2>Ingreso al sistema</h2>
           <p>Trazabilidad alimentaria segura</p>
         </div>
-        <FormularioIngreso />
+        <Suspense fallback={null}>
+          <FormularioIngreso />
+        </Suspense>
       </div>
     </div>
   );

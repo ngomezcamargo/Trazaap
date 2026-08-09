@@ -1,8 +1,14 @@
 import crypto from 'crypto';
 import {
+  confirmarRecepcionClienteBlockchain,
   consultarEventoBlockchain,
   consultarEventosPorLote,
+  consultarHistorialBlockchain,
+  registrarAlertaVencimientoBlockchain,
+  registrarCorreccionBlockchain,
+  registrarDespachoBlockchain,
   registrarEventoBlockchain,
+  validarDespachoBlockchain,
   validarEventoBlockchain
 } from './fabric.client.js';
 import { construirPayloadInspeccion } from './payloads/inspeccion.payload.js';
@@ -36,12 +42,9 @@ export function generarHashSHA256(value) {
 
 export function normalizarRecepcion(row) {
   return ordenarValor({
-    id: row.id || row.recepcion_id,
     fechaRecepcion: fechaISO(row.fecha_recepcion),
-    proveedorId: row.proveedor_id,
     proveedor: row.proveedor_nombre,
     proveedorNit: row.proveedor_nit || null,
-    materiaPrimaId: row.materia_prima_id,
     materiaPrima: row.materia_prima_nombre || row.materia_prima,
     cantidad: numero(row.cantidad) || null,
     unidadMedida: row.unidad_medida || null,
@@ -60,8 +63,6 @@ export function normalizarInspeccionRecepcion(row) {
   if (!row?.inspeccion_id && !row?.decision_final) return null;
 
   return ordenarValor({
-    id: row.inspeccion_id,
-    recepcionId: row.id || row.recepcion_id,
     lote: row.numero_lote || row.lote_proveedor,
     olor: Boolean(row.olor),
     color: Boolean(row.color),
@@ -86,7 +87,11 @@ function estadoDesdeResultado(resultado, hashActual) {
     valido: Boolean(resultado.valido),
     hashActual: resultado.hashActual || hashActual || null,
     hashBlockchain: resultado.hashBlockchain || null,
-    mensaje: resultado.mensaje
+    hashOriginal: resultado.hashOriginal || null,
+    mensaje: resultado.mensaje,
+    motivoCorreccion: resultado.motivoCorreccion || null,
+    txId: resultado.txId || null,
+    timestampBlockchain: resultado.timestampBlockchain || null
   };
 }
 
@@ -110,6 +115,46 @@ export async function registrarEventoCritico(tipoEvento, idEntidad, actorFallbac
 
   const payload = ordenarValor(evento.payload);
   const hashLocal = generarHashSHA256(payload);
+  const validacionExistente = await validarEventoBlockchain(tipoEvento, evento.idEntidad, payload);
+
+  if (['VERIFICADO', 'VERIFICADO_CORREGIDO'].includes(validacionExistente.estado)) {
+    return {
+      tipoEvento,
+      idEntidad: evento.idEntidad,
+      lote: evento.lote,
+      hashLocal,
+      estado: 'YA_REGISTRADO',
+      valido: true,
+      mensaje: validacionExistente.mensaje || 'La evidencia inmutable ya existe y coincide con el registro operativo',
+      estadoValidacion: validacionExistente.estado,
+      transactionId: validacionExistente.txId || null
+    };
+  }
+
+  if (validacionExistente.estado === 'ALTERADO') {
+    return {
+      tipoEvento,
+      idEntidad: evento.idEntidad,
+      lote: evento.lote,
+      hashLocal,
+      estado: 'ALTERADO',
+      valido: false,
+      mensaje: 'El registro operativo fue modificado; la evidencia original no se sobrescribio',
+      hashBlockchain: validacionExistente.hashBlockchain,
+      hashActual: validacionExistente.hashActual
+    };
+  }
+
+  if (validacionExistente.estado === 'PENDIENTE') {
+    return {
+      tipoEvento,
+      idEntidad: evento.idEntidad,
+      lote: evento.lote,
+      hashLocal,
+      ...validacionExistente
+    };
+  }
+
   const resultado = await registrarEventoBlockchain({
     ...evento,
     actor: evento.actor || actorFallback,
@@ -147,6 +192,71 @@ export async function consultarEventoCritico(tipoEvento, idEntidad) {
 }
 
 export { consultarEventosPorLote };
+
+export async function registrarCorreccionCritica({
+  tipoEventoOriginal,
+  idEntidadOriginal,
+  motivoCorreccion,
+  actor
+}) {
+  const evento = await construirEventoBlockchain(tipoEventoOriginal, idEntidadOriginal);
+  if (!evento) throw new Error(`No existe el registro operativo ${tipoEventoOriginal}:${idEntidadOriginal}`);
+  return registrarCorreccionBlockchain({
+    tipoEventoOriginal,
+    idEntidadOriginal: String(idEntidadOriginal),
+    motivoCorreccion,
+    actor,
+    payloadCorregido: ordenarValor(evento.payload)
+  });
+}
+
+export async function registrarVersionEventoCritico(
+  tipoEvento,
+  idEntidad,
+  actor = 'sistema',
+  motivoCorreccion = 'Actualizacion funcional del registro operativo'
+) {
+  const resultado = await registrarEventoCritico(tipoEvento, idEntidad, actor);
+  if (resultado?.estado !== 'ALTERADO') return resultado;
+
+  const correccion = await registrarCorreccionCritica({
+    tipoEventoOriginal: tipoEvento,
+    idEntidadOriginal: idEntidad,
+    motivoCorreccion,
+    actor: actor || 'sistema'
+  });
+
+  return {
+    tipoEvento,
+    idEntidad: String(idEntidad),
+    lote: resultado.lote,
+    estado: 'CORRECCION_REGISTRADA',
+    valido: true,
+    mensaje: 'La nueva version funcional se registro sin sobrescribir la evidencia original',
+    transactionId: correccion.txId || null,
+    correccion
+  };
+}
+
+export function consultarHistorialCritico(tipoEvento, idEntidad) {
+  return consultarHistorialBlockchain(tipoEvento, String(idEntidad));
+}
+
+export function validarDespachoCritico(datos) {
+  return validarDespachoBlockchain(ordenarValor(datos));
+}
+
+export function registrarDespachoCritico(datos) {
+  return registrarDespachoBlockchain(ordenarValor(datos));
+}
+
+export function confirmarRecepcionCliente(datos) {
+  return confirmarRecepcionClienteBlockchain(datos);
+}
+
+export function registrarAlertaVencimiento(datos) {
+  return registrarAlertaVencimientoBlockchain(ordenarValor(datos));
+}
 
 export async function registrarEventoRecepcion(contexto, actor) {
   const id = contexto?.id || contexto?.recepcion_id;

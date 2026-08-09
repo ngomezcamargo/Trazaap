@@ -1,14 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { autenticacionServicio } from '@/servicios/autenticacion.servicio';
 import { guardarSesion } from '@/utilidades/sesion';
 
 export function FormularioIngreso() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const aviso = searchParams.get('motivo') === 'inactividad'
+    ? 'Sesion cerrada por inactividad. Inicia sesion nuevamente.'
+    : '';
 
   const handleChange = (event) => {
     setForm((prev) => ({ ...prev, [event.target.name]: event.target.value }));
@@ -52,6 +56,7 @@ export function FormularioIngreso() {
         </button>
       </div>
 
+      {aviso && !error && <div className="alerta error">{aviso}</div>}
       {error && <div className="alerta error">{error}</div>}
     </form>
   );

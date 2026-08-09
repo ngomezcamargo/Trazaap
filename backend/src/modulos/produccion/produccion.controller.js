@@ -46,12 +46,12 @@ export async function listarProductosFabricadosController(req, res) {
 }
 
 export async function crearProductoFabricadoController(req, res) {
-  const producto = await crearProductoFabricadoService(req.body);
+  const producto = await crearProductoFabricadoService(req.body, req.usuario.email);
   res.status(201).json(producto);
 }
 
 export async function actualizarProductoFabricadoController(req, res) {
-  const producto = await actualizarProductoFabricadoService(Number(req.params.productoId), req.body);
+  const producto = await actualizarProductoFabricadoService(Number(req.params.productoId), req.body, req.usuario.email);
   res.json(producto);
 }
 

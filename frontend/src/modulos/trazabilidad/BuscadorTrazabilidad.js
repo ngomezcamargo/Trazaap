@@ -2,13 +2,20 @@
 
 import { useState } from 'react';
 import { trazabilidadServicio } from '@/servicios/trazabilidad.servicio';
+import { obtenerUsuario } from '@/utilidades/sesion';
+import { esGerente } from '@/utilidades/roles';
 
 const etiquetasBlockchain = {
   VERIFICADO: 'Verificado en blockchain',
+  VERIFICADO_CORREGIDO: 'Verificado con correccion inmutable',
   ALTERADO: 'Registro alterado',
   PENDIENTE: 'Pendiente de validacion',
   NO_ENCONTRADO: 'No encontrado en blockchain'
 };
+
+function claseEstado(estado) {
+  return estado === 'VERIFICADO_CORREGIDO' ? 'verificado' : String(estado || '').toLowerCase();
+}
 
 function textoCortoHash(hash) {
   if (!hash) return '-';
@@ -16,6 +23,8 @@ function textoCortoHash(hash) {
 }
 
 export function BuscadorTrazabilidad() {
+  const usuario = obtenerUsuario();
+  const puedeVerDetalleTecnico = esGerente(usuario?.role);
   const [lote, setLote] = useState('');
   const [filtroEvento, setFiltroEvento] = useState('');
   const [data, setData] = useState(null);
@@ -95,7 +104,7 @@ export function BuscadorTrazabilidad() {
           <div className="tarjeta" style={{ marginTop: 12 }}>
             <h4>Linea de tiempo del lote</h4>
             <div className="flujo" style={{ fontSize: '0.95rem' }}>
-              Recepcion de materias primas <span>{'->'}</span> Inspeccion <span>{'->'}</span> Produccion <span>{'->'}</span> Liberacion
+              Recepcion de materias primas <span>{'->'}</span> Inspeccion <span>{'->'}</span> Produccion <span>{'->'}</span> Despacho <span>{'->'}</span> Confirmacion del cliente
             </div>
           </div>
 
@@ -104,7 +113,7 @@ export function BuscadorTrazabilidad() {
             <table className="tabla">
               <thead>
                 <tr>
-                  <th>Lote proveedor</th>
+                  <th>Lote</th>
                   <th>Materia prima</th>
                   <th>Proveedor</th>
                   <th>Cantidad recibida</th>
@@ -138,6 +147,52 @@ export function BuscadorTrazabilidad() {
           </div>
 
           <div className="tarjeta" style={{ marginTop: 12 }}>
+            <h4>Decisiones del chaincode</h4>
+            <table className="tabla">
+              <thead><tr><th>Evento</th><th>Estado</th><th>Fecha Fabric</th><th>Decision / motivos</th><th>Transaccion</th></tr></thead>
+              <tbody>
+                {(data.decisionesBlockchain || [])
+                  .filter((item) => item.tipoEvento !== 'correccion_evento')
+                  .map((item) => (
+                    <tr key={item.txId || `${item.tipoEvento}-${item.idEntidad}`}>
+                      <td>{item.tipoEvento}</td>
+                      <td><span className={`estado ${String(item.estado || '').toLowerCase()}`}>{item.estado || '-'}</span></td>
+                      <td>{item.timestampBlockchain ? new Date(item.timestampBlockchain).toLocaleString() : '-'}</td>
+                      <td>{item.decisionChaincode?.motivos?.length ? item.decisionChaincode.motivos.join('; ') : (item.decisionChaincode?.estado || item.estado || '-')}</td>
+                      <td title={item.txId || ''}>{textoCortoHash(item.txId)}</td>
+                    </tr>
+                  ))}
+                {!(data.decisionesBlockchain || []).filter((item) => item.tipoEvento !== 'correccion_evento').length && (
+                  <tr><td colSpan={5}>No hay decisiones automaticas adicionales para este lote.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {puedeVerDetalleTecnico && (
+            <div className="tarjeta" style={{ marginTop: 12 }}>
+              <h4>Historial tecnico de correcciones</h4>
+              <table className="tabla">
+                <thead><tr><th>Evento original</th><th>Motivo</th><th>Actor</th><th>Fecha Fabric</th><th>Transaccion</th></tr></thead>
+                <tbody>
+                  {(data.historialCorrecciones || []).map((item) => (
+                    <tr key={item.txId}>
+                      <td>{item.tipoEventoOriginal}:{item.idEntidadOriginal}</td>
+                      <td>{item.motivoCorreccion}</td>
+                      <td>{item.actor}</td>
+                      <td>{item.timestampBlockchain ? new Date(item.timestampBlockchain).toLocaleString() : '-'}</td>
+                      <td title={item.txId}>{textoCortoHash(item.txId)}</td>
+                    </tr>
+                  ))}
+                  {!(data.historialCorrecciones || []).length && (
+                    <tr><td colSpan={5}>Este lote no tiene correcciones registradas.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="tarjeta" style={{ marginTop: 12 }}>
             <h4>Validacion blockchain</h4>
             <table className="tabla">
               <thead>
@@ -147,6 +202,7 @@ export function BuscadorTrazabilidad() {
                   <th>Estado</th>
                   <th>Hash actual</th>
                   <th>Hash Fabric</th>
+                  <th>Mensaje</th>
                 </tr>
               </thead>
               <tbody>
@@ -155,17 +211,18 @@ export function BuscadorTrazabilidad() {
                     <td>{item.tipoEvento}</td>
                     <td>{item.idEntidad}</td>
                     <td>
-                      <span className={`estado ${item.estadoBlockchain?.toLowerCase() || ''}`}>
+                      <span className={`estado ${claseEstado(item.estadoBlockchain)}`}>
                         {etiquetasBlockchain[item.estadoBlockchain] || item.estadoBlockchain || 'Pendiente de validacion'}
                       </span>
                     </td>
                     <td title={item.hashActual}>{textoCortoHash(item.hashActual)}</td>
                     <td title={item.hashBlockchain || ''}>{textoCortoHash(item.hashBlockchain)}</td>
+                    <td>{item.mensaje || '-'}</td>
                   </tr>
                 ))}
                 {(data.validacionesBlockchain || []).length === 0 ? (
                   <tr>
-                    <td colSpan={5}>No hay eventos criticos para validar en blockchain.</td>
+                    <td colSpan={6}>No hay eventos criticos para validar en blockchain.</td>
                   </tr>
                 ) : null}
               </tbody>

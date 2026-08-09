@@ -25,6 +25,6 @@ fi
 
 "${FABRIC_DIR}/scripts/enroll-identities.sh"
 
-docker compose -f "${FABRIC_DIR}/docker-compose.fabric.yml" up -d orderer.trazaap.local peer0.org1.trazaap.local
+docker compose -f "${FABRIC_DIR}/docker-compose.fabric.yml" up -d orderer.trazaap.local peer0.org1.trazaap.local peer1.org1.trazaap.local
 
 echo "Red Fabric local iniciada"

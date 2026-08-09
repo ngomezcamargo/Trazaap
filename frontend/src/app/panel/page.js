@@ -30,6 +30,7 @@ export default function PanelPage() {
   const [recepciones, setRecepciones] = useState([]);
   const [ordenes, setOrdenes] = useState([]);
   const [liberaciones, setLiberaciones] = useState([]);
+  const [alertasVencimiento, setAlertasVencimiento] = useState([]);
 
   useEffect(() => {
     Promise.all([
@@ -37,13 +38,15 @@ export default function PanelPage() {
       materiasPrimasServicio.listar().catch(() => []),
       recepcionesServicio.listar().catch(() => []),
       produccionServicio.listarOrdenes().catch(() => []),
-      liberacionServicio.listar().catch(() => [])
-    ]).then(([prov, mats, recs, ords, libs]) => {
+      liberacionServicio.listar().catch(() => []),
+      liberacionServicio.listarAlertasVencimiento().catch(() => [])
+    ]).then(([prov, mats, recs, ords, libs, alertas]) => {
       setProveedores(prov);
       setMaterias(mats);
       setRecepciones(recs);
       setOrdenes(ords);
       setLiberaciones(libs);
+      setAlertasVencimiento(alertas);
     });
   }, []);
 
@@ -78,7 +81,28 @@ export default function PanelPage() {
               <TarjetaIndicador titulo="Recepciones del dia" valor={recepcionesHoy} />
               <TarjetaIndicador titulo="Lotes en proceso" valor={ordenes.length} estado="en_proceso" />
               <TarjetaIndicador titulo="Retenidos/Rechazados" valor={retenidos} estado={retenidos > 0 ? 'retenido' : 'aceptado'} />
+              <TarjetaIndicador titulo="Vencidos sin despacho" valor={alertasVencimiento.length} estado={alertasVencimiento.length > 0 ? 'rechazado' : 'aceptado'} />
             </div>
+
+            {alertasVencimiento.length > 0 && (
+              <div className="tarjeta" style={{ marginTop: 16 }}>
+                <h3>Alertas de vencimiento sin despacho</h3>
+                <table className="tabla">
+                  <thead><tr><th>Producto</th><th>Lote</th><th>Vencimiento</th><th>Unidades disponibles</th><th>Estado</th></tr></thead>
+                  <tbody>
+                    {alertasVencimiento.map((alerta) => (
+                      <tr key={alerta.id_inventario}>
+                        <td>{alerta.producto}</td>
+                        <td>{alerta.lote}</td>
+                        <td>{String(alerta.fecha_vencimiento).slice(0, 10)}</td>
+                        <td>{alerta.unidades_disponibles}</td>
+                        <td><span className="estado rechazado">Vencido sin despacho</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <div className="grid grid-2" style={{ marginTop: 16 }}>
               <div className="tarjeta">

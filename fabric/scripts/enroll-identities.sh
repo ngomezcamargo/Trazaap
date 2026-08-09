@@ -48,8 +48,8 @@ copy_tls_ca_to_org_msp() {
 
 reset_identity_dir() {
   target="$1"
-  rm -rf "${target}"
   mkdir -p "${target}"
+  find "${target}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 }
 
 enroll_org1() {
@@ -61,6 +61,7 @@ enroll_org1() {
   write_nodeous "${FABRIC_CA_CLIENT_HOME}/msp" "${ca_cert}"
 
   fabric-ca-client register --caname ca-trazaap --id.name peer0 --id.secret peer0pw --id.type peer --tls.certfiles "${CA_CERT}" || true
+  fabric-ca-client register --caname ca-trazaap --id.name peer1 --id.secret peer1pw --id.type peer --tls.certfiles "${CA_CERT}" || true
   fabric-ca-client register --caname ca-trazaap --id.name user1 --id.secret user1pw --id.type client --tls.certfiles "${CA_CERT}" || true
   fabric-ca-client register --caname ca-trazaap --id.name org1admin --id.secret org1adminpw --id.type admin --tls.certfiles "${CA_CERT}" || true
 
@@ -77,6 +78,19 @@ enroll_org1() {
   cp "${FABRIC_CA_CLIENT_HOME}/peers/peer0.org1.trazaap.local/tls/signcerts/"* "${FABRIC_CA_CLIENT_HOME}/peers/peer0.org1.trazaap.local/tls/server.crt"
   cp "${FABRIC_CA_CLIENT_HOME}/peers/peer0.org1.trazaap.local/tls/keystore/"* "${FABRIC_CA_CLIENT_HOME}/peers/peer0.org1.trazaap.local/tls/server.key"
   copy_tls_ca_to_org_msp "${FABRIC_CA_CLIENT_HOME}" "${FABRIC_CA_CLIENT_HOME}/peers/peer0.org1.trazaap.local/tls/ca.crt" "tlsca.org1.trazaap.local-cert.pem"
+
+  reset_identity_dir "${FABRIC_CA_CLIENT_HOME}/peers/peer1.org1.trazaap.local/msp"
+  fabric-ca-client enroll -u "https://peer1:peer1pw@localhost:7054" --caname ca-trazaap \
+    -M "${FABRIC_CA_CLIENT_HOME}/peers/peer1.org1.trazaap.local/msp" --csr.hosts peer1.org1.trazaap.local --tls.certfiles "${CA_CERT}"
+  cp "${FABRIC_CA_CLIENT_HOME}/msp/config.yaml" "${FABRIC_CA_CLIENT_HOME}/peers/peer1.org1.trazaap.local/msp/config.yaml"
+
+  reset_identity_dir "${FABRIC_CA_CLIENT_HOME}/peers/peer1.org1.trazaap.local/tls"
+  fabric-ca-client enroll -u "https://peer1:peer1pw@localhost:7054" --caname ca-trazaap \
+    -M "${FABRIC_CA_CLIENT_HOME}/peers/peer1.org1.trazaap.local/tls" --enrollment.profile tls \
+    --csr.hosts peer1.org1.trazaap.local --csr.hosts localhost --tls.certfiles "${CA_CERT}"
+  cp "${FABRIC_CA_CLIENT_HOME}/peers/peer1.org1.trazaap.local/tls/tlscacerts/"* "${FABRIC_CA_CLIENT_HOME}/peers/peer1.org1.trazaap.local/tls/ca.crt"
+  cp "${FABRIC_CA_CLIENT_HOME}/peers/peer1.org1.trazaap.local/tls/signcerts/"* "${FABRIC_CA_CLIENT_HOME}/peers/peer1.org1.trazaap.local/tls/server.crt"
+  cp "${FABRIC_CA_CLIENT_HOME}/peers/peer1.org1.trazaap.local/tls/keystore/"* "${FABRIC_CA_CLIENT_HOME}/peers/peer1.org1.trazaap.local/tls/server.key"
 
   reset_identity_dir "${FABRIC_CA_CLIENT_HOME}/users/User1@org1.trazaap.local/msp"
   fabric-ca-client enroll -u "https://user1:user1pw@localhost:7054" --caname ca-trazaap \

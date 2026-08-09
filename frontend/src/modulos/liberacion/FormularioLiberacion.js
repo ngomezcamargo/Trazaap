@@ -41,6 +41,7 @@ export function FormularioLiberacion({ pendiente, onGuardado }) {
   const [operarios, setOperarios] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [motivosBloqueo, setMotivosBloqueo] = useState([]);
 
   const checksCompletos = validaciones.every(([key]) => form[key]);
 
@@ -52,6 +53,7 @@ export function FormularioLiberacion({ pendiente, onGuardado }) {
     event.preventDefault();
     setError('');
     setMessage('');
+    setMotivosBloqueo([]);
 
     if (!checksCompletos) {
       setError('Debe completar todas las validaciones de liberación.');
@@ -71,6 +73,7 @@ export function FormularioLiberacion({ pendiente, onGuardado }) {
       onGuardado?.();
     } catch (err) {
       setError(err.message);
+      setMotivosBloqueo(Array.isArray(err.motivos) ? err.motivos : []);
     }
   };
 
@@ -149,6 +152,14 @@ export function FormularioLiberacion({ pendiente, onGuardado }) {
       <div className="acciones"><button className="boton" type="submit">Registrar liberacion</button></div>
       {message && <div className="alerta ok">{message}</div>}
       {error && <div className="alerta error">{error}</div>}
+      {motivosBloqueo.length > 0 && (
+        <div className="alerta error">
+          <strong>Motivos informados por el chaincode:</strong>
+          <ul>
+            {motivosBloqueo.map((motivo) => <li key={motivo}>{motivo}</li>)}
+          </ul>
+        </div>
+      )}
     </form>
   );
 }

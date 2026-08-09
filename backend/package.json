@@ -8,7 +8,9 @@
     "start": "node src/server.js",
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
-    "test": "node --test test/trazabilidad.hash.test.js"
+    "seed:materias": "node scripts/seed-materias-primas-pruebas.js",
+    "blockchain:sync": "node scripts/sync-blockchain.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.12.6",

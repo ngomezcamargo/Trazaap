@@ -9,9 +9,9 @@ Trazaap mantiene los datos completos en PostgreSQL y usa Fabric como capa de evi
 ```text
 Registro operativo en PostgreSQL
 -> Backend normaliza el registro
--> Backend calcula SHA-256
--> Chaincode guarda el hash inmutable
--> Consulta de trazabilidad recalcula y valida contra Fabric
+-> Backend envia el payload normalizado a Fabric
+-> Chaincode calcula SHA-256 y guarda el hash inmutable
+-> Consulta de trazabilidad reconstruye el payload actual y Fabric lo valida
 ```
 
 No existe tabla PostgreSQL para duplicar bloques, hashes, payloads del ledger ni evidencia blockchain.
@@ -26,10 +26,17 @@ fabric/chaincode/traceability
 
 Funciones principales:
 
-- `registrarEvento(tipoEvento, idEntidad, lote, hashRegistro, fechaEvento, actor)`
-- `validarEvento(tipoEvento, idEntidad, hashActual)`
+- `registrarEvento(tipoEvento, idEntidad, lote, actor, fechaEvento, payloadJson)`
+- `validarEvento(tipoEvento, idEntidad, payloadActualJson)`
 - `consultarEvento(tipoEvento, idEntidad)`
 - `consultarEventosPorLote(lote)`
+- `registrarCorreccionEvento(tipoEventoOriginal, idEntidadOriginal, motivo, actor, payloadCorregido)`
+- `consultarHistorialEvento(tipoEvento, idEntidad)`
+- `validarDespacho(datos)` y `registrarDespacho(datos)`
+- `confirmarRecepcionCliente(...)`
+- `registrarAlertaVencimiento(datos)`
+
+`registrarEvento` es inmutable: un segundo registro con la misma clave falla con `EVENTO_DUPLICADO`. Las actualizaciones funcionales autorizadas quedan como correcciones independientes y la ultima version se valida como `VERIFICADO_CORREGIDO`. Para desplegar RF13 sobre un ledger existente se usa la version `2.2`, secuencia `4`; no se eliminan volumenes, canal ni certificados.
 
 La clave del estado en Fabric usa:
 
@@ -50,8 +57,8 @@ Variables relevantes del backend:
 ```env
 FABRIC_ENABLED=true
 FABRIC_MSP_ID=Org1MSP
-FABRIC_CHANNEL_NAME=trazaapchannel
-FABRIC_CHAINCODE_NAME=trazaap
+FABRIC_CHANNEL_NAME=trazabilidad-channel
+FABRIC_CHAINCODE_NAME=traceability
 FABRIC_PEER_ENDPOINT=localhost:7051
 FABRIC_PEER_HOST_ALIAS=peer0.org1.trazaap.local
 FABRIC_TLS_CERT_PATH=../fabric/organizations/peerOrganizations/org1.trazaap.local/peers/peer0.org1.trazaap.local/tls/ca.crt
@@ -64,7 +71,7 @@ Si `FABRIC_ENABLED=false` o la red no esta disponible, el registro operativo no 
 ## Flujo De Prueba
 
 1. Levanta PostgreSQL, backend, frontend y la red Fabric.
-2. Despliega el chaincode `trazaap` en el canal `trazaapchannel`.
+2. Despliega el chaincode `traceability` en el canal `trazabilidad-channel`.
 3. En Trazaap, crea una recepcion de materia prima.
 4. El backend guarda la recepcion e inspeccion en PostgreSQL.
 5. El backend registra automaticamente en Fabric:
@@ -97,9 +104,9 @@ Ejemplo conceptual para validar un hash:
 
 ```bash
 peer chaincode query \
-  -C trazaapchannel \
-  -n trazaap \
-  -c '{"Args":["validarEvento","recepcion_materia_prima","15","HASH_ACTUAL"]}'
+  -C trazabilidad-channel \
+  -n traceability \
+  -c '{"Args":["validarEvento","recepcion_materia_prima","15","PAYLOAD_ACTUAL_JSON"]}'
 ```
 
-El `HASH_ACTUAL` normalmente no se calcula a mano; lo calcula el backend desde el registro operativo normalizado.
+El `PAYLOAD_ACTUAL_JSON` normalmente no se arma a mano; lo construye el backend desde el registro operativo normalizado. El hash de comparacion lo calcula el chaincode.

@@ -67,6 +67,7 @@ fabric/**/*.log
 !fabric/
 !fabric/chaincode/
 !fabric/chaincode/**
+fabric/chaincode/**/node_modules/
 !fabric/configtx/
 !fabric/configtx/**
 !fabric/scripts/

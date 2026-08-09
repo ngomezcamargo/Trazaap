@@ -10,5 +10,8 @@ export function erroresMiddleware(error, req, res, next) {
     console.error(error);
   }
 
-  res.status(status).json({ message });
+  res.status(status).json({
+    message,
+    ...(status < 500 && error.details ? error.details : {})
+  });
 }

@@ -1,5 +1,6 @@
 import {
   crearLiberacionService,
+  listarAlertasVencimientoService,
   listarLiberacionesService,
   listarPendientesLiberacionService
 } from './liberacion.service.js';
@@ -17,4 +18,9 @@ export async function listarPendientesLiberacionController(req, res) {
 export async function listarLiberacionesController(req, res) {
   const liberaciones = await listarLiberacionesService();
   res.json(liberaciones);
+}
+
+export async function listarAlertasVencimientoController(req, res) {
+  const alertas = await listarAlertasVencimientoService();
+  res.json(alertas);
 }

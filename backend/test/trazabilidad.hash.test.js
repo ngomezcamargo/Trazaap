@@ -37,7 +37,9 @@ test('generarHashSHA256 genera el mismo hash con distinto orden de claves', () =
 test('normalizarRecepcion produce un payload estable para la evidencia Fabric', () => {
   const payload = normalizarRecepcion(recepcionBase);
 
-  assert.equal(payload.id, 15);
+  assert.equal(payload.id, undefined);
+  assert.equal(payload.proveedorId, undefined);
+  assert.equal(payload.materiaPrimaId, undefined);
   assert.equal(payload.lote, 'L-2026-001');
   assert.equal(payload.cantidad, 25);
   assert.equal(payload.fechaVencimiento, '2026-08-01');
@@ -61,7 +63,8 @@ test('normalizarInspeccionRecepcion incluye decision, vehiculo y conductor', () 
     inspeccionado_en: '2026-05-06T19:25:00.000Z'
   });
 
-  assert.equal(payload.id, 8);
+  assert.equal(payload.id, undefined);
+  assert.equal(payload.recepcionId, undefined);
   assert.equal(payload.condicionesVehiculo, true);
   assert.equal(payload.higieneConductor, false);
   assert.equal(payload.decisionFinal, 'retenido');

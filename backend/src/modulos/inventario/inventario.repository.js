@@ -30,6 +30,8 @@ export async function listarInventarioProductoTerminado() {
       estado,
       updated_at
     FROM inventario_producto_terminado
+    WHERE unidades_disponibles > 0
+      AND estado <> 'despachado'
     ORDER BY updated_at DESC, producto ASC
   `;
 

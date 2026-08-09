@@ -16,7 +16,7 @@ const initialForm = {
   inspeccionado_por: '1'
 };
 
-export function FormularioInspeccion() {
+export function FormularioInspeccion({ onSaved }) {
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -33,9 +33,10 @@ export function FormularioInspeccion() {
 
     try {
       const { receptionId, ...payload } = form;
-      await recepcionesServicio.crearInspeccion(receptionId, payload);
+      const guardado = await recepcionesServicio.crearInspeccion(receptionId, payload);
       setMessage('Inspeccion registrada correctamente');
       setForm(initialForm);
+      onSaved?.(guardado);
     } catch (err) {
       setError(err.message);
     }

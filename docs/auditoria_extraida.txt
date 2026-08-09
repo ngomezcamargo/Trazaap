@@ -1,0 +1,430 @@
+pages 17
+
+--- PAGE 1 ---
+AUDITORÍA TÉCNICA COMPLETA
+Proyecto Trazaap
+Contraste entre documento principal, anexos académicos e implementación real
+Repositorio: Trazaap
+Fecha de auditoría: 8 de agosto de 2026
+Alcance: revisión sin modificación del código fuente
+1. Resumen ejecutivo
+Trazaap es un MVP funcional parcial, con una base técnica real en Next.js, Express, PostgreSQL y Hyperledger Fabric.
+No es una simulación puramente local: existe una red Fabric configurable, Gateway SDK, chaincode propio, envío de
+transacciones y consultas al ledger. Sin embargo, el alcance real es considerablemente menor que el afirmado en varias
+secciones de los documentos académicos.
+Área Resultado
+Backend y PostgreSQL Implementación real
+Frontend operativo Implementación real, pero parcial
+Integración Hyperledger Fabric REAL PERO PARCIAL
+RBAC IMPLEMENTACIÓN PARCIAL
+
+--- PAGE 2 ---
+
+
+--- PAGE 3 ---
+MinIO DOCUMENTADO, PERO NO IMPLEMENTADO
+
+--- PAGE 4 ---
+Trazabilidad bidireccional completa IMPLEMENTACIÓN PARCIAL
+Cumplimiento integral RF01–RF17 NO DEMOSTRABLE / no implementado integralmente
+OE1 Hay RF/HU, pero falta trazabilidad normativa demostrable
+PMBOK + Scrum Evidencia documental parcial; Git no permite reconstruir sprints rigurosamente
+Pruebas Muy insuficientes
+Conclusión principal: la afirmación del documento principal, página PDF 16, sección 4.2, según la cual el sistema
+automatiza “todo el ciclo de vida” y garantiza “cumplimiento total” con la Resolución 2674, no está sostenida por el
+código.
+• Los anexos especifican cinco roles; el código solo define administrador, gerente y operario.
+• La mayoría de endpoints solo exigen JWT, sin verificar rol.
+• La gerencia puede ejecutar operaciones de escritura.
+• No existen cliente gastronómico ni INVIMA como perfiles reales.
+• No existe MinIO.
+• No existen módulos de saneamiento, devoluciones, despacho a clientes ni almacenamiento por lote.
+• No existe OAuth 2.0, refresh token, Redis, revocación, rate limiting ni JWT RS256.
+• La consulta se construye principalmente desde PostgreSQL; Fabric valida eventos seleccionados.
+• No se persisten pendientes blockchain ni existen reintentos.
+• Solo existe un archivo con tres pruebas unitarias de hash/normalización.
+2. Arquitectura real encontrada
+[Next.js / React]
+|
+| HTTP JSON + Bearer JWT guardado en localStorage
+v
+[Express API]
+|-- autenticación JWT HS256
+|-- validación Zod en operaciones seleccionadas
+|-- autorización por rol solo en pocas rutas
++------------------------------+
+| |
+v v
+[PostgreSQL] [Fabric Gateway SDK]
+Datos operativos | gRPC/TLS
+y eventos locales v
+
+--- PAGE 5 ---
+[peer0 - Org1MSP]
+|
+[Canal trazabilidad-channel]
+|
+[Chaincode traceability]
+|
+[World state / ledger]
+Fabric real: 1 CA, 1 organización, 1 peer, 1 orderer Raft,
+1 canal y 1 chaincode.
+No encontrado: MinIO, segundo peer, segundo servidor, participantes
+INVIMA/cliente, private data collections, segundo canal, outbox/retry,
+OAuth 2.0 o Redis.
+Evidencia: montaje de módulos en backend/src/app.js:31-39; PostgreSQL con ssl:false en
+backend/src/configuracion/postgresql.js:6-13; Gateway en backend/src/modulos/blockchain/fabric-
+traceability.service.js:42-62; peer único en fabric/docker-compose.fabric.yml:54-84; un solo consenter Raft en
+fabric/configtx/configtx.yaml:67-76. Los Compose, JavaScript y scripts shell pasan validación sintáctica/estructural,
+lo cual no equivale a una prueba end-to-end.
+3. Estado de la integración blockchain
+Clasificación global: REAL PERO PARCIAL
+El backend utiliza @hyperledger/fabric-gateway, envía transacciones y consulta chaincode. La red no tiene la topología,
+resiliencia, segregación ni consistencia descritas académicamente.
+Flujo técnico real
+1. El endpoint recibe una solicitud autenticada.
+2. El repository guarda primero el registro en PostgreSQL.
+3. El service consulta PostgreSQL para construir un payload canónico.
+4. El backend calcula SHA-256 localmente y el chaincode vuelve a calcularlo.
+5. FabricTraceabilityService.registrarEvento() ejecuta submitAsync('registrarEvento').
+6. Espera el commit mediante getStatus().
+7. Obtiene transactionId y blockNumber.
+8. El chaincode almacena payload, hash, actor, fecha, timestamp Fabric y txId.
+9. El resultado se devuelve por HTTP, pero no se conserva en PostgreSQL.
+Evidencia: blockchain.service.js:93-125; fabric-traceability.service.js:71-98;
+fabric/chaincode/traceability/index.js:7-40; validación posterior en líneas 43-72; reconstrucción desde
+PostgreSQL en trazabilidad.service.js:133-198.
+
+--- PAGE 6 ---
+Funciones del chaincode
+Función Comportamiento
+registrarEvento Guarda o sobrescribe tipoEvento:idEntidad
+validarEvento Recalcula SHA-256 y compara contra el estado actual
+consultarEvento Lee un evento por clave
+consultarEventosPorLote Consulta índice compuesto por lote
+EventExists Comprueba existencia
+GetTraceabilityEvent / GetEventsByLot Alias de consultas
+El chaincode no implementa RF13: confirmación por cliente, bloqueo por HACCP ni alerta por vencimiento.
+Flujos blockchain encontrados
+Flujo Endpoint PostgreSQL Evento Fabric Resultado/problema
+recepcion_materia_pri Real si Fabric está disponible; fallo
+Recepción POST /api/receptions receptions
+ma no persistido
+reception_inspectio
+Inspección Mismo POST inspeccion_recepcion Real; sin retry
+ns
+inventario_materias inventario_materia_pri No se verifica sistemáticamente en
+Inventario MP Mismo POST
+_primas ma UI
+Movimiento Recepción/ inventario_movimie Validación no expuesta
+movimiento_inventario
+inventario manufactura ntos sistemáticamente
+Orden POST Usa código de orden como lote
+ordenes_produccion orden_produccion
+producción /produccion/ordenes inicial
+POST/PUT producto/variantes/ producto_fabricado_c
+Producto/receta Actualizar sobrescribe world state
+/produccion/productos receta onfigurado
+registro_manufactur Respuesta no entrega txId
+Manufactura POST .../manufactura registro_manufactura
+a claramente
+
+--- PAGE 7 ---
+Se presenta como despacho sin
+Liberación POST /api/liberacion liberacion_producto liberacion_producto
+cliente/temperatura
+GET No proviene exclusivamente de
+Consulta interna Fuente principal validarEvento
+/traceability/lote/:lote Fabric
+GET
+Sin diferenciación
+Consulta pública /public/traceability/lote/ Fuente principal Validación indirecta
+INVIMA/consumidor
+:lote
+Consistencia PostgreSQL–Fabric
+Si PostgreSQL guarda y Fabric falla, fabric.client.js:3-24 convierte el error en estado PENDIENTE. El registro
+operativo continúa guardado, pero el pendiente, error e intentos no se almacenan; no hay outbox, cola, reintento o
+reconciliación.
+Si Fabric guarda y falla una operación PostgreSQL posterior, tampoco existe compensación ni transacción distribuida. El
+txId y número de bloque se obtienen en memoria en fabric-traceability.service.js:91-97, pero no se persisten.
+Limitaciones de auditabilidad
+• Todos los eventos se firman con la misma identidad Fabric administrativa.
+• El usuario de negocio es texto, no identidad X.509 individual.
+• El chaincode no valida roles o identidad del invocador.
+• registrarEvento permite sobrescribir la clave y marca ACTUALIZADO.
+• El historial existe en el ledger, pero no se expone GetHistoryForKey.
+• Un peer y un orderer no aportan tolerancia a fallos real.
+• No existe evidencia runtime reproducible de una transacción ya ejecutada en el repositorio.
+4. Estado de RBAC
+Autenticación real
+Login por email/contraseña con bcrypt; JWT simétrico HS256 con claims sub, email, role, iat y exp; duración de ocho
+horas; Bearer token; almacenamiento en localStorage. Evidencia: autenticacion.service.js:20-37,
+autenticarJwt.js:5-18 y frontend/src/utilidades/sesion.js:39-42.
+No existe OAuth 2.0, RS256, refresh token ni cookie HttpOnly.
+
+--- PAGE 8 ---
+Roles reales
+administrador
+gerente
+operario
+Evidencia: backend/src/utilidades/roles.util.js:1-5 y backend/sql/001_schema_actual.sql:5-12.
+Matriz real de acceso backend
+Recurso Operario Gerencia Cliente INVIMA Consumidor Backend real
+Proveedores CRUD CRUD No existe No existe — JWT sin rol
+Materias primas CRU CRU No existe No existe — JWT sin rol
+Recepciones CR; detalle restringido CR No existe No existe — Parcial
+Producción/productos CRU CRU No existe No existe — JWT sin rol
+Liberación CR CR No existe No existe — JWT sin rol
+Inventario — R No existe No existe — Rol aplicado
+Trazabilidad interna R R No existe No existe — JWT sin rol
+Portal público R R R público R público R Público
+Usuarios — — — — — No hay CRUD
+Reportes R R — Sin perfil — Impresión web
+El anexo, página PDF 22, especifica operario limitado, gerencia solo lectura, cliente con despachos propios, INVIMA con
+lectura total y consumidor público. Resultado: CONTRADICCIÓN ENTRE DOCUMENTOS E IMPLEMENTACIÓN.
+5. Matriz de requerimientos
+Fuente: anexo 4, páginas PDF 6–9; historias relacionadas en anexo 5, páginas PDF 9–12.
+RF Estado Clasificación/evidencia Faltante Severidad
+RF01-A 🟡 Recepción PostgreSQL + Fabric Persistencia de confirmación, retry y garantía Alta
+
+--- PAGE 9 ---
+RF01-B 🟡 Inspección por FK + Fabric Manejo fiable de fallos y prueba integración Alta
+RF02 🟡 Manufactura con horas, operario y lote Equipos, consistencia y pruebas Alta
+Liberación contiene Operación independiente de
+RF03-A 🟡 Media
+empaque/responsable envasado/embalado
+RF03-B 🟡 lote_producido UNIQUE Generación automática con fábrica/fechas Alta
+RF04 🔴 DOCUMENTADO, NO IMPLEMENTADO Ubicación, temperatura, ingreso/salida por lote Alta
+Cliente, cantidad, entrega, temperatura,
+RF05 🟡 Liberación con factura/conductor/placa Crítica
+despacho
+RF06 🟡 Reconstrucción hacia materias primas Hacia clientes; no es exclusiva de Fabric Crítica
+RF07 🟡 Compara real contra estándar Rangos, alertas, HACCP y bloqueo Alta
+RF08 🟡 Inspección/liberación física Químicos, microbiológicos y organolépticos Alta
+RF09 🟡 Eventos Fabric con metadatos No todos; transacción no equivale a crear bloque Crítica
+No almacenado; servicio externo; ISO no
+RF10 🟡 QR en reporte Media
+probado
+RF11 🟡 Ruta pública /verificar/[lote] Diferenciar INVIMA/consumidor y rendimiento Alta
+RF12 🟡 JWT + tres roles Cinco perfiles y permisos backend Crítica
+RF13 🔴 DOCUMENTADO, NO IMPLEMENTADO Tres reglas automáticas Crítica
+RF14 🟡 Página imprimible PDF Excel, 50 lotes y estructura Art. 22 Alta
+RF15 🔴 DOCUMENTADO, NO IMPLEMENTADO Plan de saneamiento Alta
+RF16 🔴 DOCUMENTADO, NO IMPLEMENTADO Devolución, retiro, reproceso, destrucción Alta
+RF17 🟡 CRUD y certificación como texto Documentos, vigencia, fichas y MinIO Alta
+Ningún RF está plenamente demostrado por las pruebas actuales.
+
+--- PAGE 10 ---
+6. Cumplimiento del Objetivo Específico 1
+Diagnóstico: NO DEMOSTRABLE completamente
+Existe evidencia de RF01–RF17 (anexo 4, pp. PDF 6–8), RNF01–RNF11 (pp. 8–9), 22 HU (anexo 5, pp. 9–12),
+restricciones (p. 13), reuniones con cliente (pp. 23–25), reunión con ingeniera (pp. 26–27) y estructuras de datos en el
+código. Sin embargo, falta la cadena verificable:
+Artículo/inciso normativo exacto
+→ registro exigido
+→ campo obligatorio
+→ RF/RNF
+→ HU
+→ modelo/DTO/formulario
+→ prueba y resultado
+El propio RNF04 exige una matriz explícita campo por campo, pero esa matriz no está en los anexos. La afirmación de
+cobertura del 100 % en el principal, página PDF 30, no es demostrable.
+Matriz propuesta para OE1
+Evidencia Resultado actual Ubicación
+Análisis Resolución Referencias generales, sin desglose por inciso/campo Principal pp. 8–16 y 30
+Registros normativos Parcialmente inferibles Anexo 4
+Requisitos derivados RF01–RF17; RNF01–RNF11 Anexo 4
+Historias 22 HU, sin matriz RF↔HU Anexo 5
+Validación especialista Reunión de levantamiento; no validación final Anexos pp. 26–27
+Modelo de datos Implementación distinta del modelo académico SQL/anexo 12
+Implementación MVP Recepción, producción, liberación, inventario, trazabilidad parcial Código
+Pruebas Prácticamente ausentes Un test de hash
+Cobertura cuantificada NO DEMOSTRABLE Ausente
+
+--- PAGE 11 ---
+7. PMBOK + Scrum
+Elemento Marco Evidencia Faltante
+EDT/alcance PMBOK Principal pp. 18–20 Línea base y cambios
+Cronograma PMBOK Principal pp. 19–20 Plan vs real
+Presupuesto PMBOK Principal pp. 21–22 Costos reales/control
+Comunicaciones PMBOK Principal pp. 22–23 Evidencia completa
+Riesgos PMBOK Principal pp. 23–25 Seguimiento fechado
+Product Backlog Scrum RF y HU Backlog priorizado/versionado
+Sprint Planning Scrum Mención Actas, capacidad, sprint goal
+Sprint Backlog Scrum Commits “Sprint” HU→tarea→estado
+Sprint Review Scrum Una acta cliente Demás reviews
+Retrospective Scrum Solo mención Actas y acciones
+Incrementos Scrum Evolución Git Tags/releases/DoD
+Pruebas por sprint Calidad Casi inexistentes Aceptación y resultados
+Git contiene 12 commits, sin tags, con mensajes Sprint 1, Sprint 2, Sprint 3, integración mínima Fabric, otro Sprint 3,
+Blockchain MVP, Sprint 4 y posteriormente otro Sprint 2. No permite reconstruir sprints rigurosamente. Debe hablarse de
+prácticas de gestión inspiradas en PMBOK e iteraciones inspiradas en Scrum, no de dos metodologías completas
+aplicadas en paralelo.
+8. Diferencias entre documentación y código
+Afirmación Realidad Clasificación/riesgo Corrección
+RF parciales/no DOCUMENTADO, NO IMPLEMENTADO
+Cumplimiento total Describir alcance MVP
+implementados — crítico
+
+--- PAGE 12 ---
+DOCUMENTADO, NO IMPLEMENTADO
+MinIO implementado No existe Marcar futuro
+— alto
+Corregir documento o
+Cinco roles Tres roles CONTRADICCIÓN — crítico
+código
+Gerencia solo lectura Puede escribir CONTRADICCIÓN — crítico RBAC backend
+DOCUMENTADO, NO IMPLEMENTADO
+OAuth 2.0 + RS256 JWT HS256 Documentar lo real
+— crítico
+No localStorage Se usa localStorage CONTRADICCIÓN — alto Corregir sesión
+DOCUMENTADO, NO IMPLEMENTADO
+Refresh token No existe Retirar afirmación
+— alto
+DOCUMENTADO, NO IMPLEMENTADO
+Rate limiting/Redis No existen Marcar futuro
+— alto
+Tres servidores/dos peers Compose con un peer CONTRADICCIÓN — crítico Topología real
+Tolerancia a caída Un peer y un orderer Incorrecto — crítico Eliminar garantía
+Canales privados Un canal, sin PDC NO IMPLEMENTADO — alto Marcar capacidad futura
+Consulta exclusiva Datos salen de
+CONTRADICCIÓN — crítico Explicar híbrido real
+blockchain PostgreSQL
+Cada evento crea bloque Se envía transacción Incorrecto — alto Usar terminología Fabric
+API GS1 EPCIS 2.0 API propia NO IMPLEMENTADO — alto Marcar futuro
+PDF y Excel INVIMA Impresión web PARCIAL — alto Reducir afirmación
+9. Problemas técnicos
+CRÍTICOS
+1. RBAC backend ausente en la mayoría de rutas.
+2. Gerencia puede escribir/eliminar.
+3. Cinco perfiles documentados, tres implementados.
+
+--- PAGE 13 ---
+4. Dual write sin outbox/retry.
+5. World state Fabric sobrescribible.
+6. Topología sin tolerancia a fallos.
+7. Sin trazabilidad hacia clientes.
+8. Cumplimiento normativo total sin matriz/pruebas.
+9. Reglas RF13 ausentes.
+ALTOS
+• TxId/bloque no persistidos.
+• Identidad Fabric compartida y sin autorización de chaincode.
+• JWT en localStorage y sin revocación.
+• Sin rate limiting ni auditoría de accesos.
+• PostgreSQL sin TLS.
+• MinIO ausente.
+• Portal sin diferenciación INVIMA.
+• QR externo pese a restricción on-premise.
+• Pruebas casi inexistentes.
+MEDIOS/BAJOS
+• Middleware JWT duplicado.
+• README enumera endpoints blockchain ausentes.
+• Sello “VALIDADO” puede aparecer con pendientes.
+• Roles desconocidos se normalizan como operario en frontend.
+• Credenciales de demo hardcodeadas.
+• version obsoleto en Compose y nombres Sprint inconsistentes.
+10. Correcciones necesarias en el software
+10.1 RBAC backend completo — prioridad crítica
+Aplicar matriz centralizada por verbo/recurso a todas las rutas y pruebas 401/403. Complejidad media.
+10.2 Outbox Fabric — prioridad crítica
+Tabla con estado, payload/hash, intentos, error, txId y bloque; worker idempotente. Complejidad alta.
+
+--- PAGE 14 ---
+10.3 Chaincode append-only — prioridad crítica
+Rechazar duplicados o versionar, exponer historial y aplicar ACL Fabric. Complejidad alta.
+10.4 Roles faltantes — prioridad alta
+Crear cliente/INVIMA, propiedad de despachos y permisos. El consumidor puede seguir como actor público. Complejidad
+alta.
+10.5 Despacho y trazabilidad hacia adelante — prioridad crítica
+Entidades clientes, despachos, despacho_lotes, confirmaciones y evento Fabric. Complejidad alta.
+10.6 Seguridad de sesión — prioridad alta
+Access token corto, refresh HttpOnly, usuario activo, rate limiting y logs. Complejidad media-alta.
+10.7 QR local y estado correcto — prioridad media
+Generación local y sello validado únicamente si el estado global es VERIFICADO. Complejidad baja.
+10.8 Pruebas — prioridad crítica
+Pruebas unitarias, API, integración PostgreSQL/Fabric y end-to-end. Complejidad alta.
+11. Correcciones necesarias en el documento
+• Página PDF 16: sustituir “todo el ciclo” y “cumplimiento total”.
+• Páginas 15, 26 y 31: no presentar MinIO como implementado.
+• Página 32: no afirmar dos peers ni continuidad ante caída.
+• Anexo p. 20: retirar OAuth 2.0, RS256, refresh, cookies y rate limiting como hechos.
+• Anexo p. 22: distinguir RBAC diseñado del implementado.
+• Anexo pp. 6–7: sustituir “generar bloque” por enviar una transacción que se incorpora a un bloque.
+• RF06: explicar PostgreSQL para reconstrucción y Fabric para verificación.
+• RNF08: no atribuir PBFT/tolerancia de un tercio a la topología actual.
+• Página 30: retirar 100 % hasta tener matriz validada.
+• Página 32: actualizar modelo relacional.
+• Página 36: hablar de integración inicial.
+
+--- PAGE 15 ---
+Diagramas necesarios: arquitectura real; secuencia PostgreSQL–Fabric; fallo/pending; matriz RBAC; topología Fabric real;
+matriz OE1; mapa RF→HU→componente→prueba; iteraciones reales.
+12. Correcciones que no dependen del código
+• Eliminar duplicidad de diagramas entre cuerpo y anexos.
+• Corregir tildes y errores como “Prespuesto”, “desarollo”, “Gannt” y “Spring Retrospective”.
+• Corregir numeración: pie de página y página física del PDF difieren.
+• Revisar referencias cruzadas, ilustraciones y anexos.
+• Resolver actas con encabezado 2026 y cuerpo 2025 en anexos pp. PDF 23, 24 y 26.
+• Uniformar el nombre Angela’s Bagels.
+• Normalizar tablas, títulos, espacios, jerarquía y bibliografía.
+13. Plan de corrección priorizado
+FASE 1 — Responder al jurado
+Tarea Dificultad Dependencia/riesgo
+Corregir alcance documental Media Auditoría / bajo
+Matriz OE1 normativa Alta Ingeniera de alimentos / alto
+Documentar integración Fabric real Media Bajo
+Matriz RBAC real/deseada Media Decisión de alcance / medio
+Demo Fabric con txId Media Entorno Fabric / alto
+Pruebas RBAC mínimas Media Middleware / medio
+FASE 2 — Coherencia técnica
+RBAC backend; outbox/retry; persistencia de txId/bloque/status; chaincode append-only; sello de reporte correcto; QR
+local.
+
+--- PAGE 16 ---
+FASE 3 — Mejoras
+Sesión segura, rate limiting, auditoría, TLS PostgreSQL, pruebas E2E, rendimiento, tags y changelog.
+FASE 4 — Futuro
+MinIO, cliente gastronómico, nodo/rol INVIMA, HA real, PDC, EPCIS, saneamiento, devoluciones, Excel multi-lote y RF13
+avanzado.
+14. Evidencia que se debería mostrar al jurado
+1. Aplicación→Fabric: formulario, log backend, txId, consulta CLI y JSON del ledger.
+2. Transacción: txId y bloque coincidentes entre API y peer.
+3. Verificación: VERIFICADO; modificación controlada; ALTERADO; restauración.
+4. Operario permitido: POST recepción con HTTP 201 y evento validado.
+5. Operario prohibido: acción administrativa con HTTP 403 desde backend.
+6. Gerencia: consulta permitida y escritura rechazada si el diseño es solo lectura.
+7. QR: acceso sin token, filtrado de datos y estado blockchain.
+8. OE1: norma→registro→RF/RNF→HU→campo→endpoint/tabla→prueba.
+9. PMBOK+Scrum: EDT, plan/real, riesgos, backlog, sprint goal, commits, review y retrospectiva.
+15. Veredicto final
+¿Fabric es demostrable?
+Parcialmente. El código demuestra integración real, pero no hay evidencia runtime reproducible, persistencia de txId ni
+pruebas de integración. REAL PERO PARCIAL.
+¿RBAC es demostrable?
+Solo parcialmente. Hay JWT, tres roles y pocos checks; no existe el RBAC de cinco perfiles.
+¿OE1 es demostrable?
+NO DEMOSTRABLE CON LA EVIDENCIA ACTUAL en su totalidad. Hay RF/RNF/HU, pero no una derivación normativa
+campo por campo ni cobertura validada.
+
+--- PAGE 17 ---
+¿PMBOK + Scrum es demostrable?
+Parcialmente. PMBOK tiene más evidencia documental; Scrum carece de artefactos, eventos y trazabilidad consistente.
+Afirmaciones más fuertes que la evidencia
+1. Cumplimiento total de la Resolución.
+2. Trazabilidad completa hasta cliente.
+3. Cinco perfiles RBAC.
+4. Red tolerante a fallos.
+5. MinIO implementado.
+6. OAuth 2.0/RS256/refresh/Redis.
+7. Consulta exclusivamente blockchain.
+8. Cada evento genera un bloque.
+9. Reglas RF13.
+10.Reportes INVIMA PDF/Excel conformes.
+Cinco correcciones prioritarias
+1. Matriz OE1 norma→RF/RNF→HU→campo→código→prueba.
+2. RBAC backend con pruebas permitidas/prohibidas.
+3. Outbox, retry, txId persistido y pruebas Fabric E2E.
+4. Documento ajustado al MVP real.
+5. Demo reproducible recepción/manufactura→Fabric→txId→consulta→alteración.
+Informe elaborado exclusivamente a partir de los dos documentos académicos, la estructura del repositorio, código fuente, configuración, scripts,
+esquema SQL, frontend, backend, chaincode, pruebas e historial Git disponibles. No se modificó código durante la auditoría original.

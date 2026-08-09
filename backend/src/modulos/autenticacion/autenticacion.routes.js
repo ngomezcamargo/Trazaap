@@ -9,7 +9,7 @@ import { iniciarSesionSchema } from './autenticacion.schemas.js';
 const router = Router();
 
 router.post('/login', validarSolicitud(iniciarSesionSchema), manejarAsync(iniciarSesionController));
-router.get('/me', autenticarJwt, manejarAsync(perfilController));
-router.get('/operarios', autenticarJwt, rolesMiddleware('administrador', 'gerente', 'operario'), manejarAsync(listarOperariosController));
+router.get('/me', autenticarJwt, rolesMiddleware('gerente', 'operario'), manejarAsync(perfilController));
+router.get('/operarios', autenticarJwt, rolesMiddleware('operario'), manejarAsync(listarOperariosController));
 
 export default router;

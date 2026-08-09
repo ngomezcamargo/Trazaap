@@ -28,28 +28,37 @@ export async function listarPendientesLiberacion() {
 export async function buscarManufacturaPorId(idManufactura) {
   const { rows } = await poolPostgres.query(
     `SELECT
-       rm.id_manufactura,
+       rm.*,
        rm.id_orden_produccion,
        rm.id_producto,
        op.codigo_orden,
        rm.lote_producido,
        rm.unidades_producidas,
        rm.created_at AS fecha_manufactura,
-       rm.registrado_por AS responsable_manufactura,
+       COALESCE(um.email, rm.registrado_por) AS responsable_manufactura,
        opp.producto,
        opp.tamano_presentacion,
-       opp.estado_manufactura
+       opp.estado_manufactura,
+       pf.requiere_inmersion,
+       pf.tiempo_fermentacion_minutos,
+       pf.temperatura_fermentacion_c,
+       pf.tiempo_horneado_minutos,
+       pf.temperatura_horneado_c,
+       pf.tiempo_inmersion_minutos,
+       pf.temperatura_inmersion_c
      FROM registro_manufactura rm
      JOIN ordenes_produccion op ON op.id = rm.id_orden_produccion
      JOIN ordenes_produccion_productos opp ON opp.id = rm.id_producto
+     LEFT JOIN productos_fabricados pf ON pf.id = opp.producto_fabricado_id
+     LEFT JOIN users um ON um.id = rm.registrado_por_usuario_id
      WHERE rm.id_manufactura = $1`,
     [idManufactura]
   );
   return rows[0] || null;
 }
 
-export async function buscarLiberacionPorManufactura(idManufactura) {
-  const { rows } = await poolPostgres.query(
+export async function buscarLiberacionPorManufactura(idManufactura, db = poolPostgres) {
+  const { rows } = await db.query(
     'SELECT * FROM liberacion_producto WHERE id_manufactura = $1',
     [idManufactura]
   );
@@ -69,8 +78,8 @@ export async function buscarUsuarioOperarioPorId(id) {
   return rows[0] || null;
 }
 
-export async function crearLiberacionProducto(data) {
-  const { rows } = await poolPostgres.query(
+export async function crearLiberacionProducto(data, db = poolPostgres) {
+  const { rows } = await db.query(
     `INSERT INTO liberacion_producto (
       id_manufactura,
       id_orden_produccion,
@@ -132,6 +141,37 @@ export async function crearLiberacionProducto(data) {
   return rows[0];
 }
 
+export async function crearInventarioProductoTerminadoDesdeLiberacion(data, db = poolPostgres) {
+  const { rows } = await db.query(
+    `INSERT INTO inventario_producto_terminado (
+      id_liberacion,
+      producto,
+      lote,
+      unidades_disponibles,
+      fecha_vencimiento,
+      estado
+    )
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (id_liberacion) DO UPDATE SET
+       producto = EXCLUDED.producto,
+       lote = EXCLUDED.lote,
+       unidades_disponibles = EXCLUDED.unidades_disponibles,
+       fecha_vencimiento = EXCLUDED.fecha_vencimiento,
+       estado = EXCLUDED.estado,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      data.id_liberacion,
+      data.producto,
+      data.lote,
+      data.unidades_disponibles,
+      data.fecha_vencimiento,
+      data.estado
+    ]
+  );
+  return rows[0];
+}
+
 export async function listarLiberaciones() {
   const { rows } = await poolPostgres.query(
     `SELECT
@@ -153,10 +193,38 @@ export async function listarLiberaciones() {
   return rows;
 }
 
-export async function registrarEventoTrazabilidad(data) {
-  await poolPostgres.query(
+export async function registrarEventoTrazabilidad(data, db = poolPostgres) {
+  await db.query(
     `INSERT INTO trazabilidad_eventos (recepcion_id, lote, tipo_evento, actor, payload)
      VALUES ($1, $2, $3, $4, $5)`,
     [data.recepcion_id, data.lote, data.tipo_evento, data.actor, JSON.stringify(data.payload || {})]
   );
+}
+
+export async function ejecutarTransaccionLiberacion(callback) {
+  const client = await poolPostgres.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listarLotesVencidosSinDespacho() {
+  const { rows } = await poolPostgres.query(
+    `SELECT id_inventario, id_liberacion, producto, lote, unidades_disponibles,
+            fecha_vencimiento, estado
+     FROM inventario_producto_terminado
+     WHERE fecha_vencimiento <= CURRENT_DATE
+       AND unidades_disponibles > 0
+       AND estado IN ('disponible', 'reservado')
+     ORDER BY fecha_vencimiento, lote`
+  );
+  return rows;
 }

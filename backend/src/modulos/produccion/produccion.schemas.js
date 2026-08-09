@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 const estadosOrden = ['pendiente', 'en_proceso', 'lista_para_liberacion', 'finalizada', 'cancelada'];
-const tamanos = ['grande', 'mediano', 'pequeno', 'personal', 'mini', 'cocktail'];
+const tamanos = ['grande', 'mediano', 'pequeno', 'personal', 'mini', 'cocktail', 'unico', 'kilo', 'libra'];
 const estadosProducto = ['activo', 'inactivo'];
 
 export const recetaMateriaSchema = z.object({

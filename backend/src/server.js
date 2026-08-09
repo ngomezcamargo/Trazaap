@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { entorno } from './configuracion/entorno.js';
 import { probarConexionPostgres } from './configuracion/postgresql.js';
+import { iniciarTareaAlertasVencimiento } from './modulos/liberacion/vencimientos.job.js';
 
 async function bootstrap() {
   await probarConexionPostgres();
@@ -9,6 +10,7 @@ async function bootstrap() {
   app.listen(entorno.port, () => {
     console.log(`Trazaap API ejecutandose en http://localhost:${entorno.port}`);
   });
+  iniciarTareaAlertasVencimiento();
 }
 
 bootstrap().catch((error) => {

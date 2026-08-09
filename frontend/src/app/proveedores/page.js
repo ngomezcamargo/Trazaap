@@ -6,9 +6,12 @@ import { GuardiaRol } from '@/comunes/GuardiaRol';
 import { GuardiaSesion } from '@/comunes/GuardiaSesion';
 import { FormularioProveedor } from '@/modulos/proveedores/FormularioProveedor';
 import { proveedoresServicio } from '@/servicios/proveedores.servicio';
-import { ROLES } from '@/utilidades/roles';
+import { obtenerUsuario } from '@/utilidades/sesion';
+import { puedeAdministrar, ROLES } from '@/utilidades/roles';
 
 export default function ProveedoresPage() {
+  const usuario = obtenerUsuario();
+  const puedeEditar = puedeAdministrar(usuario?.role);
   const [proveedores, setProveedores] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [error, setError] = useState('');
@@ -39,6 +42,7 @@ export default function ProveedoresPage() {
 
   const cerrarModal = () => {
     setModal({ abierto: false, proveedor: null });
+    setError('');
   };
 
   const manejarGuardado = async () => {
@@ -81,12 +85,14 @@ export default function ProveedoresPage() {
       <GuardiaRol permitido={[ROLES.GERENTE]}>
         <ContenedorApp titulo="Proveedores" subtitulo="Consulta y seguimiento basico de proveedores activos.">
           <div className="tarjeta">
-            <div className="acciones" style={{ marginTop: 0, marginBottom: 14 }}>
-              <button className="boton" type="button" onClick={abrirCrear}>Nuevo proveedor</button>
-            </div>
+            {puedeEditar && (
+              <div className="acciones" style={{ marginTop: 0, marginBottom: 14 }}>
+                <button className="boton" type="button" onClick={abrirCrear}>Nuevo proveedor</button>
+              </div>
+            )}
 
-            {error && <div className="alerta error">{error}</div>}
-            {message && <div className="alerta ok">{message}</div>}
+            {!modal.abierto && error && <div className="alerta error">{error}</div>}
+            {!modal.abierto && message && <div className="alerta ok">{message}</div>}
 
             <div className="campo" style={{ marginBottom: 14 }}>
               <label>Buscar por nombre, NIT o contacto</label>
@@ -102,7 +108,7 @@ export default function ProveedoresPage() {
                   <th>Contacto</th>
                   <th>Telefono</th>
                   <th>Estado</th>
-                  <th>Acciones</th>
+                  {puedeEditar && <th>Acciones</th>}
                 </tr>
               </thead>
               <tbody>
@@ -116,19 +122,21 @@ export default function ProveedoresPage() {
                     <td>
                       <span className="estado">{provider.estado}</span>
                     </td>
-                    <td>
-                      <div className="acciones" style={{ marginTop: 0 }}>
-                        <button className="boton secundario" type="button" onClick={() => abrirEditar(provider)}>Editar</button>
-                        <button className="boton secundario" type="button" onClick={() => eliminarProveedor(provider)}>Eliminar</button>
-                      </div>
-                    </td>
+                    {puedeEditar && (
+                      <td>
+                        <div className="acciones" style={{ marginTop: 0 }}>
+                          <button className="boton secundario" type="button" onClick={() => abrirEditar(provider)}>Editar</button>
+                          <button className="boton secundario" type="button" onClick={() => eliminarProveedor(provider)}>Eliminar</button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          {modal.abierto && (
+          {puedeEditar && modal.abierto && (
             <div className="modal-fondo" onClick={cerrarModal}>
               <div className="modal" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-encabezado-form">

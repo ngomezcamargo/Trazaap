@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { autenticarJwt } from '../../middlewares/autenticarJwt.js';
 import { manejarAsync } from '../../middlewares/manejarAsync.js';
+import { rolesMiddleware } from '../../middlewares/roles.middleware.js';
 import { validarSolicitud } from '../../middlewares/validarSolicitud.js';
 import {
   calcularInsumosRequeridosController,
@@ -34,21 +35,21 @@ import {
 const router = Router();
 router.use(autenticarJwt);
 
-router.get('/ordenes', manejarAsync(listarOrdenesProduccionController));
-router.get('/manufactura/ordenes', manejarAsync(listarOrdenesManufacturaController));
-router.get('/ordenes/:id', manejarAsync(obtenerDetalleOrdenController));
-router.get('/ordenes/:id/productos/:productoId/manufactura', manejarAsync(obtenerContextoManufacturaController));
-router.get('/productos', manejarAsync(listarProductosFabricadosController));
-router.get('/productos/:productoId', manejarAsync(obtenerDetalleProductoFabricadoController));
-router.get('/recepciones-disponibles', manejarAsync(listarRecepcionesAceptadasController));
-router.post('/ordenes', validarSolicitud(crearOrdenProduccionSchema), manejarAsync(crearOrdenProduccionController));
-router.post('/productos', validarSolicitud(productoFabricadoSchema), manejarAsync(crearProductoFabricadoController));
-router.put('/productos/:productoId', validarSolicitud(productoFabricadoSchema), manejarAsync(actualizarProductoFabricadoController));
-router.post('/calcular-insumos', validarSolicitud(calcularInsumosSchema), manejarAsync(calcularInsumosRequeridosController));
-router.put('/ordenes/:id/estado', validarSolicitud(actualizarEstadoOrdenSchema), manejarAsync(actualizarEstadoOrdenController));
-router.post('/ordenes/:id/materias', validarSolicitud(asociarMateriasSchema), manejarAsync(asociarMateriasController));
-router.put('/ordenes/:id/materias/:materiaId', validarSolicitud(actualizarCantidadRealMateriaSchema), manejarAsync(actualizarCantidadRealMateriaController));
-router.post('/ordenes/:id/tiempos', validarSolicitud(registrarTiemposSchema), manejarAsync(registrarTiemposController));
-router.post('/ordenes/:id/productos/:productoId/manufactura', validarSolicitud(registroManufacturaSchema), manejarAsync(registrarManufacturaController));
+router.get('/ordenes', rolesMiddleware('gerente', 'operario'), manejarAsync(listarOrdenesProduccionController));
+router.get('/manufactura/ordenes', rolesMiddleware('operario'), manejarAsync(listarOrdenesManufacturaController));
+router.get('/ordenes/:id', rolesMiddleware('gerente', 'operario'), manejarAsync(obtenerDetalleOrdenController));
+router.get('/ordenes/:id/productos/:productoId/manufactura', rolesMiddleware('operario'), manejarAsync(obtenerContextoManufacturaController));
+router.get('/productos', rolesMiddleware('gerente', 'operario'), manejarAsync(listarProductosFabricadosController));
+router.get('/productos/:productoId', rolesMiddleware('gerente', 'operario'), manejarAsync(obtenerDetalleProductoFabricadoController));
+router.get('/recepciones-disponibles', rolesMiddleware('administrador'), manejarAsync(listarRecepcionesAceptadasController));
+router.post('/ordenes', rolesMiddleware('administrador'), validarSolicitud(crearOrdenProduccionSchema), manejarAsync(crearOrdenProduccionController));
+router.post('/productos', rolesMiddleware('administrador'), validarSolicitud(productoFabricadoSchema), manejarAsync(crearProductoFabricadoController));
+router.put('/productos/:productoId', rolesMiddleware('administrador'), validarSolicitud(productoFabricadoSchema), manejarAsync(actualizarProductoFabricadoController));
+router.post('/calcular-insumos', rolesMiddleware('administrador'), validarSolicitud(calcularInsumosSchema), manejarAsync(calcularInsumosRequeridosController));
+router.put('/ordenes/:id/estado', rolesMiddleware('administrador'), validarSolicitud(actualizarEstadoOrdenSchema), manejarAsync(actualizarEstadoOrdenController));
+router.post('/ordenes/:id/materias', rolesMiddleware('administrador'), validarSolicitud(asociarMateriasSchema), manejarAsync(asociarMateriasController));
+router.put('/ordenes/:id/materias/:materiaId', rolesMiddleware('administrador'), validarSolicitud(actualizarCantidadRealMateriaSchema), manejarAsync(actualizarCantidadRealMateriaController));
+router.post('/ordenes/:id/tiempos', rolesMiddleware('operario'), validarSolicitud(registrarTiemposSchema), manejarAsync(registrarTiemposController));
+router.post('/ordenes/:id/productos/:productoId/manufactura', rolesMiddleware('operario'), validarSolicitud(registroManufacturaSchema), manejarAsync(registrarManufacturaController));
 
 export default router;

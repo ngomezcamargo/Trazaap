@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { GuardiaSesion } from '@/comunes/GuardiaSesion';
+import { GuardiaRol } from '@/comunes/GuardiaRol';
 import { trazabilidadServicio } from '@/servicios/trazabilidad.servicio';
 import { obtenerUsuario } from '@/utilidades/sesion';
+import { ROLES } from '@/utilidades/roles';
 
 const nombresEventos = {
   recepcion_materia_prima: 'RECEPCION DE MATERIA PRIMA',
@@ -12,7 +14,14 @@ const nombresEventos = {
   orden_produccion: 'ORDEN DE PRODUCCION',
   producto_fabricado_configurado: 'PRODUCTO / RECETA',
   registro_manufactura: 'FABRICACION',
-  liberacion_producto: 'EMBALADO / LIBERACION'
+  liberacion_producto: 'EMBALADO / LIBERACION',
+  inventario_producto_terminado: 'INVENTARIO PRODUCTO TERMINADO',
+  inventario_materia_prima: 'INVENTARIO MATERIA PRIMA',
+  movimiento_inventario: 'MOVIMIENTO DE INVENTARIO',
+  despacho_producto: 'DESPACHO DE PRODUCTO',
+  confirmacion_recepcion_cliente: 'CONFIRMACION DE RECEPCION DEL CLIENTE',
+  correccion_evento: 'CORRECCION AUDITADA',
+  alerta_vencimiento: 'ALERTA DE VENCIMIENTO'
 };
 
 function fechaCorta(fecha) {
@@ -27,6 +36,7 @@ function hashCorto(hash) {
 
 function estadoTexto(estado) {
   if (estado === 'VERIFICADO') return 'VERIFICADO';
+  if (estado === 'VERIFICADO_CORREGIDO') return 'VERIFICADO CON CORRECCION';
   if (estado === 'ALTERADO') return 'ALTERADO';
   if (estado === 'NO_ENCONTRADO') return 'NO ENCONTRADO';
   return 'PENDIENTE';
@@ -153,9 +163,95 @@ function crearEventosReporte(data) {
     });
   }
 
+  if (data.inventarioProductoTerminado) {
+    eventos.push({
+      tipoEvento: 'inventario_producto_terminado',
+      idEntidad: data.inventarioProductoTerminado.id_inventario,
+      titulo: nombresEventos.inventario_producto_terminado,
+      referencia: `Inventario terminado #${data.inventarioProductoTerminado.id_inventario}`,
+      lote: data.inventarioProductoTerminado.lote || data.lote,
+      filas: [
+        ['Producto', data.inventarioProductoTerminado.producto || '-'],
+        ['Lote', data.inventarioProductoTerminado.lote || data.lote],
+        ['Unidades disponibles', data.inventarioProductoTerminado.unidades_disponibles || '-'],
+        ['Fecha de vencimiento', fechaCorta(data.inventarioProductoTerminado.fecha_vencimiento)],
+        ['Estado', data.inventarioProductoTerminado.estado || '-']
+      ]
+    });
+  }
+
+  for (const movimiento of data.movimientosInventario || []) {
+    eventos.push({
+      tipoEvento: 'movimiento_inventario',
+      idEntidad: movimiento.id,
+      titulo: nombresEventos.movimiento_inventario,
+      referencia: `Movimiento #${movimiento.id}`,
+      lote: data.lote,
+      filas: [
+        ['Materia prima', movimiento.materia_prima || '-'],
+        ['Tipo movimiento', movimiento.tipo_movimiento || '-'],
+        ['Cantidad', `${movimiento.cantidad || '-'} ${movimiento.unidad_medida || ''}`],
+        ['Referencia', `${movimiento.referencia_tipo || '-'} #${movimiento.referencia_id || '-'}`],
+        ['Creado por', movimiento.creado_por || '-'],
+        ['Fecha', fechaCorta(movimiento.creado_en)]
+      ]
+    });
+  }
+
+  for (const inventario of data.inventariosMateriaPrima || []) {
+    eventos.push({
+      tipoEvento: 'inventario_materia_prima',
+      idEntidad: inventario.id,
+      titulo: nombresEventos.inventario_materia_prima,
+      referencia: `Inventario materia prima #${inventario.id}`,
+      lote: data.lote,
+      filas: [
+        ['Materia prima', inventario.materia_prima || '-'],
+        ['Cantidad disponible', `${inventario.cantidad_disponible || '-'} ${inventario.unidad_medida || ''}`],
+        ['Fecha actualizacion', fechaCorta(inventario.fecha_actualizacion)]
+      ]
+    });
+  }
+
+  for (const decision of data.decisionesBlockchain || []) {
+    const motivos = decision.decisionChaincode?.motivos || [];
+    eventos.push({
+      tipoEvento: decision.tipoEvento,
+      idEntidad: decision.idEntidad,
+      titulo: nombresEventos[decision.tipoEvento] || decision.tipoEvento,
+      referencia: `${decision.tipoEvento} ${decision.idEntidad}`,
+      lote: decision.lote || data.lote,
+      filas: [
+        ['Lote', decision.lote || data.lote],
+        ['Estado / decision', decision.decisionChaincode?.estado || decision.estado || '-'],
+        ['Motivos', motivos.length ? motivos.join('; ') : 'Sin bloqueos'],
+        ['Fecha Fabric', fechaCorta(decision.timestampBlockchain)],
+        ['Transaccion Fabric', decision.txId || '-'],
+        ...(decision.tipoEvento === 'correccion_evento'
+          ? [
+              ['Evento original', `${decision.tipoEventoOriginal}:${decision.idEntidadOriginal}`],
+              ['Motivo de correccion', decision.motivoCorreccion || '-']
+            ]
+          : [])
+      ],
+      validacion: {
+        estadoBlockchain: 'VERIFICADO',
+        hashActual: decision.hashRegistro,
+        hashBlockchain: decision.hashRegistro,
+        mensaje: decision.tipoEvento === 'despacho_producto'
+          ? 'Reglas de despacho validadas por chaincode'
+          : 'Decision registrada de forma inmutable',
+        transactionId: decision.txId,
+        timestampBlockchain: decision.timestampBlockchain,
+        decision: decision.decisionChaincode?.estado || decision.estado,
+        motivos
+      }
+    });
+  }
+
   return eventos.map((evento) => ({
     ...evento,
-    validacion: obtenerValidacion(data, evento.tipoEvento, evento.idEntidad)
+    validacion: evento.validacion || obtenerValidacion(data, evento.tipoEvento, evento.idEntidad)
   }));
 }
 
@@ -185,6 +281,9 @@ function EventoReporte({ evento, index, verificarUrl }) {
             <div><dt>Hash en blockchain:</dt><dd>{hashCorto(validacion.hashBlockchain)}</dd></div>
             <div><dt>Estado:</dt><dd><span className={`reporte-estado ${estado.toLowerCase().replaceAll(' ', '_')}`}>{estado}</span></dd></div>
             <div><dt>Mensaje:</dt><dd>{validacion.mensaje || 'Pendiente de validacion blockchain'}</dd></div>
+            {validacion.decision && <div><dt>Decision chaincode:</dt><dd>{validacion.decision}</dd></div>}
+            {validacion.motivos?.length ? <div><dt>Motivos:</dt><dd>{validacion.motivos.join('; ')}</dd></div> : null}
+            {validacion.transactionId && <div><dt>Transaccion Fabric:</dt><dd>{hashCorto(validacion.transactionId)}</dd></div>}
           </dl>
         </div>
 
@@ -222,10 +321,12 @@ export default function ReporteTrazabilidadPage() {
   if (error) {
     return (
       <GuardiaSesion>
-        <div className="reporte-error">
-          <h1>No fue posible generar el reporte</h1>
-          <p>{error}</p>
-        </div>
+        <GuardiaRol permitido={[ROLES.GERENTE]}>
+          <div className="reporte-error">
+            <h1>No fue posible generar el reporte</h1>
+            <p>{error}</p>
+          </div>
+        </GuardiaRol>
       </GuardiaSesion>
     );
   }
@@ -233,18 +334,21 @@ export default function ReporteTrazabilidadPage() {
   if (!data) {
     return (
       <GuardiaSesion>
-        <div className="reporte-error">
-          <h1>Generando reporte...</h1>
-        </div>
+        <GuardiaRol permitido={[ROLES.GERENTE]}>
+          <div className="reporte-error">
+            <h1>Generando reporte...</h1>
+          </div>
+        </GuardiaRol>
       </GuardiaSesion>
     );
   }
 
   return (
     <GuardiaSesion>
-      <div className="reporte-acciones no-print">
-        <button className="boton" onClick={() => window.print()}>Imprimir / guardar PDF</button>
-      </div>
+      <GuardiaRol permitido={[ROLES.GERENTE]}>
+        <div className="reporte-acciones no-print">
+          <button className="boton" onClick={() => window.print()}>Imprimir / guardar PDF</button>
+        </div>
 
       <main className="reporte-pagina">
         <header className="reporte-header">
@@ -263,6 +367,8 @@ export default function ReporteTrazabilidadPage() {
             <p><b>Reporte No:</b><br />{reporteId}</p>
             <p><b>Fecha de generacion:</b><br />{fechaCorta(generadoEn)}</p>
             <p><b>Generado por:</b><br />{usuario?.email || 'usuario@trazaap.local'}</p>
+            <p><b>Codigo cliente:</b><br />{data.codigosAcceso?.cliente || '-'}</p>
+            <p><b>Codigo auditoria:</b><br />{data.codigosAcceso?.auditoria || '-'}</p>
           </div>
         </header>
 
@@ -272,6 +378,12 @@ export default function ReporteTrazabilidadPage() {
             A continuacion se presenta el detalle de cada evento critico del lote {data.lote}
             {' '}con su validacion en Hyperledger Fabric.
           </p>
+          <div className="reporte-leyenda">
+            <span><b>VERIFICADO:</b> el hash actual coincide con Fabric.</span>
+            <span><b>ALTERADO:</b> el registro operativo cambio frente a la evidencia.</span>
+            <span><b>NO ENCONTRADO:</b> no existe evidencia para ese evento.</span>
+            <span><b>PENDIENTE:</b> Fabric no pudo validar o esta pendiente de sincronizacion.</span>
+          </div>
         </section>
 
         {eventos.map((evento, index) => (
@@ -286,7 +398,9 @@ export default function ReporteTrazabilidadPage() {
               <p>
                 Escanee el codigo QR o visite el enlace para verificar la autenticidad del reporte:<br />
                 <b>{verificarUrl}</b><br />
-                ID de verificacion: <b>{reporteId}</b>
+                ID de verificacion: <b>{reporteId}</b><br />
+                Codigo cliente: <b>{data.codigosAcceso?.cliente || '-'}</b><br />
+                Codigo auditoria: <b>{data.codigosAcceso?.auditoria || '-'}</b>
               </p>
             </div>
           </div>
@@ -300,7 +414,8 @@ export default function ReporteTrazabilidadPage() {
             <div className="sello-integridad">VALIDADO<br />EN BLOCKCHAIN</div>
           </div>
         </footer>
-      </main>
+        </main>
+      </GuardiaRol>
     </GuardiaSesion>
   );
 }

@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { poolPostgres } from '../src/configuracion/postgresql.js';
+import { CATALOGO_PRODUCTOS } from './catalogo-productos.js';
 
 async function seedRoles() {
   const roles = ['administrador', 'gerente', 'operario'];
@@ -49,22 +50,215 @@ async function seedProviders() {
 }
 
 async function seedRawMaterials() {
-  await poolPostgres.query(
-    `INSERT INTO raw_materials (
-      nombre,
-      descripcion,
-      unidad_medida,
-      unidad_medida_base,
-      descripcion_unidad_personalizada,
-      tipo_insumo,
-      condiciones_almacenamiento
-    )
-     VALUES
-       ('Harina de trigo', 'Harina para produccion de pan', 'kilogramos', 'kilogramos', '', 'solido', 'Ambiente seco'),
-       ('Levadura instantanea', 'Levadura seca para panificacion', 'gramos', 'gramos', '', 'solido', 'Ambiente seco'),
-       ('Azucar refinada', 'Azucar para formulaciones de panaderia', 'kilogramos', 'kilogramos', '', 'solido', 'Ambiente seco')
-     ON CONFLICT (nombre) DO NOTHING`
-  );
+  const materias = [
+    ['Harina de trigo', 'Harina para produccion de pan', 'kilogramos', 'kilogramos', '', 'solido', 'Ambiente seco'],
+    ['Levadura instantanea', 'Levadura seca para panificacion', 'gramos', 'gramos', '', 'solido', 'Ambiente seco'],
+    ['Azucar refinada', 'Azucar para formulaciones de panaderia', 'kilogramos', 'kilogramos', '', 'solido', 'Ambiente seco']
+  ];
+
+  for (const materia of materias) {
+    const actualizada = await poolPostgres.query(
+      `UPDATE raw_materials
+       SET descripcion = $2,
+           unidad_medida = $3,
+           unidad_medida_base = $4,
+           descripcion_unidad_personalizada = $5,
+           tipo_insumo = $6,
+           condiciones_almacenamiento = $7,
+           is_active = true,
+           updated_at = NOW()
+       WHERE LOWER(nombre) = LOWER($1)`,
+      materia
+    );
+
+    if (!actualizada.rowCount) {
+      await poolPostgres.query(
+        `INSERT INTO raw_materials (
+           nombre, descripcion, unidad_medida, unidad_medida_base,
+           descripcion_unidad_personalizada, tipo_insumo, condiciones_almacenamiento
+         )
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        materia
+      );
+    }
+  }
+}
+
+async function seedCatalogoProductos() {
+  const client = await poolPostgres.connect();
+
+  try {
+    await client.query('BEGIN');
+    const materiaResult = await client.query(
+      `SELECT id
+       FROM raw_materials
+       WHERE LOWER(nombre) = LOWER($1)
+       LIMIT 1`,
+      ['Harina de trigo']
+    );
+    const harinaId = materiaResult.rows[0]?.id;
+    if (!harinaId) throw new Error('No se encontro Harina de trigo para crear las recetas base');
+    const columnasVariantes = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'producto_variantes'`
+    );
+    const tieneNombreVariante = columnasVariantes.rows.some((row) => row.column_name === 'nombre_variante');
+    const columnasProductos = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'productos_fabricados'`
+    );
+    const tieneTamanoProducto = columnasProductos.rows.some((row) => row.column_name === 'tamano_presentacion');
+
+    for (const ficha of CATALOGO_PRODUCTOS) {
+      const existente = await client.query(
+        `SELECT id
+         FROM productos_fabricados
+         WHERE LOWER(nombre) = LOWER($1)
+         ORDER BY id
+         LIMIT 1`,
+        [ficha.nombre]
+      );
+
+      let productoId = existente.rows[0]?.id;
+      const valoresProducto = [
+        ficha.nombre,
+        ficha.categoria,
+        ficha.descripcion,
+        ficha.vida_util_dias,
+        ficha.condiciones_almacenamiento,
+        ficha.estado,
+        ficha.requiere_inmersion,
+        ficha.tiempo_fermentacion_minutos,
+        ficha.temperatura_fermentacion_c,
+        ficha.tiempo_horneado_minutos,
+        ficha.temperatura_horneado_c,
+        ficha.tiempo_inmersion_minutos,
+        ficha.temperatura_inmersion_c
+      ];
+
+      if (productoId) {
+        await client.query(
+          `UPDATE productos_fabricados
+           SET nombre = $1,
+               categoria = $2,
+               descripcion = $3,
+               vida_util_dias = $4,
+               condiciones_almacenamiento = $5,
+               estado = $6,
+               requiere_inmersion = $7,
+               tiempo_fermentacion_minutos = $8,
+               temperatura_fermentacion_c = $9,
+               tiempo_horneado_minutos = $10,
+               temperatura_horneado_c = $11,
+               tiempo_inmersion_minutos = $12,
+               temperatura_inmersion_c = $13,
+               updated_at = NOW()
+           WHERE id = $14`,
+          [...valoresProducto, productoId]
+        );
+      } else {
+        const creado = tieneTamanoProducto
+          ? await client.query(
+            `INSERT INTO productos_fabricados (
+               nombre, categoria, descripcion, vida_util_dias, condiciones_almacenamiento,
+               estado, requiere_inmersion, tiempo_fermentacion_minutos,
+               temperatura_fermentacion_c, tiempo_horneado_minutos, temperatura_horneado_c,
+               tiempo_inmersion_minutos, temperatura_inmersion_c, tamano_presentacion
+             )
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+             RETURNING id`,
+            [...valoresProducto, ficha.variantes[0].tamano_presentacion]
+          )
+          : await client.query(
+            `INSERT INTO productos_fabricados (
+               nombre, categoria, descripcion, vida_util_dias, condiciones_almacenamiento,
+               estado, requiere_inmersion, tiempo_fermentacion_minutos,
+               temperatura_fermentacion_c, tiempo_horneado_minutos, temperatura_horneado_c,
+               tiempo_inmersion_minutos, temperatura_inmersion_c
+             )
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+             RETURNING id`,
+            valoresProducto
+          );
+        productoId = creado.rows[0].id;
+      }
+
+      for (const variante of ficha.variantes) {
+        let varianteResult = await client.query(
+          `UPDATE producto_variantes
+           SET peso_estimado_unidad = $3,
+               unidad_medida = $4,
+               estado = 'activo',
+               updated_at = NOW()
+           WHERE producto_id = $1 AND tamano_presentacion = $2
+           RETURNING id`,
+          [productoId, variante.tamano_presentacion, variante.peso_estimado_unidad, variante.unidad_medida]
+        );
+
+        if (!varianteResult.rows.length) {
+          varianteResult = tieneNombreVariante
+            ? await client.query(
+              `INSERT INTO producto_variantes (
+                 producto_id, nombre_variante, tamano_presentacion,
+                 peso_estimado_unidad, unidad_medida, estado
+               )
+               VALUES ($1,$2,$2,$3,$4,'activo')
+               RETURNING id`,
+              [productoId, variante.tamano_presentacion, variante.peso_estimado_unidad, variante.unidad_medida]
+            )
+            : await client.query(
+              `INSERT INTO producto_variantes (
+                 producto_id, tamano_presentacion, peso_estimado_unidad, unidad_medida, estado
+               )
+               VALUES ($1,$2,$3,$4,'activo')
+               RETURNING id`,
+              [productoId, variante.tamano_presentacion, variante.peso_estimado_unidad, variante.unidad_medida]
+            );
+        }
+        const varianteId = varianteResult.rows[0].id;
+        const cantidadHarinaKg = Math.max((Number(variante.peso_estimado_unidad) * 0.6) / 1000, 0.001);
+        const recetaExistente = await client.query(
+          `SELECT id, observaciones
+           FROM producto_variante_materia_prima
+           WHERE variante_id = $1 AND materia_prima_id = $2
+           ORDER BY id
+           LIMIT 1`,
+          [varianteId, harinaId]
+        );
+        const observacion = 'Receta base provisional calculada al 60% del peso estimado. Debe validarse con la formulacion oficial.';
+
+        if (!recetaExistente.rows.length) {
+          await client.query(
+            `INSERT INTO producto_variante_materia_prima (
+               variante_id, materia_prima_id, cantidad_requerida, observaciones
+             )
+             VALUES ($1,$2,$3,$4)`,
+            [varianteId, harinaId, cantidadHarinaKg, observacion]
+          );
+        } else {
+          const receta = recetaExistente.rows[0];
+          const esProvisional = !receta.observaciones?.trim() || receta.observaciones.startsWith('Receta base provisional');
+          if (esProvisional) {
+            await client.query(
+              `UPDATE producto_variante_materia_prima
+               SET cantidad_requerida = $1, observaciones = $2
+               WHERE id = $3`,
+              [cantidadHarinaKg, observacion, receta.id]
+            );
+          }
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function seedReceptionSample() {
@@ -151,6 +345,7 @@ async function run() {
   await seedOperarioUser();
   await seedProviders();
   await seedRawMaterials();
+  await seedCatalogoProductos();
   await seedReceptionSample();
   await seedProduccionYLiberacion();
   console.log('Seed completed');

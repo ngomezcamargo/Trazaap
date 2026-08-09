@@ -3,7 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { autenticacionServicio } from '@/servicios/autenticacion.servicio';
-import { limpiarSesion, obtenerToken, tokenValido } from '@/utilidades/sesion';
+import {
+  LIMITE_INACTIVIDAD_MS,
+  limpiarSesion,
+  obtenerToken,
+  registrarActividadSesion,
+  sesionActivaPorActividad,
+  tokenValido
+} from '@/utilidades/sesion';
 
 let cacheSesionActiva = false;
 
@@ -12,15 +19,24 @@ export function GuardiaSesion({ children }) {
   const [autorizado, setAutorizado] = useState(cacheSesionActiva);
   const [cargando, setCargando] = useState(!cacheSesionActiva);
 
+  const cerrarPorInactividad = () => {
+    limpiarSesion();
+    cacheSesionActiva = false;
+    setAutorizado(false);
+    router.replace('/iniciar-sesion?motivo=inactividad');
+  };
+
   useEffect(() => {
     async function validarSesion() {
       const token = obtenerToken();
-      if (!token || !tokenValido()) {
+      const sesionActiva = sesionActivaPorActividad();
+      if (!token || !tokenValido() || !sesionActiva) {
+        const destino = token && !sesionActiva ? '/iniciar-sesion?motivo=inactividad' : '/iniciar-sesion';
         limpiarSesion();
         cacheSesionActiva = false;
         setCargando(false);
         setAutorizado(false);
-        router.replace('/iniciar-sesion');
+        router.replace(destino);
         return;
       }
 
@@ -49,6 +65,31 @@ export function GuardiaSesion({ children }) {
 
     validarSesion();
   }, [router]);
+
+  useEffect(() => {
+    if (!autorizado) return undefined;
+
+    let timeoutId;
+    const eventosActividad = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+
+    const programarCierre = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(cerrarPorInactividad, LIMITE_INACTIVIDAD_MS);
+    };
+
+    const registrarActividad = () => {
+      registrarActividadSesion();
+      programarCierre();
+    };
+
+    eventosActividad.forEach((evento) => window.addEventListener(evento, registrarActividad, { passive: true }));
+    programarCierre();
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      eventosActividad.forEach((evento) => window.removeEventListener(evento, registrarActividad));
+    };
+  }, [autorizado, router]);
 
   if (cargando) {
     return null;

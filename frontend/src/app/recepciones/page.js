@@ -28,7 +28,7 @@ export default function RecepcionesPage() {
 
   return (
     <GuardiaSesion>
-      <GuardiaRol permitido={[ROLES.GERENTE]}>
+      <GuardiaRol permitido={[ROLES.GERENTE, ROLES.OPERARIO]}>
       <ContenedorApp titulo="Recepciones" subtitulo="Listado operativo de recepciones registradas.">
         <div className="tarjeta">
           <div className="campo" style={{ marginBottom: 12 }}>

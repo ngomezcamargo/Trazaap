@@ -1,7 +1,8 @@
 import {
   registrarEventoCritico,
   registrarEventoInspeccion,
-  registrarEventoRecepcion
+  registrarEventoRecepcion,
+  registrarVersionEventoCritico
 } from '../blockchain/blockchain.service.js';
 import {
   buscarInventarioMateriaPorMateriaPrimaId,
@@ -56,7 +57,12 @@ export async function crearRecepcionService(data, actor) {
     const movimiento = await buscarMovimientoInventarioPorReferencia('recepcion', recepcion.id);
 
     if (inventario?.id) {
-      evidenciaInventario.push(await registrarEventoCritico('inventario_materia_prima', inventario.id, actor));
+      evidenciaInventario.push(await registrarVersionEventoCritico(
+        'inventario_materia_prima',
+        inventario.id,
+        actor,
+        `Entrada de inventario por recepcion ${recepcion.numero_lote}`
+      ));
     }
     if (movimiento?.id) {
       evidenciaInventario.push(await registrarEventoCritico('movimiento_inventario', movimiento.id, actor));

@@ -22,7 +22,6 @@ export class FabricTraceabilityService {
     let tlsRootCert;
     let cert;
     let privateKeyPem;
-
     try {
       [tlsRootCert, cert, privateKeyPem] = await Promise.all([
         fs.readFile(this.config.tlsCertPath),
@@ -36,19 +35,13 @@ export class FabricTraceabilityService {
     const client = new grpc.Client(this.config.peerEndpoint, grpc.credentials.createSsl(tlsRootCert), {
       'grpc.ssl_target_name_override': this.config.peerHostAlias
     });
-
     const privateKey = crypto.createPrivateKey(privateKeyPem);
-
     const gateway = connect({
       client,
-      identity: {
-        mspId: this.config.mspId,
-        credentials: cert
-      },
+      identity: { mspId: this.config.mspId, credentials: cert },
       signer: signers.newPrivateKeySigner(privateKey),
       hash: hash.sha256
     });
-
     return { gateway, client };
   }
 
@@ -61,33 +54,25 @@ export class FabricTraceabilityService {
       const contract = network.getContract(this.config.chaincodeName);
       return await callback(contract);
     } catch (error) {
-      throw new Error(`Operacion Fabric fallida: ${error.message}`);
+      const wrapped = new Error(`Operacion Fabric fallida: ${error.message}`);
+      wrapped.cause = error;
+      throw wrapped;
     } finally {
       gateway?.close();
       client?.close();
     }
   }
 
-  async registrarEvento(evento) {
+  async enviarTransaccion(nombre, argumentos) {
     return this.usarContrato(async (contract) => {
-      const submitted = await contract.submitAsync('registrarEvento', {
-        arguments: [
-          evento.tipoEvento,
-          String(evento.idEntidad),
-          String(evento.lote || ''),
-          String(evento.actor || 'sistema'),
-          evento.fechaEvento,
-          JSON.stringify(evento.payload || {})
-        ]
+      const submitted = await contract.submitAsync(nombre, {
+        arguments: argumentos.map((argumento) => String(argumento))
       });
-
       const status = await submitted.getStatus();
       const result = await submitted.getResult();
-
       if (!status.successful) {
         throw new Error(`Transaccion Fabric no valida. Codigo de commit: ${status.code}`);
       }
-
       return {
         transactionId: submitted.getTransactionId(),
         blockNumber: status.blockNumber ? Number(status.blockNumber) : null,
@@ -96,6 +81,17 @@ export class FabricTraceabilityService {
         evento: normalizarEventoFabric(result)
       };
     });
+  }
+
+  registrarEvento(evento) {
+    return this.enviarTransaccion('registrarEvento', [
+      evento.tipoEvento,
+      String(evento.idEntidad),
+      String(evento.lote || ''),
+      String(evento.actor || 'sistema'),
+      evento.fechaEvento,
+      JSON.stringify(evento.payload || {})
+    ]);
   }
 
   async validarEvento(tipoEvento, idEntidad, payloadActual) {
@@ -124,7 +120,50 @@ export class FabricTraceabilityService {
     });
   }
 
-  async registerEventOnFabric(eventEvidence) {
+  registrarCorreccion(datos) {
+    return this.enviarTransaccion('registrarCorreccionEvento', [
+      datos.tipoEventoOriginal,
+      String(datos.idEntidadOriginal),
+      datos.motivoCorreccion,
+      datos.actor,
+      JSON.stringify(datos.payloadCorregido || {})
+    ]);
+  }
+
+  async consultarHistorial(tipoEvento, idEntidad) {
+    return this.usarContrato(async (contract) => {
+      const result = await contract.evaluateTransaction('consultarHistorialEvento', tipoEvento, String(idEntidad));
+      return normalizarEventoFabric(result);
+    });
+  }
+
+  async validarDespacho(datos) {
+    return this.usarContrato(async (contract) => {
+      const result = await contract.evaluateTransaction('validarDespacho', JSON.stringify(datos));
+      return normalizarEventoFabric(result);
+    });
+  }
+
+  registrarDespacho(datos) {
+    return this.enviarTransaccion('registrarDespacho', [JSON.stringify(datos)]);
+  }
+
+  confirmarRecepcionCliente(datos) {
+    return this.enviarTransaccion('confirmarRecepcionCliente', [
+      datos.lote,
+      datos.numeroFactura || '',
+      datos.codigoCliente || '',
+      datos.fechaRecepcion,
+      datos.actor,
+      datos.observaciones || ''
+    ]);
+  }
+
+  registrarAlertaVencimiento(datos) {
+    return this.enviarTransaccion('registrarAlertaVencimiento', [JSON.stringify(datos)]);
+  }
+
+  registerEventOnFabric(eventEvidence) {
     return this.registrarEvento({
       tipoEvento: eventEvidence.tipoEvento,
       idEntidad: eventEvidence.idEntidad || eventEvidence.eventId,
@@ -140,7 +179,7 @@ export class FabricTraceabilityService {
     return this.consultarEvento(tipoEvento, rest.join(':'));
   }
 
-  async getEventsByLotFromFabric(codigoLote) {
+  getEventsByLotFromFabric(codigoLote) {
     return this.consultarEventosPorLote(codigoLote);
   }
 }

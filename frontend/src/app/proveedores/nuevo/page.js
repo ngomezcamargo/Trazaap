@@ -9,15 +9,22 @@ import { ROLES } from '@/utilidades/roles';
 
 export default function NuevoProveedorPage() {
   const [abierto, setAbierto] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const abrirFormulario = () => {
+    setMessage('');
+    setAbierto(true);
+  };
 
   return (
     <GuardiaSesion>
-      <GuardiaRol permitido={[ROLES.GERENTE]}>
+      <GuardiaRol permitido={[ROLES.ADMINISTRADOR]}>
         <ContenedorApp titulo="Nuevo proveedor" subtitulo="Registro operativo de proveedores para recepcion.">
           <div className="tarjeta">
             <div className="acciones" style={{ marginTop: 0 }}>
-              <button className="boton" type="button" onClick={() => setAbierto(true)}>Agregar proveedor</button>
+              <button className="boton" type="button" onClick={abrirFormulario}>Agregar proveedor</button>
             </div>
+            {message && <div className="alerta ok">{message}</div>}
           </div>
 
           {abierto && (
@@ -27,7 +34,12 @@ export default function NuevoProveedorPage() {
                   <button className="boton secundario modal-cancelar" type="button" onClick={() => setAbierto(false)}>Cancelar</button>
                   <h3>Nuevo proveedor</h3>
                 </div>
-                <FormularioProveedor />
+                <FormularioProveedor
+                  onSaved={() => {
+                    setAbierto(false);
+                    setMessage('Proveedor creado correctamente.');
+                  }}
+                />
               </div>
             </div>
           )}

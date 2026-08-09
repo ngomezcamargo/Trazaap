@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { autenticarJwt } from '../../middlewares/autenticarJwt.js';
 import { manejarAsync } from '../../middlewares/manejarAsync.js';
+import { rolesMiddleware } from '../../middlewares/roles.middleware.js';
 import { validarSolicitud } from '../../middlewares/validarSolicitud.js';
 import {
   actualizarMateriaPrimaController,
@@ -13,8 +14,8 @@ const router = Router();
 
 router.use(autenticarJwt);
 
-router.get('/', manejarAsync(listarMateriasPrimasController));
-router.post('/', validarSolicitud(materiaPrimaSchema), manejarAsync(crearMateriaPrimaController));
-router.put('/:id', validarSolicitud(materiaPrimaSchema), manejarAsync(actualizarMateriaPrimaController));
+router.get('/', rolesMiddleware('gerente', 'operario'), manejarAsync(listarMateriasPrimasController));
+router.post('/', rolesMiddleware('administrador'), validarSolicitud(materiaPrimaSchema), manejarAsync(crearMateriaPrimaController));
+router.put('/:id', rolesMiddleware('administrador'), validarSolicitud(materiaPrimaSchema), manejarAsync(actualizarMateriaPrimaController));
 
 export default router;

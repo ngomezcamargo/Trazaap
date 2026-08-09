@@ -51,6 +51,23 @@ const productoVacio = () => ({
   variantes: [varianteVacia()]
 });
 
+const productoOrdenVacio = () => ({
+  producto_id: '',
+  variante_id: '',
+  producto: '',
+  tamano_presentacion: 'mediano',
+  cantidad_programada: '',
+  observaciones: ''
+});
+
+const ordenVacia = (usuarioId = '') => ({
+  fecha_produccion: new Date().toISOString().slice(0, 10),
+  codigo_orden: '',
+  estado: 'pendiente',
+  observaciones: '',
+  creado_por: String(usuarioId || '')
+});
+
 const manufacturaVacia = () => ({
   lote_producido: '',
   unidades_producidas: '',
@@ -63,6 +80,17 @@ const manufacturaVacia = () => ({
   hora_inicio: '',
   hora_fin: '',
   responsable_usuario_id: '',
+  observaciones: ''
+});
+
+const materiaAsociadaVacia = () => ({
+  orden_producto_id: '',
+  materia_prima_id: '',
+  recepcion_id: '',
+  nombre_ingrediente: '',
+  cantidad_planificada: '',
+  cantidad_real: '',
+  unidad_medida: '',
   observaciones: ''
 });
 
@@ -112,14 +140,19 @@ function compararManufactura(producto, form) {
 
 export function FormularioOrdenProduccion() {
   const usuario = obtenerUsuario();
-  const esOperario = normalizarRol(usuario?.role) === ROLES.OPERARIO;
+  const rol = normalizarRol(usuario?.role);
+  const esAdministrador = rol === ROLES.ADMINISTRADOR;
+  const esGerente = rol === ROLES.GERENTE;
+  const esOperario = rol === ROLES.OPERARIO;
   const nuevaManufactura = () => ({
     ...manufacturaVacia(),
     responsable_usuario_id: esOperario ? String(usuario?.id || '') : ''
   });
-  const tabsDisponibles = esOperario
-    ? [TABS.NUEVA, TABS.ACTIVA, TABS.MANUFACTURA]
-    : [TABS.ORDENES, TABS.NUEVA, TABS.ACTIVA, TABS.MANUFACTURA, TABS.PRODUCTOS];
+  const tabsDisponibles = esAdministrador
+    ? [TABS.ORDENES, TABS.NUEVA, TABS.ACTIVA, TABS.MANUFACTURA, TABS.PRODUCTOS]
+    : esGerente
+      ? [TABS.ORDENES, TABS.ACTIVA, TABS.PRODUCTOS]
+      : [TABS.ACTIVA, TABS.MANUFACTURA];
 
   const [tab, setTab] = useState(tabsDisponibles[0]);
   const [ordenes, setOrdenes] = useState([]);
@@ -145,24 +178,16 @@ export function FormularioOrdenProduccion() {
   const [contextoManufactura, setContextoManufactura] = useState(null);
   const [formManufactura, setFormManufactura] = useState(nuevaManufactura());
 
-  const [formOrden, setFormOrden] = useState({
-    fecha_produccion: new Date().toISOString().slice(0, 10),
-    codigo_orden: '',
-    estado: 'pendiente',
-    observaciones: '',
-    creado_por: String(usuario?.id || '')
-  });
-  const [productos, setProductos] = useState([
-    { producto_id: '', variante_id: '', producto: '', tamano_presentacion: 'mediano', cantidad_programada: '', observaciones: '' }
-  ]);
-  const [materia, setMateria] = useState({ orden_producto_id: '', materia_prima_id: '', recepcion_id: '', nombre_ingrediente: '', cantidad_planificada: '', cantidad_real: '', unidad_medida: '', observaciones: '' });
+  const [formOrden, setFormOrden] = useState(ordenVacia(usuario?.id));
+  const [productos, setProductos] = useState([productoOrdenVacio()]);
+  const [materia, setMateria] = useState(materiaAsociadaVacia());
   const [tiempo, setTiempo] = useState({ producto: '', es_bagel: false, unidades_producidas: '', temperatura_crecimiento: '', tiempo_crecimiento_min: '', temperatura_inmersion_agua: '', tiempo_inmersion_agua_seg: '', temperatura_horneo: '', tiempo_horneo_min: '', lote_producto: '', responsable_produccion: String(usuario?.id || ''), observaciones: '' });
 
   const recargar = async () => {
     const [opsRes, opsManufacturaRes, recsRes, matsRes, prodsRes] = await Promise.allSettled([
       produccionServicio.listarOrdenes(),
-      produccionServicio.listarOrdenesManufactura(),
-      produccionServicio.listarRecepcionesDisponibles(),
+      esGerente ? Promise.resolve([]) : produccionServicio.listarOrdenesManufactura(),
+      esAdministrador ? produccionServicio.listarRecepcionesDisponibles() : Promise.resolve([]),
       materiasPrimasServicio.listar(),
       produccionServicio.listarProductos(busquedaProducto)
     ]);
@@ -174,11 +199,13 @@ export function FormularioOrdenProduccion() {
     setProductosFabricados(prodsRes.status === 'fulfilled' ? prodsRes.value : []);
     if (!ordenActivaId && ops[0]?.id) setOrdenActivaId(String(ops[0].id));
 
-    try {
-      const users = await autenticacionServicio.listarOperarios();
-      setOperarios(users);
-    } catch (err) {
-      setError(err.message);
+    if (!esGerente) {
+      try {
+        const users = await autenticacionServicio.listarOperarios();
+        setOperarios(users);
+      } catch (err) {
+        setError(err.message);
+      }
     }
 
     const fallos = [opsRes, opsManufacturaRes, recsRes, matsRes, prodsRes].filter((item) => item.status === 'rejected');
@@ -215,8 +242,10 @@ export function FormularioOrdenProduccion() {
     const payload = {
       productos: validos.map((p) => ({ producto_id: Number(p.producto_id), variante_id: Number(p.variante_id), cantidad_programada: Number(p.cantidad_programada), producto: p.producto }))
     };
-    produccionServicio.calcularInsumos(payload).then(setResumenInsumos).catch(() => setResumenInsumos([]));
-  }, [productos]);
+    if (esAdministrador) {
+      produccionServicio.calcularInsumos(payload).then(setResumenInsumos).catch(() => setResumenInsumos([]));
+    }
+  }, [productos, esAdministrador]);
 
   const ordenesFiltradas = useMemo(() => {
     const f = busqueda.trim().toLowerCase();
@@ -235,6 +264,52 @@ export function FormularioOrdenProduccion() {
 
   const comparacionManufactura = compararManufactura(contextoManufactura?.producto, formManufactura);
   const hayInventarioInsuficiente = resumenInsumos.some((r) => r.estado === 'insuficiente');
+  const modalConFormularioAbierto = mostrarFormularioOrden || Boolean(contextoManufactura) || mostrarFormularioProducto || mostrarFormularioMateria;
+  const mensajesModal = (
+    <>
+      {message && <div className="alerta ok alerta-modal">{message}</div>}
+      {error && <div className="alerta error alerta-modal">{error}</div>}
+    </>
+  );
+  const resetFormularioOrden = () => {
+    setFormOrden(ordenVacia(usuario?.id));
+    setProductos([productoOrdenVacio()]);
+    setResumenInsumos([]);
+  };
+
+  const cerrarFormularioOrden = () => {
+    setMostrarFormularioOrden(false);
+    setError('');
+    resetFormularioOrden();
+  };
+
+  const cerrarFormularioProducto = () => {
+    setMostrarFormularioProducto(false);
+    setDetalleProducto(null);
+    setFormProducto(productoVacio());
+    setError('');
+  };
+
+  const abrirFormularioProducto = () => {
+    setDetalleProducto(null);
+    setFormProducto(productoVacio());
+    setError('');
+    setMessage('');
+    setMostrarFormularioProducto(true);
+  };
+
+  const cerrarFormularioMateria = () => {
+    setMostrarFormularioMateria(false);
+    setMateria(materiaAsociadaVacia());
+    setError('');
+  };
+
+  const abrirFormularioMateria = () => {
+    setMateria(materiaAsociadaVacia());
+    setError('');
+    setMessage('');
+    setMostrarFormularioMateria(true);
+  };
 
   return (
     <div className="tarjeta">
@@ -252,15 +327,15 @@ export function FormularioOrdenProduccion() {
             <div className="campo"><label>Buscar</label><input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /></div>
             <div className="campo"><label>Estado</label><select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}><option value="todos">todos</option><option value="pendiente">pendiente</option><option value="en_proceso">en_proceso</option><option value="lista_para_liberacion">lista_para_liberacion</option><option value="finalizada">finalizada</option><option value="cancelada">cancelada</option></select></div>
           </div>
-          <div className="acciones"><button className="boton" type="button" onClick={() => setTab(TABS.NUEVA)}>Nueva orden</button></div>
+          {esAdministrador && <div className="acciones"><button className="boton" type="button" onClick={() => setTab(TABS.NUEVA)}>Nueva orden</button></div>}
           <table className="tabla"><thead><tr><th># orden</th><th>Fecha</th><th>Estado</th><th>Total programada</th><th>Total producida</th><th>Accion</th></tr></thead><tbody>{ordenesFiltradas.map((o) => <tr key={o.id}><td>{o.codigo_orden}</td><td>{String(o.fecha_produccion).slice(0, 10)}</td><td><span className={`estado ${o.estado}`}>{o.estado}</span></td><td>{o.cantidad_total_programada}</td><td>{o.cantidad_total_producida}</td><td><button className="boton secundario" type="button" onClick={() => { setOrdenActivaId(String(o.id)); setTab(TABS.ACTIVA); }}>Ver detalle</button></td></tr>)}</tbody></table>
         </>
       )}
 
-      {tab === TABS.NUEVA && (
+      {tab === TABS.NUEVA && esAdministrador && (
         <>
           <div className="acciones" style={{ marginTop: 0 }}>
-            <button className="boton" type="button" onClick={() => setMostrarFormularioOrden(true)}>Nueva orden de produccion</button>
+            <button className="boton" type="button" onClick={() => { setError(''); setMessage(''); setMostrarFormularioOrden(true); }}>Nueva orden de produccion</button>
           </div>
           {resumenInsumos.length > 0 && (
             <>
@@ -269,7 +344,7 @@ export function FormularioOrdenProduccion() {
               {hayInventarioInsuficiente && <div className="alerta error">No hay suficiente inventario para crear la orden. Ajusta la cantidad programada o registra una recepcion adicional de materia prima.</div>}
             </>
           )}
-          {mostrarFormularioOrden && <div className="modal-fondo" onClick={() => setMostrarFormularioOrden(false)}><div className="modal" onClick={(e) => e.stopPropagation()}><div className="modal-encabezado-form"><button className="boton secundario modal-cancelar" type="button" onClick={() => setMostrarFormularioOrden(false)}>Cancelar</button><h3>Nueva orden de produccion</h3></div><form onSubmit={async (e) => {
+          {mostrarFormularioOrden && <div className="modal-fondo" onClick={cerrarFormularioOrden}><div className="modal" onClick={(e) => e.stopPropagation()}><div className="modal-encabezado-form"><button className="boton secundario modal-cancelar" type="button" onClick={cerrarFormularioOrden}>Cancelar</button><h3>Nueva orden de produccion</h3></div>{mensajesModal}<form onSubmit={async (e) => {
           e.preventDefault(); setError(''); setMessage('');
           try {
             const payloadProductos = productos.map((p) => ({
@@ -287,9 +362,11 @@ export function FormularioOrdenProduccion() {
 
             const created = await produccionServicio.crearOrden({ ...formOrden, productos: payloadProductos });
             setOrdenActivaId(String(created.id));
+            setError('');
             setMessage('Orden creada correctamente');
             await recargar();
             setMostrarFormularioOrden(false);
+            resetFormularioOrden();
             setTab(TABS.ACTIVA);
           } catch (err) { setError(err.message); }
         }}>
@@ -302,14 +379,25 @@ export function FormularioOrdenProduccion() {
 
           <h4>Productos a fabricar</h4>
           {productos.map((p, index) => (
-            <div key={index} className="grid grid-3" style={{ marginBottom: 10 }}>
+            <div key={index} className="producto-orden-item grid grid-3">
+              {index > 0 && (
+                <button
+                  className="boton-quitar-producto"
+                  type="button"
+                  aria-label="Quitar producto"
+                  title="Quitar producto"
+                  onClick={() => setProductos(productos.filter((_, itemIndex) => itemIndex !== index))}
+                >
+                  x
+                </button>
+              )}
               <div className="campo"><label>Producto</label><select value={p.producto_id} onChange={(e) => { const elegido = productosFabricados.find((x) => String(x.id) === String(e.target.value)); const variante = elegido?.variantes?.find((v) => v.estado === 'activo') || elegido?.variantes?.[0]; const copy = [...productos]; copy[index] = { ...copy[index], producto_id: e.target.value, variante_id: variante?.id ? String(variante.id) : '', producto: elegido?.nombre || '', tamano_presentacion: variante?.tamano_presentacion || 'mediano' }; setProductos(copy); }} required><option value="">Selecciona producto</option>{productosFabricados.filter((x) => x.estado === 'activo').map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}</select></div>
               <div className="campo"><label>Variante / tamano</label><select value={p.variante_id} onChange={(e) => { const elegido = productosFabricados.find((x) => String(x.id) === String(p.producto_id)); const variante = elegido?.variantes?.find((v) => String(v.id) === String(e.target.value)); const copy = [...productos]; copy[index] = { ...copy[index], variante_id: e.target.value, tamano_presentacion: variante?.tamano_presentacion || copy[index].tamano_presentacion }; setProductos(copy); }} required><option value="">Selecciona variante</option>{(productosFabricados.find((x) => String(x.id) === String(p.producto_id))?.variantes || []).filter((v) => v.estado === 'activo').map((v) => <option key={v.id} value={v.id}>{v.tamano_presentacion}</option>)}</select></div>
               <div className="campo"><label>Cantidad programada</label><input type="number" min="0.01" value={p.cantidad_programada} onChange={(e) => { const copy = [...productos]; copy[index] = { ...copy[index], cantidad_programada: e.target.value }; setProductos(copy); }} required /></div>
               <div className="campo"><label>Observaciones del producto</label><input value={p.observaciones || ''} onChange={(e) => { const copy = [...productos]; copy[index] = { ...copy[index], observaciones: e.target.value }; setProductos(copy); }} /></div>
             </div>
           ))}
-          <div className="acciones"><button className="boton secundario" type="button" onClick={() => setProductos([...productos, { producto_id: '', variante_id: '', producto: '', tamano_presentacion: 'mediano', cantidad_programada: '', observaciones: '' }])}>Agregar producto</button><button className="boton" type="submit">Guardar orden</button></div>
+          <div className="acciones"><button className="boton secundario" type="button" onClick={() => setProductos([...productos, productoOrdenVacio()])}>Agregar producto</button><button className="boton" type="submit">Guardar orden</button></div>
         </form></div></div>}
         </>
       )}
@@ -320,17 +408,17 @@ export function FormularioOrdenProduccion() {
           {detalle?.orden && (
             <>
               <p><strong>Estado:</strong> <span className={`estado ${detalle.orden.estado}`}>{detalle.orden.estado}</span></p>
-              <div className="acciones"><button className="boton secundario" type="button" onClick={async () => { await produccionServicio.actualizarEstadoOrden(detalle.orden.id, { estado: 'en_proceso' }); await recargar(); setDetalle(await produccionServicio.obtenerOrden(detalle.orden.id)); }}>Marcar en proceso</button><button className="boton secundario" type="button" onClick={async () => { await produccionServicio.actualizarEstadoOrden(detalle.orden.id, { estado: 'lista_para_liberacion' }); await recargar(); setDetalle(await produccionServicio.obtenerOrden(detalle.orden.id)); }}>Lista para liberacion</button><button className="boton" type="button" onClick={async () => { await produccionServicio.actualizarEstadoOrden(detalle.orden.id, { estado: 'finalizada' }); await recargar(); setDetalle(await produccionServicio.obtenerOrden(detalle.orden.id)); }}>Marcar finalizada</button></div>
+              {esAdministrador && <div className="acciones"><button className="boton secundario" type="button" onClick={async () => { await produccionServicio.actualizarEstadoOrden(detalle.orden.id, { estado: 'en_proceso' }); await recargar(); setDetalle(await produccionServicio.obtenerOrden(detalle.orden.id)); }}>Marcar en proceso</button><button className="boton" type="button" onClick={async () => { await produccionServicio.actualizarEstadoOrden(detalle.orden.id, { estado: 'finalizada' }); await recargar(); setDetalle(await produccionServicio.obtenerOrden(detalle.orden.id)); }}>Marcar finalizada</button></div>}
               <h4>Productos programados</h4>
               <table className="tabla"><thead><tr><th>Producto</th><th>Tamano</th><th>Programada</th><th>Lote producido</th><th>Unidades reales</th><th>Registrado por</th><th>Referencia estandar</th></tr></thead><tbody>{detalle.productos.map((p) => <tr key={p.id}><td>{p.producto}</td><td>{p.tamano_presentacion}</td><td>{p.cantidad_programada}</td><td>{p.lote_producido || '-'}</td><td>{p.unidades_producidas ?? '-'}</td><td>{p.registrado_por || '-'}</td><td>{p.observaciones || '-'}</td></tr>)}</tbody></table>
               <h4>Materias primas asociadas</h4>
-              <table className="tabla"><thead><tr><th>Materia</th><th>Lote recepcion</th><th>Unidad</th><th>Planificada</th><th>Real</th><th>Accion</th></tr></thead><tbody>{detalle.materias.map((m) => <tr key={m.id}><td>{m.nombre_ingrediente}</td><td>{m.numero_lote || m.lote_proveedor}</td><td>{m.unidad_medida}</td><td>{m.cantidad_planificada}</td><td>{m.cantidad_real}</td><td><button className="boton secundario" type="button" onClick={async () => { const nuevo = window.prompt('Nueva cantidad real utilizada', String(m.cantidad_real)); if (!nuevo) return; await produccionServicio.actualizarCantidadRealMateria(detalle.orden.id, m.id, { cantidad_real: Number(nuevo) }); setDetalle(await produccionServicio.obtenerOrden(detalle.orden.id)); }}>Editar real</button></td></tr>)}</tbody></table>
+              <table className="tabla"><thead><tr><th>Materia</th><th>Lote recepcion</th><th>Unidad</th><th>Planificada</th><th>Real</th>{esAdministrador && <th>Accion</th>}</tr></thead><tbody>{detalle.materias.map((m) => <tr key={m.id}><td>{m.nombre_ingrediente}</td><td>{m.numero_lote || m.lote_proveedor}</td><td>{m.unidad_medida}</td><td>{m.cantidad_planificada}</td><td>{m.cantidad_real}</td>{esAdministrador && <td><button className="boton secundario" type="button" onClick={async () => { const nuevo = window.prompt('Nueva cantidad real utilizada', String(m.cantidad_real)); if (!nuevo) return; await produccionServicio.actualizarCantidadRealMateria(detalle.orden.id, m.id, { cantidad_real: Number(nuevo) }); setDetalle(await produccionServicio.obtenerOrden(detalle.orden.id)); }}>Editar real</button></td>}</tr>)}</tbody></table>
             </>
           )}
         </>
       )}
 
-      {tab === TABS.MANUFACTURA && (
+      {tab === TABS.MANUFACTURA && !esGerente && (
         <>
           <div className="grid grid-2" style={{ marginBottom: 12 }}>
             <div className="campo">
@@ -385,6 +473,8 @@ export function FormularioOrdenProduccion() {
                           type="button"
                           disabled={['registrado', 'con_observaciones'].includes(p.estado_manufactura)}
                           onClick={async () => {
+                            setError('');
+                            setMessage('');
                             const contexto = await produccionServicio.obtenerContextoManufactura(detalle.orden.id, p.id);
                             setManufacturaSeleccionada(p);
                             setContextoManufactura(contexto);
@@ -403,6 +493,7 @@ export function FormularioOrdenProduccion() {
 
           {contextoManufactura && (
             <div className="modal-fondo" onClick={() => {
+              setError('');
               setContextoManufactura(null);
               setManufacturaSeleccionada(null);
               setFormManufactura(nuevaManufactura());
@@ -410,12 +501,14 @@ export function FormularioOrdenProduccion() {
             <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-encabezado-form">
               <button className="boton secundario modal-cancelar" type="button" onClick={() => {
+                setError('');
                 setContextoManufactura(null);
                 setManufacturaSeleccionada(null);
                 setFormManufactura(nuevaManufactura());
               }}>Cancelar</button>
               <h3>Registro de manufactura: {manufacturaSeleccionada?.producto}</h3>
             </div>
+            {mensajesModal}
             <form onSubmit={async (e) => {
               e.preventDefault();
               setError('');
@@ -504,10 +597,12 @@ export function FormularioOrdenProduccion() {
       {tab === TABS.PRODUCTOS && !esOperario && (
         <>
           <div className="campo" style={{ marginBottom: 10 }}><label>Buscar productos</label><input value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.target.value)} /></div>
-          <div className="acciones"><button className="boton" type="button" onClick={() => { setMostrarFormularioProducto((v) => !v); if (!mostrarFormularioProducto) setDetalleProducto(null); }}>{mostrarFormularioProducto ? 'Ocultar formulario' : 'Agregar producto'}</button></div>
-          <table className="tabla" style={{ marginTop: 10 }}><thead><tr><th>Nombre</th><th>Categoria</th><th>Variantes</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{productosFabricados.map((p) => <tr key={p.id}><td>{p.nombre}</td><td>{p.categoria || '-'}</td><td>{p.variantes?.length || 0}</td><td>{p.estado}</td><td><div className="acciones" style={{ marginTop: 0 }}><button className="boton secundario" type="button" onClick={async () => { const det = await produccionServicio.obtenerProducto(p.id); setDetalleProducto(det); }}>Ver detalle</button><button className="boton secundario" type="button" onClick={async () => { const det = await produccionServicio.obtenerProducto(p.id); const variantesEditables = (det.variantes || []).map((v) => ({ tamano_presentacion: v.tamano_presentacion, peso_estimado_unidad: v.peso_estimado_unidad || '', unidad_medida: v.unidad_medida || 'unidad', estado: v.estado || 'activo', receta: (v.receta || []).map((x) => ({ materia_prima_id: String(x.materia_prima_id), cantidad_requerida: String(x.cantidad_requerida), observaciones: x.observaciones || '' })) })); setDetalleProducto(det); setMostrarFormularioProducto(true); setFormProducto({ id: det.id, nombre: det.nombre, categoria: det.categoria || '', descripcion: det.descripcion || '', vida_util_dias: det.vida_util_dias, condiciones_almacenamiento: det.condiciones_almacenamiento || '', estado: det.estado, requiere_inmersion: Boolean(det.requiere_inmersion), tiempo_fermentacion_minutos: det.tiempo_fermentacion_minutos ?? '', temperatura_fermentacion_c: det.temperatura_fermentacion_c ?? '', tiempo_horneado_minutos: det.tiempo_horneado_minutos ?? '', temperatura_horneado_c: det.temperatura_horneado_c ?? '', tiempo_inmersion_minutos: det.tiempo_inmersion_minutos ?? '', temperatura_inmersion_c: det.temperatura_inmersion_c ?? '', variantes: variantesEditables.length ? variantesEditables : [varianteVacia()] }); }}>Actualizar informacion</button></div></td></tr>)}</tbody></table>
-          {mostrarFormularioProducto && <div className="modal-fondo" onClick={() => setMostrarFormularioProducto(false)}><div className="modal" onClick={(e) => e.stopPropagation()}><div className="modal-encabezado-form"><button className="boton secundario modal-cancelar" type="button" onClick={() => setMostrarFormularioProducto(false)}>Cancelar</button><h3>{formProducto.id ? 'Actualizar producto' : 'Agregar producto'}</h3></div><form onSubmit={async (e) => {
+          {esAdministrador && <div className="acciones"><button className="boton" type="button" onClick={abrirFormularioProducto}>Agregar producto</button></div>}
+          <table className="tabla" style={{ marginTop: 10 }}><thead><tr><th>Nombre</th><th>Categoria</th><th>Variantes</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{productosFabricados.map((p) => <tr key={p.id}><td>{p.nombre}</td><td>{p.categoria || '-'}</td><td>{p.variantes?.length || 0}</td><td>{p.estado}</td><td><div className="acciones" style={{ marginTop: 0 }}><button className="boton secundario" type="button" onClick={async () => { const det = await produccionServicio.obtenerProducto(p.id); setDetalleProducto(det); }}>Ver detalle</button>{esAdministrador && <button className="boton secundario" type="button" onClick={async () => { setError(''); setMessage(''); const det = await produccionServicio.obtenerProducto(p.id); const variantesEditables = (det.variantes || []).map((v) => ({ tamano_presentacion: v.tamano_presentacion, peso_estimado_unidad: v.peso_estimado_unidad || '', unidad_medida: v.unidad_medida || 'unidad', estado: v.estado || 'activo', receta: (v.receta || []).map((x) => ({ materia_prima_id: String(x.materia_prima_id), cantidad_requerida: String(x.cantidad_requerida), observaciones: x.observaciones || '' })) })); setDetalleProducto(det); setMostrarFormularioProducto(true); setFormProducto({ id: det.id, nombre: det.nombre, categoria: det.categoria || '', descripcion: det.descripcion || '', vida_util_dias: det.vida_util_dias, condiciones_almacenamiento: det.condiciones_almacenamiento || '', estado: det.estado, requiere_inmersion: Boolean(det.requiere_inmersion), tiempo_fermentacion_minutos: det.tiempo_fermentacion_minutos ?? '', temperatura_fermentacion_c: det.temperatura_fermentacion_c ?? '', tiempo_horneado_minutos: det.tiempo_horneado_minutos ?? '', temperatura_horneado_c: det.temperatura_horneado_c ?? '', tiempo_inmersion_minutos: det.tiempo_inmersion_minutos ?? '', temperatura_inmersion_c: det.temperatura_inmersion_c ?? '', variantes: variantesEditables.length ? variantesEditables : [varianteVacia()] }); }}>Actualizar informacion</button>}</div></td></tr>)}</tbody></table>
+          {esAdministrador && mostrarFormularioProducto && <div className="modal-fondo" onClick={cerrarFormularioProducto}><div className="modal" onClick={(e) => e.stopPropagation()}><div className="modal-encabezado-form"><button className="boton secundario modal-cancelar" type="button" onClick={cerrarFormularioProducto}>Cancelar</button><h3>{formProducto.id ? 'Actualizar producto' : 'Agregar producto'}</h3></div>{mensajesModal}<form onSubmit={async (e) => {
             e.preventDefault();
+            setError('');
+            setMessage('');
             try {
               const payload = {
                 ...formProducto,
@@ -530,8 +625,7 @@ export function FormularioOrdenProduccion() {
                 await produccionServicio.crearProducto(payload);
                 setMessage('Producto creado');
               }
-              setFormProducto(productoVacio());
-              setMostrarFormularioProducto(false);
+              cerrarFormularioProducto();
               setProductosFabricados(await produccionServicio.listarProductos(busquedaProducto));
             } catch (err) { setError(err.message); }
           }} style={{ marginTop: 12 }}>
@@ -555,7 +649,7 @@ export function FormularioOrdenProduccion() {
               <div key={vIdx} className="tarjeta" style={{ marginBottom: 10, position: 'relative' }}>
                 {formProducto.variantes.length > 1 && <button type="button" aria-label="Eliminar variante" className="boton secundario" style={{ position: 'absolute', right: 10, top: 10, padding: '4px 9px' }} onClick={() => setFormProducto({ ...formProducto, variantes: formProducto.variantes.filter((_, i) => i !== vIdx) })}>X</button>}
                 <div className="grid grid-3">
-                  <div className="campo"><label>Tamano/presentacion</label><select value={v.tamano_presentacion} onChange={(e) => { const copy = [...formProducto.variantes]; copy[vIdx] = { ...copy[vIdx], tamano_presentacion: e.target.value }; setFormProducto({ ...formProducto, variantes: copy }); }}><option>grande</option><option>mediano</option><option>pequeno</option><option>personal</option><option>mini</option><option>cocktail</option></select></div>
+                  <div className="campo"><label>Tamano/presentacion</label><select value={v.tamano_presentacion} onChange={(e) => { const copy = [...formProducto.variantes]; copy[vIdx] = { ...copy[vIdx], tamano_presentacion: e.target.value }; setFormProducto({ ...formProducto, variantes: copy }); }}><option>grande</option><option>mediano</option><option>pequeno</option><option>personal</option><option>mini</option><option>cocktail</option><option>unico</option><option>kilo</option><option>libra</option></select></div>
                   <div className="campo"><label>Peso estimado por unidad</label><input type="number" min="0" step="0.001" value={v.peso_estimado_unidad} onChange={(e) => { const copy = [...formProducto.variantes]; copy[vIdx] = { ...copy[vIdx], peso_estimado_unidad: e.target.value }; setFormProducto({ ...formProducto, variantes: copy }); }} /></div>
                   <div className="campo"><label>Unidad variante</label><input value={v.unidad_medida} onChange={(e) => { const copy = [...formProducto.variantes]; copy[vIdx] = { ...copy[vIdx], unidad_medida: e.target.value }; setFormProducto({ ...formProducto, variantes: copy }); }} /></div>
                   <div className="campo"><label>Estado variante</label><select value={v.estado} onChange={(e) => { const copy = [...formProducto.variantes]; copy[vIdx] = { ...copy[vIdx], estado: e.target.value }; setFormProducto({ ...formProducto, variantes: copy }); }}><option value="activo">activo</option><option value="inactivo">inactivo</option></select></div>
@@ -605,11 +699,13 @@ export function FormularioOrdenProduccion() {
         </form>
       )}
 
-      {tab === TABS.ACTIVA && !esOperario && ordenActivaId && (
+      {tab === TABS.ACTIVA && esAdministrador && ordenActivaId && (
         <>
-          <div className="acciones"><button className="boton" type="button" onClick={() => setMostrarFormularioMateria(true)}>Asociar materias primas</button></div>
-          {mostrarFormularioMateria && <div className="modal-fondo" onClick={() => setMostrarFormularioMateria(false)}><div className="modal" onClick={(e) => e.stopPropagation()}><div className="modal-encabezado-form"><button className="boton secundario modal-cancelar" type="button" onClick={() => setMostrarFormularioMateria(false)}>Cancelar</button><h3>Asociar materias primas</h3></div><form onSubmit={async (e) => {
+          <div className="acciones"><button className="boton" type="button" onClick={abrirFormularioMateria}>Asociar materias primas</button></div>
+          {mostrarFormularioMateria && <div className="modal-fondo" onClick={cerrarFormularioMateria}><div className="modal" onClick={(e) => e.stopPropagation()}><div className="modal-encabezado-form"><button className="boton secundario modal-cancelar" type="button" onClick={cerrarFormularioMateria}>Cancelar</button><h3>Asociar materias primas</h3></div>{mensajesModal}<form onSubmit={async (e) => {
           e.preventDefault();
+          setError('');
+          setMessage('');
           try {
             await produccionServicio.asociarMaterias(Number(ordenActivaId), {
               materias: [{
@@ -624,7 +720,7 @@ export function FormularioOrdenProduccion() {
             });
             setMessage('Materia prima asociada');
             setDetalle(await produccionServicio.obtenerOrden(Number(ordenActivaId)));
-            setMostrarFormularioMateria(false);
+            cerrarFormularioMateria();
           } catch (err) { setError(err.message); }
         }}>
           <div className="grid grid-3">
@@ -641,8 +737,8 @@ export function FormularioOrdenProduccion() {
         </>
       )}
 
-      {message && <div className="alerta ok">{message}</div>}
-      {error && <div className="alerta error">{error}</div>}
+      {!modalConFormularioAbierto && message && <div className="alerta ok">{message}</div>}
+      {!modalConFormularioAbierto && error && <div className="alerta error">{error}</div>}
     </div>
   );
 }

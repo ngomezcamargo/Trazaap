@@ -7,7 +7,7 @@ export function normalizarRol(role) {
   if (limpio === 'admin' || limpio === 'administrador') return ROL_ADMINISTRADOR;
   if (limpio === 'gerente' || limpio === 'gerencia') return ROL_GERENTE;
   if (limpio === 'operario') return ROL_OPERARIO;
-  return ROL_OPERARIO;
+  return null;
 }
 
 export function esGerente(role) {
@@ -21,7 +21,22 @@ export function esOperario(role) {
 
 export function tieneAcceso(role, permitido = []) {
   const rol = normalizarRol(role);
+  if (!rol) return false;
   return rol === ROL_ADMINISTRADOR || permitido.includes(rol);
+}
+
+export function puedeAdministrar(role) {
+  return normalizarRol(role) === ROL_ADMINISTRADOR;
+}
+
+export function puedeOperar(role) {
+  const rol = normalizarRol(role);
+  return rol === ROL_ADMINISTRADOR || rol === ROL_OPERARIO;
+}
+
+export function puedeConsultarGestion(role) {
+  const rol = normalizarRol(role);
+  return rol === ROL_ADMINISTRADOR || rol === ROL_GERENTE;
 }
 
 export const ROLES = {

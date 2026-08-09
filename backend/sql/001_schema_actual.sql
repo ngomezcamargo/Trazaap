@@ -222,6 +222,33 @@ CREATE TABLE IF NOT EXISTS productos_fabricados (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DO $$
+DECLARE
+  constraint_name TEXT;
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'productos_fabricados'
+      AND column_name = 'tamano_presentacion'
+  ) THEN
+    FOR constraint_name IN
+      SELECT conname
+      FROM pg_constraint
+      WHERE conrelid = 'productos_fabricados'::regclass
+        AND contype = 'c'
+        AND pg_get_constraintdef(oid) ILIKE '%tamano_presentacion%'
+    LOOP
+      EXECUTE format('ALTER TABLE productos_fabricados DROP CONSTRAINT %I', constraint_name);
+    END LOOP;
+
+    ALTER TABLE productos_fabricados
+      ADD CONSTRAINT productos_fabricados_tamano_presentacion_check
+      CHECK (tamano_presentacion IN ('grande', 'mediano', 'pequeno', 'personal', 'mini', 'cocktail', 'unico', 'kilo', 'libra'));
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS producto_variantes (
   id BIGSERIAL PRIMARY KEY,
   producto_id BIGINT NOT NULL REFERENCES productos_fabricados(id) ON DELETE CASCADE,
@@ -235,6 +262,40 @@ CREATE TABLE IF NOT EXISTS producto_variantes (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (producto_id, tamano_presentacion)
 );
+
+DO $$
+DECLARE
+  constraint_name TEXT;
+BEGIN
+  FOR constraint_name IN
+    SELECT conname
+    FROM pg_constraint
+    WHERE conrelid = 'producto_variantes'::regclass
+      AND contype = 'c'
+      AND pg_get_constraintdef(oid) ILIKE '%tamano_presentacion%'
+  LOOP
+    EXECUTE format('ALTER TABLE producto_variantes DROP CONSTRAINT %I', constraint_name);
+  END LOOP;
+END $$;
+
+ALTER TABLE producto_variantes
+  ADD CONSTRAINT producto_variantes_tamano_presentacion_check
+  CHECK (tamano_presentacion IN ('grande', 'mediano', 'pequeno', 'personal', 'mini', 'cocktail', 'unico', 'kilo', 'libra'));
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'producto_variantes'::regclass
+      AND contype = 'u'
+      AND pg_get_constraintdef(oid) ILIKE '%(producto_id, tamano_presentacion)%'
+  ) THEN
+    ALTER TABLE producto_variantes
+      ADD CONSTRAINT producto_variantes_producto_tamano_key
+      UNIQUE (producto_id, tamano_presentacion);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS producto_variante_materia_prima (
   id BIGSERIAL PRIMARY KEY,
@@ -295,6 +356,25 @@ ALTER TABLE ordenes_produccion_productos
   ADD COLUMN IF NOT EXISTS producto_variante_id BIGINT REFERENCES producto_variantes(id);
 ALTER TABLE ordenes_produccion_productos
   ADD COLUMN IF NOT EXISTS estado_manufactura VARCHAR(30) NOT NULL DEFAULT 'pendiente';
+
+DO $$
+DECLARE
+  constraint_name TEXT;
+BEGIN
+  FOR constraint_name IN
+    SELECT conname
+    FROM pg_constraint
+    WHERE conrelid = 'ordenes_produccion_productos'::regclass
+      AND contype = 'c'
+      AND pg_get_constraintdef(oid) ILIKE '%tamano_presentacion%'
+  LOOP
+    EXECUTE format('ALTER TABLE ordenes_produccion_productos DROP CONSTRAINT %I', constraint_name);
+  END LOOP;
+END $$;
+
+ALTER TABLE ordenes_produccion_productos
+  ADD CONSTRAINT ordenes_produccion_productos_tamano_presentacion_check
+  CHECK (tamano_presentacion IN ('grande', 'mediano', 'pequeno', 'personal', 'mini', 'cocktail', 'unico', 'kilo', 'libra'));
 
 DO $$
 BEGIN

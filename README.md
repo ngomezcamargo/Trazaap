@@ -23,6 +23,7 @@ Trazaap queda refactorizado como una base academica limpia para Sprint 2, enfoca
 - Backend: Node.js + Express
 - Base de datos: PostgreSQL
 - Autenticacion: JWT
+- Permisos: RBAC interno con roles `administrador`, `gerente` y `operario`
 - Blockchain: Hyperledger Fabric local como capa de auditoria minima
 - Integracion Fabric: backend con Fabric Gateway SDK hacia chaincode `traceability`
 
@@ -95,6 +96,8 @@ src/
 
 Base URL backend: `http://localhost:4000/api`
 
+La matriz de permisos vigente esta documentada en [docs/MATRIZ_RBAC.md](docs/MATRIZ_RBAC.md). Las rutas privadas requieren JWT y autorizacion por rol; las rutas publicas viven bajo `/public`. El alcance de informacion para consumidor final, cliente e INVIMA esta documentado en [docs/ACCESO_EXTERNO.md](docs/ACCESO_EXTERNO.md). El flujo de evidencia y validacion Fabric esta documentado en [docs/VALIDACION_BLOCKCHAIN.md](docs/VALIDACION_BLOCKCHAIN.md).
+
 - `POST /auth/login`
 - `GET /auth/me`
 - `GET /auth/operarios`
@@ -133,6 +136,11 @@ Base URL backend: `http://localhost:4000/api`
 - `POST /produccion/ordenes/:id/tiempos`
 - `GET /liberacion`
 - `POST /liberacion`
+- `GET /public/traceability/lote/:lote`
+- `GET /public/traceability/cliente?lote=<lote>&factura=<factura>`
+- `GET /public/traceability/cliente?lote=<lote>&codigo=<codigo_cliente>`
+- `POST /public/traceability/cliente/confirmar`
+- `GET /public/traceability/auditoria?lote=<lote>&codigo=<codigo_auditoria>`
 
 ## Blockchain Hyperledger Fabric
 
@@ -141,7 +149,7 @@ Guia de demo paso a paso: [docs/demo-hyperledger-fabric.md](docs/demo-hyperledge
 La arquitectura de integridad es:
 
 ```text
-PostgreSQL operativo -> Backend -> Hash SHA-256 normalizado -> Hyperledger Fabric
+PostgreSQL operativo -> Backend -> Payload normalizado -> Hyperledger Fabric / Chaincode
 ```
 
 PostgreSQL conserva solo la informacion operativa del sistema. No guarda hashes, bloques ni evidencia blockchain. Fabric conserva la evidencia criptografica minima:
@@ -154,14 +162,24 @@ PostgreSQL conserva solo la informacion operativa del sistema. No guarda hashes,
 - `actor`
 - `timestampBlockchain`
 
-El backend calcula `hashRegistro` con SHA-256 sobre una representacion estable y normalizada del registro operativo. El chaincode expone:
+El backend construye un payload estable y normalizado desde los registros operativos. El chaincode calcula `hashRegistro` con SHA-256, almacena la evidencia y expone:
 
 - `registrarEvento`
 - `validarEvento`
 - `consultarEvento`
 - `consultarEventosPorLote`
+- `registrarCorreccionEvento`
+- `consultarHistorialEvento`
+- `validarDespacho`
+- `registrarDespacho`
+- `confirmarRecepcionCliente`
+- `registrarAlertaVencimiento`
 
-En la consulta de trazabilidad, el backend recalcula el hash actual y Fabric responde si el registro esta `VERIFICADO`, `ALTERADO`, `PENDIENTE` o `NO_ENCONTRADO`.
+En la consulta de trazabilidad, el backend reconstruye el payload actual y Fabric responde si el registro esta `VERIFICADO`, `ALTERADO`, `PENDIENTE` o `NO_ENCONTRADO`.
+
+Desde la version 2.2 (secuencia 4), `registrarEvento` rechaza cualquier clave existente. Las correcciones se guardan como eventos nuevos que referencian el original y la validacion reconoce como vigente la ultima correccion inmutable autorizada. La aprobacion del despacho falla de forma cerrada si Fabric no esta disponible o si el chaincode detecta vencimiento, inventario insuficiente, controles de produccion fuera de rango o validaciones no conformes. El cliente receptor confirma la entrega desde el portal QR mediante factura o codigo, sin una cuenta interna.
+
+El backend revisa cada hora los lotes con unidades disponibles que alcanzaron su vencimiento. `registrarAlertaVencimiento` conserva una sola alerta inmutable por lote y el dashboard gerencial muestra la alerta operativa.
 
 ### Red Fabric local
 
@@ -169,10 +187,10 @@ La red de desarrollo esta en `fabric/` y usa:
 
 - 1 CA: `ca.trazaap.local`
 - 1 orderer: `orderer.trazaap.local`
-- 1 peer: `peer0.org1.trazaap.local`
+- 2 peers: `peer0.org1.trazaap.local` y `peer1.org1.trazaap.local`
 - 1 organizacion: `Org1MSP`
-- 1 canal: `trazaapchannel`
-- 1 chaincode: `trazaap`
+- 1 canal: `trazabilidad-channel`
+- 1 chaincode: `traceability`
 
 Requisitos previos:
 
@@ -187,6 +205,15 @@ cd fabric
 ./scripts/start.sh
 ./scripts/create-channel.sh
 ./scripts/deploy-chaincode.sh
+```
+
+El despliegue instala el paquete en `peer0` y `peer1`, aprueba la definicion para `Org1MSP` y la confirma en `trazabilidad-channel`. Una actualizacion normal no debe ejecutar `clean.sh`, borrar volumenes, regenerar certificados ni recrear el canal.
+
+Pruebas del chaincode:
+
+```bash
+cd fabric/chaincode/traceability
+npm test
 ```
 
 Detener red:
@@ -240,6 +267,8 @@ cd backend
 npm run migrate
 npm run seed
 ```
+
+La semilla carga 19 fichas de producto basadas en el catalogo 2026 de Bagel Home. Los pesos y presentaciones provienen del catalogo; los tiempos de Bagel, pan trenza, pan sandwich y pan molde toman como referencia el formato operativo de produccion. Los demas tiempos y la receta base de harina son valores provisionales para pruebas y deben reemplazarse cuando la empresa valide las formulaciones oficiales.
 
 4. Levantar backend:
 
