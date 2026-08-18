@@ -63,8 +63,9 @@ Aplicar en un ambiente nuevo, en orden: `001_schema_actual.sql`,
 `009_rnf11_interoperabilidad.sql`, `010_rf03b_lote_automatico.sql`,
 `011_rf16_politica_inventario.sql` y `012_rf13_alertas_vencimiento.sql`.
 
-No se ejecutaron estas migraciones. Antes del despliegue debe existir respaldo,
-validación en una base efímera y revisión de datos históricos.
+La secuencia completa se validó desde cero en PostgreSQL efímero. Antes del
+despliegue formal debe existir respaldo y revisión de datos históricos; esta
+validación técnica no sustituye QA.
 
 ## Fabric
 
