@@ -15,6 +15,7 @@ const nombresEventos = {
   orden_produccion: 'ORDEN DE PRODUCCION',
   producto_fabricado_configurado: 'PRODUCTO / RECETA',
   registro_manufactura: 'FABRICACION',
+  envasado_embalado: 'ENVASADO Y EMBALADO',
   ingreso_almacenamiento: 'INGRESO A ALMACENAMIENTO',
   control_almacenamiento: 'CONTROL DE ALMACENAMIENTO',
   salida_almacenamiento: 'SALIDA DE ALMACENAMIENTO',
@@ -150,6 +151,14 @@ function crearEventosReporte(data) {
   }
 
   const almacenamiento = data.almacenamiento;
+  for (const envasado of data.envasados || []) {
+    eventos.push({
+      tipoEvento: 'envasado_embalado', idEntidad: envasado.id_envasado,
+      titulo: nombresEventos.envasado_embalado, referencia: `Envasado #${envasado.id_envasado}`, lote: envasado.lote,
+      filas: [['Fecha', fechaCorta(envasado.fecha_operacion)], ['Responsable', envasado.responsable_email], ['Operacion', envasado.descripcion_operacion], ['Resultado', envasado.resultado], ['Observaciones', envasado.observaciones || '-']]
+    });
+  }
+
   if (almacenamiento) {
     eventos.push({
       tipoEvento: 'ingreso_almacenamiento',

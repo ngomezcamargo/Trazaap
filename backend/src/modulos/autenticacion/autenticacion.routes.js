@@ -10,6 +10,6 @@ const router = Router();
 
 router.post('/login', validarSolicitud(iniciarSesionSchema), manejarAsync(iniciarSesionController));
 router.get('/me', autenticarJwt, rolesMiddleware('gerente', 'operario'), manejarAsync(perfilController));
-router.get('/operarios', autenticarJwt, rolesMiddleware('operario'), manejarAsync(listarOperariosController));
+router.get('/operarios', autenticarJwt, rolesMiddleware('gerente', 'operario'), manejarAsync(listarOperariosController));
 
 export default router;

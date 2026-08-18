@@ -15,6 +15,7 @@ import {
 } from './trazabilidad.repository.js';
 import { generarCodigosAcceso } from '../publico/codigos-acceso.util.js';
 import { buscarDespachosPorLote } from '../despachos/despachos.repository.js';
+import { listarEnvasados } from '../envasado/envasado.repository.js';
 
 async function construirValidacionesBlockchain(recepcion) {
   if (!recepcion) return [];
@@ -188,6 +189,8 @@ export async function consultarTrazabilidadPorLote(lote) {
       detalle?.manufactura?.id_manufactura
         ? validarSeguro('registro_manufactura', detalle.manufactura.id_manufactura)
         : null,
+      ...(detalle?.manufactura?.lote_producido ? (await listarEnvasados(detalle.manufactura.lote_producido)) : [])
+        .map((envasado) => validarSeguro('envasado_embalado', envasado.id_envasado)),
       detalle?.almacenamiento?.id_almacenamiento
         ? validarSeguro('ingreso_almacenamiento', detalle.almacenamiento.id_almacenamiento)
         : null,
@@ -224,6 +227,7 @@ export async function consultarTrazabilidadPorLote(lote) {
     correccionesPorEntidad
   ]);
   const loteProducido = detalle?.manufactura?.lote_producido || null;
+  const envasados = loteProducido ? await listarEnvasados(loteProducido) : [];
   const despachosOperativos = loteProducido ? await buscarDespachosPorLote(loteProducido) : [];
   const recepciones = recepcionesOrigen.map((recepcion) => mapearRecepcion(recepcion, blockchainPorEntidad));
   const inspecciones = recepcionesOrigen.map((recepcion) => mapearInspeccion(recepcion, blockchainPorEntidad)).filter(Boolean);
@@ -249,6 +253,10 @@ export async function consultarTrazabilidadPorLote(lote) {
         }
       : null,
     liberacion: detalle?.liberacion || null,
+    envasados: envasados.map((envasado) => ({
+      ...envasado,
+      blockchain: blockchainPorEntidad[`envasado_embalado:${envasado.id_envasado}`] || null
+    })),
     almacenamiento: detalle?.almacenamiento
       ? {
           ...detalle.almacenamiento,

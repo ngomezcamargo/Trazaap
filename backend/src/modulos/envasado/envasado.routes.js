@@ -1,0 +1,12 @@
+import { Router } from 'express';
+import { autenticarJwt } from '../../middlewares/autenticarJwt.js';
+import { manejarAsync } from '../../middlewares/manejarAsync.js';
+import { rolesMiddleware } from '../../middlewares/roles.middleware.js';
+import { validarSolicitud } from '../../middlewares/validarSolicitud.js';
+import { crearEnvasadoController, listarEnvasadosController, listarPendientesController } from './envasado.controller.js';
+import { envasadoSchema } from './envasado.schemas.js';
+const router=Router(); router.use(autenticarJwt);
+router.get('/',rolesMiddleware('gerente','operario'),manejarAsync(listarEnvasadosController));
+router.get('/pendientes',rolesMiddleware('operario'),manejarAsync(listarPendientesController));
+router.post('/',rolesMiddleware('operario'),validarSolicitud(envasadoSchema),manejarAsync(crearEnvasadoController));
+export default router;
