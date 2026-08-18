@@ -1,6 +1,6 @@
 import { ErrorHttp } from '../../middlewares/errorHttp.js';
-import { registrarEventoCritico } from '../blockchain/blockchain.service.js';
-import { buscarContextoLote, buscarDetalleDespachado, crearCaso, listarCasos } from './devoluciones.repository.js';
+import { registrarEventoCritico, registrarVersionEventoCritico } from '../blockchain/blockchain.service.js';
+import { buscarContextoLote, buscarDetalleDespachado, crearCaso, listarCasos, resolverCaso } from './devoluciones.repository.js';
 
 export const listarCasosService = (lote) => listarCasos(lote);
 
@@ -35,4 +35,15 @@ export async function crearCasoService(data, usuario) {
       ? 'BLOQUEADO POR DEFINICION DE POLITICA DE REINCORPORACION A INVENTARIO'
       : null
   };
+}
+
+export async function resolverCasoService(id, data, usuario) {
+  const registro = await resolverCaso(id, data);
+  if (!registro) throw new ErrorHttp(409, 'Caso no encontrado o ya tiene una decision registrada');
+  const blockchain = await registrarVersionEventoCritico(
+    'devolucion_no_conformidad', id, usuario.email, `Decision de no conformidad: ${data.accion}`
+  );
+  return { registro, blockchain, inventario_modificado: false,
+    bloqueo: registro.tipo_caso === 'devolucion_post_despacho'
+      ? 'BLOQUEADO POR DEFINICION DE POLITICA DE REINCORPORACION A INVENTARIO' : null };
 }

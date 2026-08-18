@@ -26,3 +26,10 @@ export const devolucionSchema = z.object({
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fecha_decision'], message: 'Una decision pendiente no debe tener fecha de decision' });
   }
 });
+
+export const decisionCasoSchema = z.object({
+  accion: z.enum(['retiro', 'reproceso', 'destruccion']),
+  fecha_decision: z.string().datetime(),
+  responsable: z.coerce.number().int().positive(),
+  observaciones: z.string().trim().max(3000).optional().default('')
+});

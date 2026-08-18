@@ -48,3 +48,14 @@ export async function crearCaso(data) {
     ]);
   return rows[0];
 }
+
+export async function resolverCaso(id, data) {
+  const { rows } = await poolPostgres.query(`
+    UPDATE devoluciones_no_conformidades
+    SET accion = $2, fecha_decision = $3, responsable = $4,
+        observaciones = CASE WHEN $5 = '' THEN observaciones ELSE $5 END,
+        updated_at = NOW()
+    WHERE id_caso = $1 AND accion = 'pendiente_decision'
+    RETURNING *`, [id, data.accion, data.fecha_decision, data.responsable, data.observaciones]);
+  return rows[0] || null;
+}

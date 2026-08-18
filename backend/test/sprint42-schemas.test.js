@@ -3,7 +3,7 @@ import test from 'node:test';
 import { crearUsuarioSchema, actualizarUsuarioSchema } from '../src/modulos/usuarios/usuarios.schemas.js';
 import { envasadoSchema } from '../src/modulos/envasado/envasado.schemas.js';
 import { saneamientoSchema } from '../src/modulos/saneamiento/saneamiento.schemas.js';
-import { devolucionSchema } from '../src/modulos/devoluciones/devoluciones.schemas.js';
+import { decisionCasoSchema, devolucionSchema } from '../src/modulos/devoluciones/devoluciones.schemas.js';
 import { metadatosDocumentoSchema } from '../src/modulos/documentos/documentos.schemas.js';
 import { controlSchema, definicionSchema } from '../src/modulos/calidad/calidad.schemas.js';
 import { multiloteSchema } from '../src/modulos/reportes/reportes.schemas.js';
@@ -33,6 +33,8 @@ test('RF16 distingue devolucion posterior de rechazo previo', () => {
   assert.equal(devolucionSchema.safeParse({ ...base, tipo_caso: 'devolucion_post_despacho', id_cliente: 3, id_despacho: 4 }).success, true);
   assert.equal(devolucionSchema.safeParse({ ...base, tipo_caso: 'rechazo_pre_despacho', id_despacho: 4 }).success, false);
   assert.equal(devolucionSchema.safeParse({ ...base, tipo_caso: 'rechazo_pre_despacho' }).success, true);
+  assert.equal(decisionCasoSchema.safeParse({ accion: 'retiro', fecha_decision: '2026-08-17T16:00:00.000Z', responsable: 2 }).success, true);
+  assert.equal(decisionCasoSchema.safeParse({ accion: 'reincorporar', fecha_decision: '2026-08-17T16:00:00.000Z', responsable: 2 }).success, false);
 });
 
 test('RF17 asocia cada documento exclusivamente a proveedor o materia prima', () => {
