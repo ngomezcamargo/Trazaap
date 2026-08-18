@@ -1,4 +1,5 @@
 import { poolPostgres } from '../../configuracion/postgresql.js';
+import { entorno } from '../../configuracion/entorno.js';
 import { calcularFechaVencimiento, formatearLote } from './lotes.util.js';
 
 async function obtenerColumnasTabla(tableName) {
@@ -161,7 +162,7 @@ export async function actualizarProductoFabricado(id, data) {
 
 export async function generarLoteProducto(ordenId, productoOrdenId, db = poolPostgres) {
   const contexto = await db.query(
-    `SELECT to_char(op.fecha_produccion, 'YYYY-MM-DD') AS fecha_produccion, pf.prefijo_lote, pf.vida_util_dias
+    `SELECT to_char(op.fecha_produccion, 'YYYY-MM-DD') AS fecha_produccion, pf.vida_util_dias
      FROM ordenes_produccion_productos opp
      JOIN ordenes_produccion op ON op.id = opp.orden_produccion_id
      JOIN productos_fabricados pf ON pf.id = opp.producto_fabricado_id
@@ -169,22 +170,25 @@ export async function generarLoteProducto(ordenId, productoOrdenId, db = poolPos
     [productoOrdenId, ordenId]
   );
   const producto = contexto.rows[0];
-  if (!producto?.prefijo_lote || !producto?.fecha_produccion) {
-    throw new Error('No se pudo determinar el prefijo o la fecha de produccion del producto.');
+  if (!producto?.fecha_produccion) {
+    throw new Error('No se pudo determinar la fecha de fabricacion del producto.');
   }
+  const fechaVencimiento = calcularFechaVencimiento(producto.fecha_produccion, producto.vida_util_dias);
 
   const consecutivo = await db.query(
-    `INSERT INTO consecutivos_lote (prefijo_producto, fecha_produccion, ultimo_consecutivo)
-     VALUES ($1, $2, 1)
-     ON CONFLICT (prefijo_producto, fecha_produccion)
-     DO UPDATE SET ultimo_consecutivo = consecutivos_lote.ultimo_consecutivo + 1
+    `INSERT INTO consecutivos_lote_fabrica (codigo_fabrica, fecha_fabricacion, fecha_vencimiento, ultimo_consecutivo)
+     VALUES ($1, $2, $3, 1)
+     ON CONFLICT (codigo_fabrica, fecha_fabricacion, fecha_vencimiento)
+     DO UPDATE SET ultimo_consecutivo = consecutivos_lote_fabrica.ultimo_consecutivo + 1
+       WHERE consecutivos_lote_fabrica.ultimo_consecutivo < 9999
      RETURNING ultimo_consecutivo`,
-    [producto.prefijo_lote, producto.fecha_produccion]
+    [entorno.codigoFabrica, producto.fecha_produccion, fechaVencimiento]
   );
   const numero = consecutivo.rows[0]?.ultimo_consecutivo;
+  if (!numero) throw new Error('Se agoto el consecutivo diario de lotes para la fabrica configurada.');
   return {
-    lote_producido: formatearLote(producto.prefijo_lote, producto.fecha_produccion, numero),
-    fecha_vencimiento_calculada: calcularFechaVencimiento(producto.fecha_produccion, producto.vida_util_dias)
+    lote_producido: formatearLote(entorno.codigoFabrica, producto.fecha_produccion, fechaVencimiento, numero),
+    fecha_vencimiento_calculada: fechaVencimiento
   };
 }
 

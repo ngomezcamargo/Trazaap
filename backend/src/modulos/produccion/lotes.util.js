@@ -47,19 +47,25 @@ export function normalizarFechaProduccion(value) {
   return fecha;
 }
 
-export function formatearLote(prefijo, fechaProduccion, consecutivo) {
-  const prefijoNormalizado = normalizarPrefijoLote(prefijo);
-  if (!esPrefijoLoteValido(prefijoNormalizado)) {
-    throw new Error('El prefijo del lote debe tener entre 2 y 5 caracteres alfanumericos en mayuscula.');
+export function normalizarCodigoFabrica(value) {
+  const codigo = String(value || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,12}$/.test(codigo)) {
+    throw new Error('FABRICA_CODIGO debe tener entre 2 y 12 caracteres alfanumericos en mayuscula.');
   }
+  return codigo;
+}
 
-  const fecha = normalizarFechaProduccion(fechaProduccion);
+export function formatearLote(codigoFabrica, fechaFabricacion, fechaVencimiento, consecutivo) {
+  const codigo = normalizarCodigoFabrica(codigoFabrica);
+  const fabricacion = normalizarFechaProduccion(fechaFabricacion);
+  const vencimiento = normalizarFechaProduccion(fechaVencimiento);
+  if (vencimiento < fabricacion) throw new Error('La fecha de vencimiento no puede ser anterior a la fabricacion.');
   const numero = Number(consecutivo);
-  if (!Number.isInteger(numero) || numero < 1) {
-    throw new Error('El consecutivo del lote debe ser un entero positivo.');
+  if (!Number.isInteger(numero) || numero < 1 || numero > 9999) {
+    throw new Error('El consecutivo del lote debe estar entre 1 y 9999.');
   }
 
-  return `${prefijoNormalizado}-${fecha.replaceAll('-', '')}-${String(numero).padStart(3, '0')}`;
+  return `${codigo}-${fabricacion.replaceAll('-', '')}-${vencimiento.replaceAll('-', '')}-${String(numero).padStart(4, '0')}`;
 }
 
 export function calcularFechaVencimiento(fechaProduccion, vidaUtilDias) {

@@ -24,6 +24,7 @@ export const entorno = {
   apiPrefix: process.env.API_PREFIX || '/api',
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
+  codigoFabrica: process.env.FABRICA_CODIGO || '',
   auth: {
     legacyJwtEnabled: process.env.AUTH_LEGACY_JWT_ENABLED !== 'false',
     oauthEnabled: process.env.OAUTH_ENABLED === 'true',
