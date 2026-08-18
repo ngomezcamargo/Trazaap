@@ -38,6 +38,7 @@ test('la manufactura no acepta lote digitado como fuente de verdad', () => {
     responsable_usuario_id: 3,
     unidades_producidas: 10,
     lote_producido: 'MANUAL-001',
+    equipos_utilizados: ['Horno de prueba'],
     hora_inicio: '2026-08-13T10:00:00.000Z',
     hora_fin: '2026-08-13T11:00:00.000Z'
   });
