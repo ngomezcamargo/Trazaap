@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { poolPostgres } from '../src/configuracion/postgresql.js';
 import { CATALOGO_PRODUCTOS } from './catalogo-productos.js';
+import { resolverPasswordSeed, USUARIOS_QA } from './seed-usuarios-qa.js';
 
 function prefijoLoteDesdeNombre(nombre) {
   const palabras = String(nombre || '').trim().toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
@@ -18,34 +19,16 @@ async function seedRoles() {
   }
 }
 
-async function seedAdminUser() {
-  const passwordHash = await bcrypt.hash('Admin123*', 12);
-  const query = `
-    INSERT INTO users (email, password_hash, role_id)
-    VALUES (
-      $1,
-      $2,
-      (SELECT id FROM roles WHERE name = 'administrador')
-    )
-    ON CONFLICT (email) DO NOTHING
-  `;
-
-  await poolPostgres.query(query, ['admin@trazaap.local', passwordHash]);
-}
-
-async function seedOperarioUser() {
-  const passwordHash = await bcrypt.hash('Operario123*', 12);
-  const query = `
-    INSERT INTO users (email, password_hash, role_id)
-    VALUES (
-      $1,
-      $2,
-      (SELECT id FROM roles WHERE name = 'operario')
-    )
-    ON CONFLICT (email) DO NOTHING
-  `;
-
-  await poolPostgres.query(query, ['operario@trazaap.local', passwordHash]);
+async function seedUsuariosQa() {
+  for (const usuario of USUARIOS_QA) {
+    const passwordHash = await bcrypt.hash(resolverPasswordSeed(usuario), 12);
+    await poolPostgres.query(
+      `INSERT INTO users (email, password_hash, role_id, is_active)
+       VALUES ($1, $2, (SELECT id FROM roles WHERE name = $3), true)
+       ON CONFLICT (email) DO NOTHING`,
+      [usuario.email, passwordHash, usuario.rol]
+    );
+  }
 }
 
 async function seedProviders() {
@@ -352,8 +335,7 @@ async function seedProduccionYLiberacion() {
 
 async function run() {
   await seedRoles();
-  await seedAdminUser();
-  await seedOperarioUser();
+  await seedUsuariosQa();
   await seedProviders();
   await seedRawMaterials();
   await seedCatalogoProductos();
