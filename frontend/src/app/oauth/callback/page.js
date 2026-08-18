@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { guardarSesionOAuth } from '@/utilidades/sesion';
 
-export default function OAuthCallbackPage() {
+function OAuthCallbackContent() {
   const router = useRouter(); const params = useSearchParams(); const [error, setError] = useState('');
   useEffect(() => { (async () => {
     try {
@@ -21,4 +21,8 @@ export default function OAuthCallbackPage() {
     } catch (e) { setError(e.message); }
   })(); }, [params, router]);
   return <div className="pantalla-login"><div className="panel-login"><h2>Ingreso OAuth 2.0</h2>{error ? <div className="alerta error">{error}</div> : <p>Validando identidad…</p>}</div></div>;
+}
+
+export default function OAuthCallbackPage() {
+  return <Suspense fallback={<div className="pantalla-login"><div className="panel-login"><p>Preparando OAuth…</p></div></div>}><OAuthCallbackContent /></Suspense>;
 }
