@@ -72,6 +72,7 @@ export const entorno = {
   epcis: {
     enabled: process.env.EPCIS_ENABLED === 'true',
     maxPayloadBytes: Number(process.env.EPCIS_MAX_PAYLOAD_BYTES) || 1024 * 1024,
+    schemaPath: process.env.EPCIS_SCHEMA_PATH || '',
     contextUrl: process.env.EPCIS_CONTEXT_URL || 'https://ref.gs1.org/standards/epcis/epcis-context.jsonld',
     timeZoneOffset: process.env.EPCIS_TIME_ZONE_OFFSET || '-05:00'
   }

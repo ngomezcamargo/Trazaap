@@ -9,6 +9,7 @@
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
     "seed:materias": "node scripts/seed-materias-primas-pruebas.js",
+    "epcis:schema:prepare": "node scripts/preparar-schema-epcis.js",
     "blockchain:sync": "node scripts/sync-blockchain.js",
     "test:rf05": "node scripts/verificar-rf05.js",
     "test": "node --test test/*.test.js"
@@ -16,6 +17,8 @@
   "dependencies": {
     "@grpc/grpc-js": "^1.12.6",
     "@hyperledger/fabric-gateway": "^1.7.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
