@@ -4,6 +4,18 @@ const variante = (tamanoPresentacion, pesoEstimadoUnidad) => ({
   unidad_medida: 'unidad'
 });
 
+// Identificador interno compatible con el catalogo historico. No forma parte
+// del lote RF03-B, generado como FAB-AAAAMMDD-AAAAMMDD-NNNN en el backend.
+export function resolverPrefijoInternoProducto(ficha) {
+  if (ficha.prefijo_lote) return ficha.prefijo_lote;
+  const palabras = String(ficha.nombre || '').trim().toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  if (!palabras.length) return 'PR';
+  if (palabras[0] === 'BAGEL') return 'BG';
+  if (palabras.length > 1) return palabras.map((palabra) => palabra[0]).join('').slice(0, 5).padEnd(2, 'X');
+  const consonantes = palabras[0].replace(/[AEIOU]/g, '');
+  return (consonantes.length >= 2 ? consonantes : palabras[0]).slice(0, 5).padEnd(2, 'X');
+}
+
 export const CATALOGO_PRODUCTOS = [
   {
     nombre: 'Bagel',
@@ -110,6 +122,7 @@ export const CATALOGO_PRODUCTOS = [
   },
   {
     nombre: 'Pan pita',
+    prefijo_lote: 'PPT',
     categoria: 'Pan para ensamble',
     descripcion: 'Sabores: tradicional e integral.',
     vida_util_dias: 5,
@@ -220,6 +233,7 @@ export const CATALOGO_PRODUCTOS = [
   },
   {
     nombre: 'Crinkle de chocolate',
+    prefijo_lote: 'CRK',
     categoria: 'Galleta',
     descripcion: 'Galleta crinkle de chocolate.',
     vida_util_dias: 15,

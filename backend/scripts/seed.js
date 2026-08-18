@@ -1,16 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { poolPostgres } from '../src/configuracion/postgresql.js';
-import { CATALOGO_PRODUCTOS } from './catalogo-productos.js';
+import { CATALOGO_PRODUCTOS, resolverPrefijoInternoProducto } from './catalogo-productos.js';
 import { resolverPasswordSeed, USUARIOS_QA } from './seed-usuarios-qa.js';
-
-function prefijoLoteDesdeNombre(nombre) {
-  const palabras = String(nombre || '').trim().toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
-  if (!palabras.length) return 'PR';
-  if (palabras[0] === 'BAGEL') return 'BG';
-  if (palabras.length > 1) return palabras.map((palabra) => palabra[0]).join('').slice(0, 5).padEnd(2, 'X');
-  const consonantes = palabras[0].replace(/[AEIOU]/g, '');
-  return (consonantes.length >= 2 ? consonantes : palabras[0]).slice(0, 5).padEnd(2, 'X');
-}
 
 async function seedRoles() {
   const roles = ['administrador', 'gerente', 'operario'];
@@ -116,7 +107,7 @@ async function seedCatalogoProductos() {
       let productoId = existente.rows[0]?.id;
       const valoresProducto = [
         ficha.nombre,
-        ficha.prefijo_lote || prefijoLoteDesdeNombre(ficha.nombre),
+        resolverPrefijoInternoProducto(ficha),
         ficha.categoria,
         ficha.descripcion,
         ficha.vida_util_dias,
