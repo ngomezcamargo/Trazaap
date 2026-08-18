@@ -1,4 +1,5 @@
 import { ErrorHttp } from '../../middlewares/errorHttp.js';
+import { entorno } from '../../configuracion/entorno.js';
 import { registrarAlertaVencimiento } from '../blockchain/blockchain.service.js';
 import { encolarEventoBlockchain } from '../blockchain/outbox.repository.js';
 import {
@@ -10,9 +11,11 @@ import {
   crearLiberacionProducto,
   ejecutarTransaccionLiberacion,
   listarLiberaciones,
-  listarLotesVencidosSinDespacho,
+  listarAlertasVencimiento,
+  marcarEvidenciaAlerta,
   listarPendientesLiberacion,
-  registrarEventoTrazabilidad
+  registrarEventoTrazabilidad,
+  sincronizarAlertasVencimiento
 } from './liberacion.repository.js';
 
 const dependenciasPredeterminadas = {
@@ -152,7 +155,7 @@ export function listarLiberacionesService() {
 }
 
 export async function procesarAlertasVencimientoService() {
-  const lotes = await listarLotesVencidosSinDespacho();
+  const lotes = await sincronizarAlertasVencimiento(entorno.diasAlertaVencimiento);
   const resultados = [];
   for (const lote of lotes) {
     try {
@@ -162,13 +165,18 @@ export async function procesarAlertasVencimientoService() {
         fechaVencimiento: lote.fecha_vencimiento,
         unidadesDisponibles: lote.unidades_disponibles,
         fechaDeteccion: new Date().toISOString(),
-        actor: 'tarea_programada'
+        actor: 'tarea_programada',
+        tipoAlerta: lote.tipo_alerta,
+        diasAnticipacion: lote.dias_anticipacion
       });
+      await marcarEvidenciaAlerta(lote.id_alerta, 'registrada');
       resultados.push({ ...lote, blockchain: evidencia });
     } catch (error) {
       if (error.codigo === 'ALERTA_DUPLICADA') {
-        resultados.push({ ...lote, blockchain: { estado: 'VENCIDO_SIN_DESPACHO', duplicada: true } });
+        await marcarEvidenciaAlerta(lote.id_alerta, 'registrada');
+        resultados.push({ ...lote, blockchain: { estado: lote.tipo_alerta.toUpperCase(), duplicada: true } });
       } else if (error.codigo !== 'DESPACHO_DUPLICADO') {
+        await marcarEvidenciaAlerta(lote.id_alerta, 'error', String(error.message || 'Error de evidencia').slice(0, 1000));
         console.error(`[Vencimientos] No se pudo registrar alerta para ${lote.lote}: ${error.message}`);
       }
     }
@@ -177,5 +185,5 @@ export async function procesarAlertasVencimientoService() {
 }
 
 export function listarAlertasVencimientoService() {
-  return listarLotesVencidosSinDespacho();
+  return listarAlertasVencimiento();
 }

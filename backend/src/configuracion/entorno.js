@@ -25,6 +25,9 @@ export const entorno = {
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
   codigoFabrica: process.env.FABRICA_CODIGO || '',
+  diasAlertaVencimiento: Number.isInteger(Number(process.env.DIAS_ALERTA_VENCIMIENTO))
+    && Number(process.env.DIAS_ALERTA_VENCIMIENTO) >= 0
+    ? Number(process.env.DIAS_ALERTA_VENCIMIENTO) : 30,
   auth: {
     legacyJwtEnabled: process.env.AUTH_LEGACY_JWT_ENABLED !== 'false',
     oauthEnabled: process.env.OAUTH_ENABLED === 'true',

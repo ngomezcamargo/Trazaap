@@ -363,3 +363,14 @@ test('registra una sola alerta de vencimiento cuando quedan unidades', async () 
   await contract.registrarAlertaVencimiento(ctx, JSON.stringify(data));
   await assert.rejects(contract.registrarAlertaVencimiento(ctx, JSON.stringify(data)), /ALERTA_DUPLICADA/);
 });
+
+test('distingue alerta proxima de lote vencido sin colisionar sus claves', async () => {
+  const contract = new TraceabilityContract();
+  const ctx = context();
+  const proxima = { lote: 'LT-DOBLE', producto: 'Bagel', fechaVencimiento: '2026-08-20', unidadesDisponibles: 4, tipoAlerta: 'proximo_vencimiento', diasAnticipacion: 2 };
+  const vencida = { ...proxima, fechaVencimiento: '2026-08-01', tipoAlerta: 'vencido', diasAnticipacion: null };
+  const primera = JSON.parse(await contract.registrarAlertaVencimiento(ctx, JSON.stringify(proxima)));
+  const segunda = JSON.parse(await contract.registrarAlertaVencimiento(ctx, JSON.stringify(vencida)));
+  assert.equal(primera.estado, 'PROXIMO_VENCIMIENTO');
+  assert.equal(segunda.estado, 'VENCIDO');
+});

@@ -233,15 +233,48 @@ export async function ejecutarTransaccionLiberacion(callback) {
   }
 }
 
-export async function listarLotesVencidosSinDespacho() {
-  const { rows } = await poolPostgres.query(
-    `SELECT id_inventario, id_liberacion, producto, lote, unidades_disponibles,
-            fecha_vencimiento, estado
+export async function sincronizarAlertasVencimiento(diasAlerta, db = poolPostgres) {
+  await db.query(
+    `INSERT INTO alertas_vencimiento_lote (
+       id_inventario, tipo_alerta, fecha_vencimiento, dias_anticipacion
+     )
+     SELECT id_inventario,
+            CASE WHEN fecha_vencimiento <= CURRENT_DATE THEN 'vencido' ELSE 'proximo_vencimiento' END,
+            fecha_vencimiento,
+            CASE WHEN fecha_vencimiento > CURRENT_DATE THEN fecha_vencimiento - CURRENT_DATE ELSE NULL END
      FROM inventario_producto_terminado
-     WHERE fecha_vencimiento <= CURRENT_DATE
+     WHERE fecha_vencimiento <= CURRENT_DATE + $1::INTEGER
        AND unidades_disponibles > 0
        AND estado IN ('disponible', 'despacho_parcial')
-     ORDER BY fecha_vencimiento, lote`
+     ON CONFLICT (id_inventario, tipo_alerta) DO NOTHING`,
+    [diasAlerta]
+  );
+  const { rows } = await db.query(
+    `SELECT a.*, i.id_liberacion, i.producto, i.lote, i.unidades_disponibles, i.estado
+     FROM alertas_vencimiento_lote a
+     JOIN inventario_producto_terminado i ON i.id_inventario = a.id_inventario
+     WHERE a.evidencia_estado IN ('pendiente', 'error')
+     ORDER BY a.fecha_vencimiento, a.id_alerta`
+  );
+  return rows;
+}
+
+export async function marcarEvidenciaAlerta(idAlerta, estado, error = null, db = poolPostgres) {
+  await db.query(
+    `UPDATE alertas_vencimiento_lote
+     SET evidencia_estado=$2, evidencia_error=$3,
+         evidencia_at=CASE WHEN $2='registrada' THEN NOW() ELSE evidencia_at END
+     WHERE id_alerta=$1`,
+    [idAlerta, estado, error]
+  );
+}
+
+export async function listarAlertasVencimiento(db = poolPostgres) {
+  const { rows } = await db.query(
+    `SELECT a.*, i.producto, i.lote, i.unidades_disponibles, i.estado
+     FROM alertas_vencimiento_lote a
+     JOIN inventario_producto_terminado i ON i.id_inventario=a.id_inventario
+     ORDER BY a.fecha_vencimiento, a.tipo_alerta, a.id_alerta`
   );
   return rows;
 }

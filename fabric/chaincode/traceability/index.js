@@ -409,14 +409,19 @@ class TraceabilityContract extends Contract {
     this._requireText(String(datos.lote || ''), 'lote');
     this._requireText(String(datos.producto || ''), 'producto');
     this._requireText(String(datos.fechaVencimiento || ''), 'fechaVencimiento');
+    const tipoAlerta = String(datos.tipoAlerta || 'vencido');
+    if (!['proximo_vencimiento', 'vencido'].includes(tipoAlerta)) throw new Error('tipoAlerta invalido');
 
-    const alertKey = this._eventKey('alerta_vencimiento', datos.lote);
+    const alertKey = this._eventKey(`alerta_${tipoAlerta}`, datos.lote);
     if (await this._exists(ctx, alertKey)) {
       this._throw(CODIGOS_ERROR.ALERTA_DUPLICADA, `Ya existe una alerta de vencimiento para ${datos.lote}`);
     }
     const hoy = this._txTimestamp(ctx).slice(0, 10);
-    if (String(datos.fechaVencimiento).slice(0, 10) > hoy) {
+    if (tipoAlerta === 'vencido' && String(datos.fechaVencimiento).slice(0, 10) > hoy) {
       this._throw(CODIGOS_ERROR.LOTE_NO_VENCIDO, `El lote ${datos.lote} todavia no esta vencido`);
+    }
+    if (tipoAlerta === 'proximo_vencimiento' && String(datos.fechaVencimiento).slice(0, 10) <= hoy) {
+      throw new Error(`El lote ${datos.lote} ya esta vencido`);
     }
     if (Number(datos.unidadesDisponibles) <= 0) {
       throw new Error('unidadesDisponibles debe ser mayor que cero');
@@ -435,10 +440,12 @@ class TraceabilityContract extends Contract {
           fechaVencimiento: datos.fechaVencimiento,
           unidadesDisponibles: Number(datos.unidadesDisponibles),
           fechaDeteccion: String(datos.fechaDeteccion || this._txTimestamp(ctx)),
-          estado: 'VENCIDO_SIN_DESPACHO'
+          estado: tipoAlerta === 'vencido' ? 'VENCIDO' : 'PROXIMO_VENCIMIENTO',
+          tipoAlerta,
+          diasAnticipacion: datos.diasAnticipacion == null ? null : Number(datos.diasAnticipacion)
         }
       },
-      estado: 'VENCIDO_SIN_DESPACHO'
+      estado: tipoAlerta === 'vencido' ? 'VENCIDO' : 'PROXIMO_VENCIMIENTO'
     });
 
     await this._guardarEvento(ctx, alertKey, event);
