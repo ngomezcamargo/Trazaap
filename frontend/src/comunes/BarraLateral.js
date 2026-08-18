@@ -18,7 +18,8 @@ const linksAdministrador = [
   { href: '/clientes', label: 'Clientes' },
   { href: '/trazabilidad', label: 'Trazabilidad' },
   { href: '/inventario', label: 'Inventario' },
-  { href: '/reportes', label: 'Reportes' }
+  { href: '/reportes', label: 'Reportes' },
+  { href: '/usuarios', label: 'Usuarios' }
 ];
 
 const linksGerente = [
@@ -33,7 +34,8 @@ const linksGerente = [
   { href: '/clientes', label: 'Clientes' },
   { href: '/trazabilidad', label: 'Trazabilidad' },
   { href: '/inventario', label: 'Inventario' },
-  { href: '/reportes', label: 'Reportes' }
+  { href: '/reportes', label: 'Reportes' },
+  { href: '/usuarios', label: 'Usuarios' }
 ];
 
 const linksOperario = [

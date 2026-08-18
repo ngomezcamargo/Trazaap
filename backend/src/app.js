@@ -17,6 +17,7 @@ import rutasAlmacenamiento from './modulos/almacenamiento/almacenamiento.routes.
 import rutasBlockchain from './modulos/blockchain/outbox.routes.js';
 import rutasClientes from './modulos/clientes/clientes.routes.js';
 import rutasDespachos from './modulos/despachos/despachos.routes.js';
+import rutasUsuarios from './modulos/usuarios/usuarios.routes.js';
 
 export function createApp() {
   const app = express();
@@ -42,6 +43,7 @@ export function createApp() {
   api.use('/blockchain', rutasBlockchain);
   api.use('/clientes', rutasClientes);
   api.use('/despachos', rutasDespachos);
+  api.use('/usuarios', rutasUsuarios);
   api.use('/inventario-insumos', rutasInventario);
   api.use('/traceability', rutasTrazabilidad);
   api.use('/public', rutasPublicas);
