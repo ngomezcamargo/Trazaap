@@ -8,6 +8,7 @@ import {
   limpiarSesion,
   obtenerToken,
   registrarActividadSesion,
+  restaurarSesionOAuth,
   sesionActivaPorActividad,
   tokenValido
 } from '@/utilidades/sesion';
@@ -28,7 +29,11 @@ export function GuardiaSesion({ children }) {
 
   useEffect(() => {
     async function validarSesion() {
-      const token = obtenerToken();
+      let token = obtenerToken();
+      if (!token) {
+        await restaurarSesionOAuth().catch(() => false);
+        token = obtenerToken();
+      }
       const sesionActiva = sesionActivaPorActividad();
       if (!token || !tokenValido() || !sesionActiva) {
         const destino = token && !sesionActiva ? '/iniciar-sesion?motivo=inactividad' : '/iniciar-sesion';

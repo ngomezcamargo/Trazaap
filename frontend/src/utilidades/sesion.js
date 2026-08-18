@@ -1,6 +1,8 @@
 const TOKEN_KEY = 'trazaap_token';
 const USER_KEY = 'trazaap_user';
 const LAST_ACTIVITY_KEY = 'trazaap_last_activity';
+const AUTH_MODE_KEY = 'trazaap_auth_mode';
+let oauthAccessToken = null;
 export const LIMITE_INACTIVIDAD_MS = 2 * 60 * 60 * 1000;
 
 export function obtenerToken() {
@@ -8,7 +10,7 @@ export function obtenerToken() {
     return null;
   }
 
-  return localStorage.getItem(TOKEN_KEY);
+  return oauthAccessToken || localStorage.getItem(TOKEN_KEY);
 }
 
 function parseJwt(token) {
@@ -61,9 +63,31 @@ export function sesionActivaPorActividad() {
 }
 
 export function guardarSesion(token, user) {
+  oauthAccessToken = null;
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.setItem(AUTH_MODE_KEY, 'legacy');
   registrarActividadSesion();
+}
+
+export function guardarSesionOAuth(token, user) {
+  oauthAccessToken = token;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.setItem(AUTH_MODE_KEY, 'oauth');
+  registrarActividadSesion();
+}
+
+export function usaOAuth() { return typeof window !== 'undefined' && localStorage.getItem(AUTH_MODE_KEY) === 'oauth'; }
+
+export async function restaurarSesionOAuth() {
+  if (!usaOAuth()) return false;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  const respuesta = await fetch(`${apiUrl}/auth/oauth/refresh`, { method: 'POST', credentials: 'include' });
+  if (!respuesta.ok) return false;
+  const tokens = await respuesta.json();
+  oauthAccessToken = tokens.access_token;
+  return tokenValido();
 }
 
 export function obtenerUsuario() {
@@ -76,7 +100,9 @@ export function obtenerUsuario() {
 }
 
 export function limpiarSesion() {
+  oauthAccessToken = null;
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(LAST_ACTIVITY_KEY);
+  localStorage.removeItem(AUTH_MODE_KEY);
 }

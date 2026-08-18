@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { limpiarSesion } from '@/utilidades/sesion';
+import { limpiarSesion, usaOAuth } from '@/utilidades/sesion';
 import { normalizarRol, ROLES } from '@/utilidades/roles';
 import { obtenerUsuario } from '@/utilidades/sesion';
 
@@ -73,7 +73,8 @@ export function BarraLateral() {
       ? linksGerente
       : linksOperario;
 
-  const cerrarSesion = () => {
+  const cerrarSesion = async () => {
+    if (usaOAuth()) await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/oauth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
     limpiarSesion();
     router.replace('/iniciar-sesion');
   };
