@@ -24,6 +24,14 @@ export const entorno = {
   apiPrefix: process.env.API_PREFIX || '/api',
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
+  auth: {
+    legacyJwtEnabled: process.env.AUTH_LEGACY_JWT_ENABLED !== 'false',
+    oauthEnabled: process.env.OAUTH_ENABLED === 'true',
+    issuer: process.env.OAUTH_ISSUER || '',
+    audience: process.env.OAUTH_AUDIENCE || '',
+    jwksUri: process.env.OAUTH_JWKS_URI || '',
+    algorithms: (process.env.OAUTH_ALLOWED_ALGORITHMS || 'RS256').split(',').map((value) => value.trim()).filter(Boolean)
+  },
   postgres: {
     host: process.env.POSTGRES_HOST,
     port: Number(process.env.POSTGRES_PORT),
@@ -51,5 +59,10 @@ export const entorno = {
     secretKey: process.env.MINIO_SECRET_KEY || '',
     bucketDocumentos: process.env.MINIO_DOCUMENTS_BUCKET || 'trazaap-documentos',
     maxUploadBytes: Number(process.env.MINIO_MAX_UPLOAD_BYTES) || 10 * 1024 * 1024
+  },
+  epcis: {
+    enabled: process.env.EPCIS_ENABLED === 'true',
+    maxPayloadBytes: Number(process.env.EPCIS_MAX_PAYLOAD_BYTES) || 1024 * 1024,
+    contextUrl: process.env.EPCIS_CONTEXT_URL || 'https://ref.gs1.org/standards/epcis/epcis-context.jsonld'
   }
 };
