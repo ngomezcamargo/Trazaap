@@ -17,6 +17,7 @@ const linksAdministrador = [
   { href: '/devoluciones', label: 'Devoluciones' },
   { href: '/documentos', label: 'Documentos' },
   { href: '/calidad', label: 'Calidad' },
+  { href: '/calidad/definiciones', label: 'Definiciones calidad' },
   { href: '/almacenamiento', label: 'Almacenamiento' },
   { href: '/liberacion', label: 'Liberacion' },
   { href: '/despachos', label: 'Despachos' },
