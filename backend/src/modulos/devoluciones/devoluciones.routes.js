@@ -1,0 +1,12 @@
+import { Router } from 'express';
+import { autenticarJwt } from '../../middlewares/autenticarJwt.js';
+import { manejarAsync } from '../../middlewares/manejarAsync.js';
+import { rolesMiddleware } from '../../middlewares/roles.middleware.js';
+import { validarSolicitud } from '../../middlewares/validarSolicitud.js';
+import { crearCasoController, listarCasosController } from './devoluciones.controller.js';
+import { devolucionSchema } from './devoluciones.schemas.js';
+const router = Router();
+router.use(autenticarJwt, rolesMiddleware('gerente'));
+router.get('/', manejarAsync(listarCasosController));
+router.post('/', validarSolicitud(devolucionSchema), manejarAsync(crearCasoController));
+export default router;
