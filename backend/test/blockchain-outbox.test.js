@@ -7,6 +7,11 @@ import {
   reintentarEventoOutbox
 } from '../src/modulos/blockchain/outbox.repository.js';
 
+const ejecutarIntegracionDb = process.env.RUN_DB_TESTS === 'true';
+const requiereDbAislada = {
+  skip: ejecutarIntegracionDb ? false : 'Requiere PostgreSQL aislado y RUN_DB_TESTS=true'
+};
+
 test('la clave de outbox distingue registro y nueva version sin guardar payloads', () => {
   assert.equal(
     claveDeduplificacion({ operacion: 'registrar', tipoEvento: 'control_almacenamiento', idEntidad: 9 }),
@@ -18,7 +23,7 @@ test('la clave de outbox distingue registro y nueva version sin guardar payloads
   );
 });
 
-test('la encolacion concurrente es idempotente y no crea duplicados', async () => {
+test('la encolacion concurrente es idempotente y no crea duplicados', requiereDbAislada, async () => {
   const idEntidad = `prueba-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const evento = { tipoEvento: 'control_almacenamiento', idEntidad, actor: 'pruebas' };
   try {
@@ -35,7 +40,7 @@ test('la encolacion concurrente es idempotente y no crea duplicados', async () =
   }
 });
 
-test('un evento fallido puede reiniciarse manualmente sin duplicarlo', async () => {
+test('un evento fallido puede reiniciarse manualmente sin duplicarlo', requiereDbAislada, async () => {
   const idEntidad = `reintento-${Date.now()}`;
   try {
     const item = await encolarEventoBlockchain({ tipoEvento: 'ingreso_almacenamiento', idEntidad, actor: 'pruebas' });
@@ -51,4 +56,3 @@ test('un evento fallido puede reiniciarse manualmente sin duplicarlo', async () 
     await poolPostgres.query('DELETE FROM blockchain_outbox WHERE id_entidad = $1', [idEntidad]);
   }
 });
-
