@@ -152,6 +152,27 @@ test('registra y valida un evento inmutable con identidad Fabric', async () => {
   assert.equal(validation.estado, 'ALTERADO');
 });
 
+test('el contrato generico admite envasado y saneamiento sin funciones ad hoc', async () => {
+  const contract = new TraceabilityContract();
+  const ctx = context();
+  const tipos = [
+    ['envasado_embalado', '501', 'LT-ENV-1', { resultado: 'conforme' }],
+    ['actividad_saneamiento', '601', 'SANEAMIENTO', { tipo: 'limpieza', resultado: 'conforme' }]
+  ];
+  for (const [tipo, id, lote, payload] of tipos) {
+    const registrado = JSON.parse(await contract.registrarEvento(
+      ctx, tipo, id, lote, 'operario@trazaap.local', '2026-08-17T15:00:00Z', JSON.stringify(payload)
+    ));
+    assert.equal(registrado.estado, 'REGISTRADO');
+    const consultado = JSON.parse(await contract.consultarEvento(ctx, tipo, id));
+    assert.equal(consultado.tipoEvento, tipo);
+    assert.equal(consultado.lote, lote);
+    const validacion = JSON.parse(await contract.validarEvento(ctx, tipo, id, JSON.stringify(payload)));
+    assert.equal(validacion.estado, 'VERIFICADO');
+    ctx.stub.nextTx(`tx-${tipo}`);
+  }
+});
+
 test('registra una correccion sin modificar el evento original', async () => {
   const contract = new TraceabilityContract();
   const ctx = context();
