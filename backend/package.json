@@ -10,6 +10,7 @@
     "seed": "node scripts/seed.js",
     "seed:materias": "node scripts/seed-materias-primas-pruebas.js",
     "epcis:schema:prepare": "node scripts/preparar-schema-epcis.js",
+    "test:oauth:pkce": "node scripts/validar-oauth-pkce-e2e.js",
     "blockchain:sync": "node scripts/sync-blockchain.js",
     "test:rf05": "node scripts/verificar-rf05.js",
     "test": "node --test test/*.test.js"
