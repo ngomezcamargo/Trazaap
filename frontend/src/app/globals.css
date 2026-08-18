@@ -1625,6 +1625,14 @@ button, input, select, textarea { font: inherit; }
     grid-template-columns: 1.7fr 1fr 0.8fr;
   }
 
+  .qr-imagen {
+    width: 2cm;
+    height: 2cm;
+    min-width: 2cm;
+    min-height: 2cm;
+    padding: 2mm;
+  }
+
   .reporte-card,
   .reporte-qr-card,
   .reporte-evento,

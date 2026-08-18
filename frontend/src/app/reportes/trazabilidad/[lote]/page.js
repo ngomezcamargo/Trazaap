@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { QRCodeSVG } from 'qrcode.react';
 import { GuardiaSesion } from '@/comunes/GuardiaSesion';
 import { GuardiaRol } from '@/comunes/GuardiaRol';
 import { trazabilidadServicio } from '@/servicios/trazabilidad.servicio';
@@ -45,8 +46,8 @@ function estadoTexto(estado) {
   return 'PENDIENTE';
 }
 
-function qrSrc(url) {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=18&data=${encodeURIComponent(url)}`;
+function CodigoQrTrazabilidad({ url, descripcion }) {
+  return <QRCodeSVG className="qr-imagen" value={url} size={240} level="M" marginSize={4} title={descripcion} />;
 }
 
 function obtenerValidacion(data, tipoEvento, idEntidad) {
@@ -414,7 +415,7 @@ function EventoReporte({ evento, index, verificarUrl }) {
 
         <aside className="reporte-qr-card">
           <strong>QR DE VERIFICACION</strong>
-          <img className="qr-imagen" src={qrSrc(verificarUrl)} alt={`QR de verificacion ${verificacionId}`} />
+          <CodigoQrTrazabilidad url={verificarUrl} descripcion={`QR de verificacion ${verificacionId}`} />
           <span>ID Verificacion:</span>
           <b>{verificacionId}</b>
           <small>Verificar en: {verificarUrl}</small>
@@ -519,7 +520,7 @@ export default function ReporteTrazabilidadPage() {
           <div>
             <h4>VERIFICACION DEL REPORTE</h4>
             <div className="reporte-footer-qr">
-              <img className="qr-imagen" src={qrSrc(verificarUrl)} alt="QR publico de trazabilidad" />
+              <CodigoQrTrazabilidad url={verificarUrl} descripcion="QR publico de trazabilidad" />
               <p>
                 Escanee el codigo QR o visite el enlace para verificar la autenticidad del reporte:<br />
                 <b>{verificarUrl}</b><br />
