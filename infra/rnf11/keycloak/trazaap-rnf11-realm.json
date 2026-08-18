@@ -1,0 +1,75 @@
+{
+  "realm": "trazaap-rnf11",
+  "enabled": true,
+  "displayName": "Trazaap RNF11 efimero",
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 28800,
+  "ssoSessionMaxLifespan": 28800,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "roles": {
+    "realm": [
+      { "name": "administrador" },
+      { "name": "gerente" },
+      { "name": "operario" }
+    ]
+  },
+  "clientScopes": [
+    { "name": "trazaap.read", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" } },
+    { "name": "trazaap.operate", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" } },
+    { "name": "trazaap.admin", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" } },
+    { "name": "epcis.query", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" } },
+    { "name": "epcis.capture", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" } }
+  ],
+  "clients": [
+    {
+      "clientId": "trazaap-web-ephemeral",
+      "name": "Trazaap Web RNF11 efimero",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://127.0.0.1:3001/oauth/callback"],
+      "webOrigins": ["http://127.0.0.1:3001"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "defaultClientScopes": ["profile", "email", "roles", "trazaap.read"],
+      "optionalClientScopes": ["trazaap.operate", "trazaap.admin", "epcis.query", "epcis.capture"],
+      "protocolMappers": [
+        {
+          "name": "trazaap-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": { "included.client.audience": "trazaap-api", "id.token.claim": "false", "access.token.claim": "true" }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin-rnf11",
+      "email": "admin-rnf11@invalid.local",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${KC_TEMP_ADMIN_PASSWORD}", "temporary": false }],
+      "realmRoles": ["administrador"]
+    },
+    {
+      "username": "gerente-rnf11",
+      "email": "gerente-rnf11@invalid.local",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${KC_TEMP_MANAGER_PASSWORD}", "temporary": false }],
+      "realmRoles": ["gerente"]
+    },
+    {
+      "username": "operario-rnf11",
+      "email": "operario-rnf11@invalid.local",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${KC_TEMP_OPERATOR_PASSWORD}", "temporary": false }],
+      "realmRoles": ["operario"]
+    }
+  ]
+}

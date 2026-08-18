@@ -1,0 +1,35 @@
+services:
+  postgres-rnf11:
+    image: postgres:15
+    container_name: trazaap_rnf11_2_pg_ephemeral
+    labels:
+      trazaap.validation: rnf11-2-ephemeral
+    environment:
+      POSTGRES_DB: trazaap_rnf11_2
+      POSTGRES_USER: trazaap_rnf11_2
+      POSTGRES_PASSWORD: ${RNF11_POSTGRES_PASSWORD:?variable requerida}
+    ports:
+      - "127.0.0.1:55434:5432"
+    tmpfs:
+      - /var/lib/postgresql/data:rw,noexec,nosuid,size=512m
+
+  keycloak-rnf11:
+    image: quay.io/keycloak/keycloak:26.7.0
+    container_name: trazaap_rnf11_2_keycloak_ephemeral
+    labels:
+      trazaap.validation: rnf11-2-ephemeral
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: rnf11-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${RNF11_KEYCLOAK_ADMIN_PASSWORD:?variable requerida}
+      KC_TEMP_ADMIN_PASSWORD: ${RNF11_TEMP_ADMIN_PASSWORD:?variable requerida}
+      KC_TEMP_MANAGER_PASSWORD: ${RNF11_TEMP_MANAGER_PASSWORD:?variable requerida}
+      KC_TEMP_OPERATOR_PASSWORD: ${RNF11_TEMP_OPERATOR_PASSWORD:?variable requerida}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:58080:8080"
+      - "127.0.0.1:59090:9000"
+    volumes:
+      - ./keycloak/trazaap-rnf11-realm.json:/opt/keycloak/data/import/trazaap-rnf11-realm.json:ro
+    tmpfs:
+      - /opt/keycloak/data/h2:rw,noexec,nosuid,size=256m
