@@ -15,6 +15,21 @@
     ]
   },
   "clientScopes": [
+    {
+      "name": "profile", "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true" },
+      "protocolMappers": [
+        { "name": "preferred username", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper", "config": { "user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" } }
+      ]
+    },
+    {
+      "name": "email", "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true" },
+      "protocolMappers": [
+        { "name": "email", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper", "config": { "user.attribute": "email", "claim.name": "email", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "email verified", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper", "config": { "user.attribute": "emailVerified", "claim.name": "email_verified", "jsonType.label": "boolean", "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" } }
+      ]
+    },
     { "name": "trazaap.read", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" } },
     { "name": "trazaap.operate", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" } },
     { "name": "trazaap.admin", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true" } },
@@ -33,9 +48,16 @@
       "redirectUris": ["http://127.0.0.1:3001/oauth/callback"],
       "webOrigins": ["http://127.0.0.1:3001"],
       "attributes": { "pkce.code.challenge.method": "S256" },
-      "defaultClientScopes": ["profile", "email", "roles", "trazaap.read"],
+      "defaultClientScopes": ["profile", "email", "trazaap.read"],
       "optionalClientScopes": ["trazaap.operate", "trazaap.admin", "epcis.query", "epcis.capture"],
       "protocolMappers": [
+        {
+          "name": "subject",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": { "access.token.claim": "true", "id.token.claim": "true" }
+        },
         {
           "name": "trazaap-api-audience",
           "protocol": "openid-connect",
@@ -49,6 +71,8 @@
   "users": [
     {
       "username": "admin-rnf11",
+      "firstName": "Administrador",
+      "lastName": "RNF11",
       "email": "admin-rnf11@invalid.local",
       "enabled": true,
       "emailVerified": true,
@@ -57,6 +81,8 @@
     },
     {
       "username": "gerente-rnf11",
+      "firstName": "Gerente",
+      "lastName": "RNF11",
       "email": "gerente-rnf11@invalid.local",
       "enabled": true,
       "emailVerified": true,
@@ -65,6 +91,8 @@
     },
     {
       "username": "operario-rnf11",
+      "firstName": "Operario",
+      "lastName": "RNF11",
       "email": "operario-rnf11@invalid.local",
       "enabled": true,
       "emailVerified": true,
