@@ -17,9 +17,15 @@ Durante la transición coexisten:
 - JWT HS256 legado (`AUTH_LEGACY_JWT_ENABLED=true`), necesario para no romper el login y las pruebas actuales.
 - access tokens OAuth JWT RS256 (`OAUTH_ENABLED=true`), validados por issuer, audience, algoritmo, expiración y JWKS.
 
+`autenticarJwt` es el único middleware de autenticación para las rutas internas y acepta el mecanismo habilitado por esas dos variables; RBAC continúa en `rolesMiddleware` y no se duplica. Las rutas `/api/epcis/*` agregan `requerirOAuth`, scopes y RBAC, por lo que nunca aceptan JWT legado. El portal `/api/public/*` conserva sus códigos externos y no exige OAuth. Los endpoints `/api/auth/oauth/exchange`, `/refresh` y `/logout` implementan el puente OAuth; el login interno existente permanece disponible durante la regresión legacy.
+
 Cada identidad OAuth se vincula explícitamente a un usuario interno activo mediante `oauth_identities`. El rol siempre se toma de PostgreSQL; no se confía en un rol enviado por el cliente. Desactivar al usuario invalida su acceso efectivo en la siguiente solicitud aunque el token siga criptográficamente vigente.
 
 Scopes mínimos propuestos: `trazaap.read`, `trazaap.operate`, `trazaap.admin`, `reports.read`, `epcis.query` y `epcis.capture`. Los endpoints EPCIS exigen access token OAuth, no aceptan JWT legado.
+
+Decisión de cierre: `CLIENT_CREDENTIALS NO REQUERIDO`. No existe un consumidor máquina-a-máquina identificado. Solo deberá revisarse si se acuerda una integración EPCIS entre servidores, un repositorio externo o un regulador con identidad técnica, scopes mínimos y responsable de credenciales.
+
+La revocación actual invalida el refresh token y cierra la sesión del frontend. Un access token ya emitido puede continuar válido hasta su expiración configurada (máximo local de 900 segundos); no se incorpora Redis ni blacklist distribuida sin un requisito explícito de revocación inmediata.
 
 ## EPCIS 2.0
 
@@ -37,7 +43,7 @@ EPCIS es una representación de interoperabilidad. PostgreSQL continúa como fue
 
 Órdenes de producción, saneamiento y alertas de vencimiento permanecen internos porque no hay correspondencia EPCIS inequívoca. La manufactura solo se emite si existen identificadores configurados para insumos y salida.
 
-Los identificadores se configuran en `epcis_identificadores_lote`. Nunca se generan GLN, GTIN, SSCC o EPC empresariales ficticios. Mientras no sean suministrados se responde `DATO_MAESTRO_EPCIS_PENDIENTE`.
+Los identificadores se configuran en `epcis_identificadores_lote`. Nunca se generan GLN, GTIN, SSCC o EPC empresariales ficticios. Su estado de cierre es `DATOS MAESTROS GS1 PENDIENTES DE LA EMPRESA`; mientras no sean suministrados se responde `DATO_MAESTRO_EPCIS_PENDIENTE`.
 
 ## Interfaces
 

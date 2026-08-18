@@ -2,54 +2,56 @@
 
 Este documento no acredita requisitos ni reemplaza el Plan de Pruebas.
 
-## Bloqueos funcionales
+## Decisiones cerradas en el cierre funcional
 
-- **RF03-B — BLOQUEADO POR DEFINICIÓN DEL FORMATO OFICIAL DEL LOTE.** El
-  generador actual es transaccional y único (`PREFIJO-AAAAMMDD-CONSECUTIVO`),
-  pero no incorpora literalmente la fecha de vencimiento ni un código de
-  fábrica diferenciado. Cambiarlo requiere aprobar formato, longitud,
-  compatibilidad y estrategia para lotes históricos.
+- **RF03-B — formato adoptado.** El lote se genera exclusivamente en backend
+  con el formato lógico `FAB-AAAAMMDD-AAAAMMDD-NNNN`: código de fábrica
+  configurable, fecha de fabricación, fecha de vencimiento y consecutivo
+  transaccional. Los lotes históricos se conservan sin reescritura.
+- **RF13 — ambos estados adoptados.** El sistema distingue
+  `proximo_vencimiento`, con umbral técnico configurable, y `vencido`. La
+  persistencia evita duplicar una alerta del mismo tipo para el mismo lote.
+- **RF16 — política segura adoptada.** Una devolución posterior al despacho
+  queda retenida y pendiente de disposición. Nunca incrementa automáticamente
+  el saldo disponible; cualquier reincorporación futura exige una decisión y
+  controles de inocuidad adicionales.
+
+## Pendientes de definición o validación externa
+
 - **RF04 — BLOQUEADO POR REGLA FUNCIONAL/INGENIERO DE ALIMENTOS.** La frase
   "no mayor de 4 °C ±2 °C" no determina inequívocamente si se acepta 2–6 °C,
   un máximo absoluto, qué productos aplican ni la acción ante desvío. Se
   conserva el rango configurable por producto.
-- **RF13 — BLOQUEADO POR DEFINICIÓN: ALERTA PREVIA VS LOTE YA VENCIDO.** El
-  bloqueo de despacho vencido existente se conserva; no se inventó una
-  anticipación.
 - **RF07/RF08 — BLOQUEADO POR VALIDACIÓN DEL INGENIERO DE ALIMENTOS.** Faltan
-  rangos, referencias, unidades y reglas de conformidad aprobadas. Debe
-  implementarse catálogo configurable antes de cargar valores.
+  rangos, referencias, unidades y reglas de conformidad aprobadas. El catálogo
+  configurable y su gestión administrativa ya están implementados; no se
+  cargaron valores ficticios.
 - **RF14 — campos normativos finales:** multilote (máximo 50), consolidación
   y Excel están implementados; el mapeo definitivo del Artículo 22 requiere
   validación externa.
 - **RF15 — listas de chequeo:** el motor acepta ítems extensibles, pero las
   plantillas finales requieren definición sanitaria.
-- **RF16 — inventario de devoluciones:** el registro y las decisiones están
-  implementados, pero no está definida la política de reincorporación; no se
-  creó una mutación de saldos especulativa.
 - Los despachos parciales y saldos de la entrega base se conservaron; cualquier
-  cambio de reservas o reincorporación queda sujeto a política aprobada.
+- **GS1:** GTIN, GLN, SSCC y EPC reales son datos maestros pendientes de la
+  empresa; el mapeo permanece configurable y las pruebas usan datos ficticios.
 
 ## PROPUESTA TÉCNICA RNF11
 
-La línea base exige API REST JSON, OAuth 2.0 y eventos GS1 EPCIS 2.0. Hoy la
-API REST responde JSON y usa JWT propio; no existe Authorization Server ni
-representación EPCIS.
+La línea base exige API REST JSON, OAuth 2.0 y eventos GS1 EPCIS 2.0. La base
+técnica y su validación efímera quedaron implementadas: OAuth/OIDC mediante un
+Authorization Server estándar, convivencia configurable con JWT legacy y una
+capa EPCIS 2.0 separada del dominio operativo.
 
-La implementación separada debería incorporar un proveedor OAuth/OIDC
-estándar, validación de access tokens por middleware, scopes equivalentes al
-RBAC interno, registro de clientes y rotación/revocación. Para EPCIS debe
-añadir un adaptador de eventos y endpoints de captura/consulta compatibles,
-sin reemplazar PostgreSQL ni Fabric. Conviene mapear primero cada evento
-Trazaap a EPCIS (identificadores, bizStep, disposition, readPoint y bizLocation)
-y versionar el contrato.
+La transición mantiene OAuth como mecanismo objetivo y JWT legacy como opción
+temporal explícita. RBAC continúa siendo una autorización única posterior a la
+autenticación. EPCIS aporta adaptadores y endpoints de captura/consulta sin
+reemplazar PostgreSQL ni Fabric.
 
-Alternativas: proveedor de identidad administrado o Keycloak/autohospedado;
-adaptador EPCIS interno o componente compatible mantenido. La migración debe
-permitir convivencia temporal JWT/OAuth, clientes piloto, scopes auditados y
-retiro posterior del JWT interno. Riesgos: ruptura de clientes, identidad de
-actores históricos, semántica GS1 incompleta, gestión de claves y mayor carga
-operativa. Complejidad relativa: **alta**, en un bloque arquitectónico propio.
+`client_credentials` no se requiere actualmente: solo deberá revisarse si se
+define un consumidor servidor-a-servidor real. El cierre de sesión revoca la
+sesión/refresh token cuando el proveedor lo permite; un access token emitido
+puede seguir válido hasta su expiración corta. No se añadió una blacklist
+distribuida sin requisito explícito.
 
 ## Base de datos y despliegue futuro
 
@@ -57,7 +59,9 @@ Aplicar en un ambiente nuevo, en orden: `001_schema_actual.sql`,
 `002_rf05_despachos_parciales.sql`, `003_rf02_equipos_fabricacion.sql`,
 `004_rf03a_envasado_embalado.sql`, `005_rf15_saneamiento.sql`,
 `006_rf16_devoluciones_no_conformidades.sql`,
-`007_rf17_documentos_minio.sql` y `008_rf07_rf08_controles_calidad.sql`.
+`007_rf17_documentos_minio.sql`, `008_rf07_rf08_controles_calidad.sql`,
+`009_rnf11_interoperabilidad.sql`, `010_rf03b_lote_automatico.sql`,
+`011_rf16_politica_inventario.sql` y `012_rf13_alertas_vencimiento.sql`.
 
 No se ejecutaron estas migraciones. Antes del despliegue debe existir respaldo,
 validación en una base efímera y revisión de datos históricos.
@@ -77,9 +81,9 @@ Quedaron implementados RF16, RF17/MinIO, la infraestructura configurable
 RF07/RF08 y RF14 multilote/Excel. MinIO quedó como perfil de infraestructura y
 no fue levantado. No se levantó Fabric ni se modificó el ambiente formal de QA.
 
-Persisten como validaciones humanas: política de reincorporación de
-devoluciones, rangos de calidad, plantillas de saneamiento y campos finales del
-Artículo 22.
+Persisten como validaciones humanas: productos/rangos/reacciones de
+refrigeración, rangos de calidad, plantillas de saneamiento, campos finales del
+Artículo 22 e identificadores empresariales GS1.
 
 ## Dependencias pendientes
 
