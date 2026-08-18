@@ -34,6 +34,7 @@ test('OAuth valida access token RS256, issuer, audience, expiracion y scopes', a
 test('OAuth rechaza token vencido, issuer incorrecto e identidad inactiva/no vinculada', async () => {
   await assert.rejects(async () => validarAccessTokenOAuth(await token({ expires: 0 }), { key: publicKey, issuer, audience, algorithms: ['RS256'] }));
   await assert.rejects(async () => validarAccessTokenOAuth(await token(), { key: publicKey, issuer: 'https://otro.example', audience, algorithms: ['RS256'] }));
+  await assert.rejects(async () => validarAccessTokenOAuth(await token({ expires: '16m' }), { key: publicKey, issuer, audience, algorithms: ['RS256'], maxAccessTokenSeconds: 900 }));
   await assert.rejects(async () => autenticarAccessTokenOAuth(await token(), {
     key: publicKey, issuer, audience, algorithms: ['RS256'], resolverUsuario: async () => null
   }), (error) => error.status === 401);

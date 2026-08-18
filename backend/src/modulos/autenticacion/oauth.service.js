@@ -28,6 +28,8 @@ export async function validarAccessTokenOAuth(token, opciones = {}) {
     algorithms,
     requiredClaims: ['sub', 'iat', 'exp']
   });
+  const duracionMaxima = opciones.maxAccessTokenSeconds ?? entorno.auth.maxAccessTokenSeconds;
+  if (resultado.payload.exp - resultado.payload.iat > duracionMaxima) throw new Error('Access token excede la vigencia permitida');
   return resultado.payload;
 }
 

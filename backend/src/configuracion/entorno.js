@@ -38,6 +38,7 @@ export const entorno = {
     redirectUri: process.env.OAUTH_REDIRECT_URI || '',
     scopes: process.env.OAUTH_SCOPES || 'openid profile trazaap.read',
     secureCookies: process.env.OAUTH_SECURE_COOKIES !== 'false',
+    maxAccessTokenSeconds: Number(process.env.OAUTH_MAX_ACCESS_TOKEN_SECONDS) || 900,
     algorithms: (process.env.OAUTH_ALLOWED_ALGORITHMS || 'RS256').split(',').map((value) => value.trim()).filter(Boolean)
   },
   postgres: {
