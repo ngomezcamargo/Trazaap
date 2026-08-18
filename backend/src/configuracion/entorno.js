@@ -30,6 +30,14 @@ export const entorno = {
     issuer: process.env.OAUTH_ISSUER || '',
     audience: process.env.OAUTH_AUDIENCE || '',
     jwksUri: process.env.OAUTH_JWKS_URI || '',
+    authorizationUrl: process.env.OAUTH_AUTHORIZATION_URL || '',
+    tokenUrl: process.env.OAUTH_TOKEN_URL || '',
+    revocationUrl: process.env.OAUTH_REVOCATION_URL || '',
+    clientId: process.env.OAUTH_CLIENT_ID || '',
+    clientSecret: process.env.OAUTH_CLIENT_SECRET || '',
+    redirectUri: process.env.OAUTH_REDIRECT_URI || '',
+    scopes: process.env.OAUTH_SCOPES || 'openid profile trazaap.read',
+    secureCookies: process.env.OAUTH_SECURE_COOKIES !== 'false',
     algorithms: (process.env.OAUTH_ALLOWED_ALGORITHMS || 'RS256').split(',').map((value) => value.trim()).filter(Boolean)
   },
   postgres: {

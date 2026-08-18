@@ -30,7 +30,7 @@ export function createApp() {
 
   app.use(helmet());
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: '1mb', strict: true }));
   app.use(morgan('dev'));
 
   const api = express.Router();
