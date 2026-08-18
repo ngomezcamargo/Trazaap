@@ -17,6 +17,7 @@ const nombresEventos = {
   registro_manufactura: 'FABRICACION',
   envasado_embalado: 'ENVASADO Y EMBALADO',
   devolucion_no_conformidad: 'DEVOLUCION / NO CONFORMIDAD',
+  control_calidad_lote: 'CONTROL DE CALIDAD E INOCUIDAD',
   ingreso_almacenamiento: 'INGRESO A ALMACENAMIENTO',
   control_almacenamiento: 'CONTROL DE ALMACENAMIENTO',
   salida_almacenamiento: 'SALIDA DE ALMACENAMIENTO',
@@ -152,6 +153,11 @@ function crearEventosReporte(data) {
   }
 
   const almacenamiento = data.almacenamiento;
+  for (const control of data.controlesCalidad || []) {
+    eventos.push({ tipoEvento: 'control_calidad_lote', idEntidad: control.id_control,
+      titulo: nombresEventos.control_calidad_lote, referencia: `Control #${control.id_control}`, lote: control.lote,
+      filas: [['Categoria', control.categoria], ['Parametro', control.parametro], ['Resultado', `${control.resultado_numerico ?? control.resultado_texto} ${control.unidad || ''}`], ['Referencia', control.referencia || '-'], ['Rango', `${control.limite_minimo ?? '-'} a ${control.limite_maximo ?? '-'}`], ['Conformidad', control.conformidad], ['Decision lote', control.decision_lote], ['Responsable', control.responsable_email], ['Fecha', fechaCorta(control.fecha_control)]] });
+  }
   for (const caso of data.devoluciones || []) {
     eventos.push({ tipoEvento: 'devolucion_no_conformidad', idEntidad: caso.id_caso,
       titulo: nombresEventos.devolucion_no_conformidad, referencia: `Caso #${caso.id_caso}`, lote: caso.lote,

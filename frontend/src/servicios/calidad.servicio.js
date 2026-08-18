@@ -1,0 +1,1 @@
+import{api}from'./api';export const calidadServicio={definiciones:()=>api.get('/calidad/definiciones?todas=true'),crearDefinicion:d=>api.post('/calidad/definiciones',d),manufacturas:()=>api.get('/calidad/manufacturas'),controles:()=>api.get('/calidad/controles'),crearControl:d=>api.post('/calidad/controles',d)};

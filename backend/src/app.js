@@ -22,6 +22,7 @@ import rutasEnvasado from './modulos/envasado/envasado.routes.js';
 import rutasSaneamiento from './modulos/saneamiento/saneamiento.routes.js';
 import rutasDevoluciones from './modulos/devoluciones/devoluciones.routes.js';
 import rutasDocumentos from './modulos/documentos/documentos.routes.js';
+import rutasCalidad from './modulos/calidad/calidad.routes.js';
 
 export function createApp() {
   const app = express();
@@ -52,6 +53,7 @@ export function createApp() {
   api.use('/saneamiento', rutasSaneamiento);
   api.use('/devoluciones', rutasDevoluciones);
   api.use('/documentos', rutasDocumentos);
+  api.use('/calidad', rutasCalidad);
   api.use('/inventario-insumos', rutasInventario);
   api.use('/traceability', rutasTrazabilidad);
   api.use('/public', rutasPublicas);
