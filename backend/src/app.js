@@ -31,7 +31,11 @@ export function createApp() {
 
   app.use(helmet());
   app.use(cors());
-  app.use(express.json({ limit: `${entorno.epcis.maxPayloadBytes}b`, strict: true }));
+  app.use(express.json({
+    limit: `${entorno.epcis.maxPayloadBytes}b`,
+    strict: true,
+    type: ['application/json', 'application/ld+json', 'application/vnd.gs1.epcis+json']
+  }));
   app.use(morgan('dev'));
 
   const api = express.Router();
