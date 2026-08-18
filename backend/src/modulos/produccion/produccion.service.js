@@ -497,6 +497,7 @@ export async function registrarManufacturaService(ordenId, productoOrdenId, data
           producto: producto.producto,
           lote_producido: registro.lote_producido,
           unidades_producidas: registro.unidades_producidas,
+          equipos_utilizados: registro.equipos_utilizados,
           consumos_inventario: consumosInventario,
           responsable_usuario_id: responsable.id,
           responsable_manufactura: responsable.email,

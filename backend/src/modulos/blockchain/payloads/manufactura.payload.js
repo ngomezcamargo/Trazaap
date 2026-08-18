@@ -36,6 +36,7 @@ export async function construirPayloadManufactura(idManufactura) {
       temperatura_real_inmersion_c: numero(row.temperatura_real_inmersion_c),
       hora_inicio: texto(row.hora_inicio),
       hora_fin: texto(row.hora_fin),
+      equipos_utilizados: (row.equipos_utilizados || []).map(texto),
       registrado_por: texto(row.registrado_por),
       registrado_por_usuario: texto(row.registrado_por_usuario_email),
       observaciones: texto(row.observaciones)

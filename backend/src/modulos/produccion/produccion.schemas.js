@@ -115,17 +115,11 @@ export const registroManufacturaSchema = z.object({
   temperatura_real_inmersion_c: z.coerce.number().optional().nullable(),
   hora_inicio: z.string().datetime(),
   hora_fin: z.string().datetime(),
+  equipos_utilizados: z.array(z.string().trim().min(2).max(120)).min(1).max(30),
   observaciones: z.string().optional().default('')
 }).superRefine((data, ctx) => {
   if (new Date(data.hora_fin).getTime() < new Date(data.hora_inicio).getTime()) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['hora_fin'], message: 'La hora de fin no puede ser anterior a la hora de inicio.' });
-  }
-  if (data.temperatura_almacenamiento_min_c > data.temperatura_almacenamiento_max_c) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['temperatura_almacenamiento_max_c'],
-      message: 'La temperatura maxima debe ser mayor o igual a la minima.'
-    });
   }
 });
 

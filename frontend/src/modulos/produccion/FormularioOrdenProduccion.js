@@ -91,6 +91,7 @@ const manufacturaVacia = () => ({
   temperatura_real_inmersion_c: '',
   hora_inicio: '',
   hora_fin: '',
+  equipos_utilizados: '',
   responsable_usuario_id: '',
   observaciones: ''
 });
@@ -358,6 +359,7 @@ export function FormularioOrdenProduccion() {
     try {
       const payload = {
         ...formManufactura,
+        equipos_utilizados: formManufactura.equipos_utilizados.split(',').map((equipo) => equipo.trim()).filter(Boolean),
         unidades_producidas: Number(formManufactura.unidades_producidas),
         tiempo_real_fermentacion_minutos: Number(formManufactura.tiempo_real_fermentacion_minutos || 0),
         temperatura_real_fermentacion_c: Number(formManufactura.temperatura_real_fermentacion_c || 0),
@@ -631,6 +633,7 @@ export function FormularioOrdenProduccion() {
                 <div className="campo"><label>Unidades producidas</label><input type="number" min="0" value={formManufactura.unidades_producidas} onChange={(e) => setFormManufactura({ ...formManufactura, unidades_producidas: e.target.value })} required /></div>
                 <div className="campo"><label>Hora inicio</label><input type="datetime-local" value={formManufactura.hora_inicio} onChange={(e) => setFormManufactura({ ...formManufactura, hora_inicio: e.target.value })} required /></div>
                 <div className="campo"><label>Hora fin</label><input type="datetime-local" value={formManufactura.hora_fin} onChange={(e) => setFormManufactura({ ...formManufactura, hora_fin: e.target.value })} required /></div>
+                <div className="campo"><label>Equipos utilizados</label><input value={formManufactura.equipos_utilizados} onChange={(e) => setFormManufactura({ ...formManufactura, equipos_utilizados: e.target.value })} placeholder="Horno 1, mezcladora 2" required /><small>Separe cada equipo con coma.</small></div>
                 <div className="campo"><label>Tiempo real fermentacion (min)</label><input type="number" min="0" value={formManufactura.tiempo_real_fermentacion_minutos} onChange={(e) => setFormManufactura({ ...formManufactura, tiempo_real_fermentacion_minutos: e.target.value })} required /></div>
                 <div className="campo"><label>Temperatura real fermentacion (C)</label><input type="number" value={formManufactura.temperatura_real_fermentacion_c} onChange={(e) => setFormManufactura({ ...formManufactura, temperatura_real_fermentacion_c: e.target.value })} required /></div>
                 <div className="campo"><label>Tiempo real horneado (min)</label><input type="number" min="0" value={formManufactura.tiempo_real_horneado_minutos} onChange={(e) => setFormManufactura({ ...formManufactura, tiempo_real_horneado_minutos: e.target.value })} required /></div>

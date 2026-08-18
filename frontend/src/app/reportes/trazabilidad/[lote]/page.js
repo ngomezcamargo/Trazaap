@@ -142,6 +142,7 @@ function crearEventosReporte(data) {
         ['Lote producido', manufactura.lote_producido],
         ['Fecha y hora inicio', fechaCorta(manufactura.hora_inicio)],
         ['Fecha y hora fin', fechaCorta(manufactura.hora_fin)],
+        ['Equipos utilizados', (manufactura.equipos_utilizados || []).join(', ') || '-'],
         ['Cantidad producida', manufactura.unidades_producidas],
         ['Responsable', manufactura.registrado_por || '-']
       ]

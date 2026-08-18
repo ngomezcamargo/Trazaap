@@ -386,6 +386,7 @@ export async function buscarProductosOrden(ordenId) {
        rm.temperatura_real_inmersion_c,
        rm.hora_inicio,
        rm.hora_fin,
+       rm.equipos_utilizados,
        rm.observaciones AS manufactura_observaciones,
        rm.registrado_por_usuario_id,
        rm.registrado_por,
@@ -470,10 +471,11 @@ export async function crearRegistroManufactura(data, db = poolPostgres) {
       temperatura_real_inmersion_c,
       hora_inicio,
       hora_fin,
+      equipos_utilizados,
       observaciones,
       registrado_por_usuario_id,
       registrado_por
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
     RETURNING *`,
     [
       data.id_orden_produccion,
@@ -489,6 +491,7 @@ export async function crearRegistroManufactura(data, db = poolPostgres) {
       data.temperatura_real_inmersion_c ?? null,
       data.hora_inicio,
       data.hora_fin,
+      data.equipos_utilizados,
       data.observaciones || '',
       data.registrado_por_usuario_id || null,
       data.registrado_por
