@@ -15,26 +15,35 @@ export async function listarCasos(lote = '') {
   return rows;
 }
 
-export async function buscarContextoLote(lote) {
-  const { rows } = await poolPostgres.query(`
+export async function buscarContextoLote(lote, db = poolPostgres) {
+  const { rows } = await db.query(`
     SELECT ipt.id_inventario, ipt.lote, ipt.producto, ipt.unidades_liberadas,
            ipt.unidades_despachadas, ipt.unidades_disponibles
     FROM inventario_producto_terminado ipt WHERE ipt.lote = $1`, [lote]);
   return rows[0] || null;
 }
 
-export async function buscarDetalleDespachado(idDespacho, lote) {
-  const { rows } = await poolPostgres.query(`
+export async function buscarDetalleDespachado(idDespacho, lote, db = poolPostgres) {
+  await db.query('SELECT pg_advisory_xact_lock($1)', [idDespacho]);
+  const { rows } = await db.query(`
     SELECT d.id_despacho, d.id_cliente, d.estado_despacho, dd.cantidad_despachada,
-           ipt.id_inventario, ipt.lote
+           ipt.id_inventario, ipt.lote,
+           COALESCE((
+             SELECT SUM(dnc.cantidad)
+             FROM devoluciones_no_conformidades dnc
+             WHERE dnc.id_despacho = d.id_despacho
+               AND dnc.id_inventario = ipt.id_inventario
+               AND dnc.tipo_caso = 'devolucion_post_despacho'
+           ), 0) AS cantidad_devuelta_registrada
     FROM despachos d JOIN despacho_detalle dd ON dd.id_despacho = d.id_despacho
     JOIN inventario_producto_terminado ipt ON ipt.id_inventario = dd.id_inventario_producto_terminado
-    WHERE d.id_despacho = $1 AND ipt.lote = $2`, [idDespacho, lote]);
+    WHERE d.id_despacho = $1 AND ipt.lote = $2
+    FOR UPDATE OF dd`, [idDespacho, lote]);
   return rows[0] || null;
 }
 
-export async function crearCaso(data) {
-  const { rows } = await poolPostgres.query(`
+export async function crearCaso(data, db = poolPostgres) {
+  const { rows } = await db.query(`
     INSERT INTO devoluciones_no_conformidades (
       tipo_caso, lote, id_inventario, id_cliente, id_despacho, cantidad,
       fecha_registro, motivo, accion, fecha_decision, responsable,
@@ -47,6 +56,21 @@ export async function crearCaso(data) {
       data.impacto_inventario, data.creado_por
     ]);
   return rows[0];
+}
+
+export async function ejecutarTransaccionDevolucion(callback) {
+  const client = await poolPostgres.connect();
+  try {
+    await client.query('BEGIN');
+    const resultado = await callback(client);
+    await client.query('COMMIT');
+    return resultado;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function resolverCaso(id, data) {
