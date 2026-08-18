@@ -19,14 +19,14 @@ Este documento no acredita requisitos ni reemplaza el Plan de Pruebas.
 - **RF07/RF08 — BLOQUEADO POR VALIDACIÓN DEL INGENIERO DE ALIMENTOS.** Faltan
   rangos, referencias, unidades y reglas de conformidad aprobadas. Debe
   implementarse catálogo configurable antes de cargar valores.
-- **RF14 — campos normativos finales:** el mapeo definitivo del Artículo 22
-  requiere validación externa. Siguen faltando multilote (máximo 50),
-  consolidación y Excel.
+- **RF14 — campos normativos finales:** multilote (máximo 50), consolidación
+  y Excel están implementados; el mapeo definitivo del Artículo 22 requiere
+  validación externa.
 - **RF15 — listas de chequeo:** el motor acepta ítems extensibles, pero las
   plantillas finales requieren definición sanitaria.
-- **RF16 — inventario de devoluciones:** no está definida la política de
-  reincorporación. El módulo continúa como brecha técnica; no se creó una
-  mutación de saldos especulativa.
+- **RF16 — inventario de devoluciones:** el registro y las decisiones están
+  implementados, pero no está definida la política de reincorporación; no se
+  creó una mutación de saldos especulativa.
 - Los despachos parciales y saldos de la entrega base se conservaron; cualquier
   cambio de reservas o reincorporación queda sujeto a política aprobada.
 
@@ -55,7 +55,9 @@ operativa. Complejidad relativa: **alta**, en un bloque arquitectónico propio.
 
 Aplicar en un ambiente nuevo, en orden: `001_schema_actual.sql`,
 `002_rf05_despachos_parciales.sql`, `003_rf02_equipos_fabricacion.sql`,
-`004_rf03a_envasado_embalado.sql`, `005_rf15_saneamiento.sql`.
+`004_rf03a_envasado_embalado.sql`, `005_rf15_saneamiento.sql`,
+`006_rf16_devoluciones_no_conformidades.sql`,
+`007_rf17_documentos_minio.sql` y `008_rf07_rf08_controles_calidad.sql`.
 
 No se ejecutaron estas migraciones. Antes del despliegue debe existir respaldo,
 validación en una base efímera y revisión de datos históricos.
@@ -69,8 +71,19 @@ formal. Si la organización versiona el paquete por cambios de contratos/tests,
 la sugerencia conservadora es siguiente versión menor y `sequence + 1`; los
 valores concretos deben obtenerse del lifecycle desplegado, no asumirse aquí.
 
-## Brechas técnicas que siguen abiertas
+## Estado técnico Sprint 4.2
 
-RF16 devoluciones/no conformidades, RF17 documentos/MinIO, RF14 multilote y
-Excel, y la infraestructura configurable RF07/RF08. No se preparó MinIO, no se
-levantó Fabric y no se modificó el ambiente formal de QA.
+Quedaron implementados RF16, RF17/MinIO, la infraestructura configurable
+RF07/RF08 y RF14 multilote/Excel. MinIO quedó como perfil de infraestructura y
+no fue levantado. No se levantó Fabric ni se modificó el ambiente formal de QA.
+
+Persisten como validaciones humanas: política de reincorporación de
+devoluciones, rangos de calidad, plantillas de saneamiento y campos finales del
+Artículo 22.
+
+## Dependencias pendientes
+
+El frontend conserva un aviso alto asociado a Next 14: resolverlo requiere una
+migración major a una línea soportada reciente. El backend conserva dos avisos
+moderados por `uuid` transitivo de ExcelJS; npm solo propone una operación
+breaking. Ninguno se forzó en este sprint.
