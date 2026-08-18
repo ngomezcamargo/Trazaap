@@ -29,6 +29,7 @@ import { construirPayloadOrdenProduccion } from './payloads/ordenProduccion.payl
 import { construirPayloadProductoFabricado } from './payloads/productoFabricado.payload.js';
 import { construirPayloadRecepcion } from './payloads/recepcion.payload.js';
 import { construirPayloadEnvasado } from './payloads/envasado.payload.js';
+import { construirPayloadSaneamiento } from './payloads/saneamiento.payload.js';
 import { fechaISO, fechaSimple, numero, ordenarValor, serializarEstable } from './payloads/helpers.js';
 import { encolarEventoBlockchain } from './outbox.repository.js';
 
@@ -45,7 +46,8 @@ const constructoresPayload = {
   ingreso_almacenamiento: construirPayloadIngresoAlmacenamiento,
   control_almacenamiento: construirPayloadControlAlmacenamiento,
   salida_almacenamiento: construirPayloadSalidaAlmacenamiento,
-  envasado_embalado: construirPayloadEnvasado
+  envasado_embalado: construirPayloadEnvasado,
+  actividad_saneamiento: construirPayloadSaneamiento
 };
 
 export { ordenarValor, serializarEstable };

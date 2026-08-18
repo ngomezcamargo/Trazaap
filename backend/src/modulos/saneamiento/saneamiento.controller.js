@@ -1,0 +1,1 @@
+import{crearSaneamientoService,listarSaneamientoService}from'./saneamiento.service.js';export async function listar(req,res){res.json(await listarSaneamientoService())}export async function crear(req,res){res.status(201).json(await crearSaneamientoService(req.body,req.usuario))}

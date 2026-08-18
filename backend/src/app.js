@@ -19,6 +19,7 @@ import rutasClientes from './modulos/clientes/clientes.routes.js';
 import rutasDespachos from './modulos/despachos/despachos.routes.js';
 import rutasUsuarios from './modulos/usuarios/usuarios.routes.js';
 import rutasEnvasado from './modulos/envasado/envasado.routes.js';
+import rutasSaneamiento from './modulos/saneamiento/saneamiento.routes.js';
 
 export function createApp() {
   const app = express();
@@ -46,6 +47,7 @@ export function createApp() {
   api.use('/despachos', rutasDespachos);
   api.use('/usuarios', rutasUsuarios);
   api.use('/envasado', rutasEnvasado);
+  api.use('/saneamiento', rutasSaneamiento);
   api.use('/inventario-insumos', rutasInventario);
   api.use('/traceability', rutasTrazabilidad);
   api.use('/public', rutasPublicas);

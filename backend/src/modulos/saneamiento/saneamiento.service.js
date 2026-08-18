@@ -1,0 +1,2 @@
+import { registrarEventoCritico } from '../blockchain/blockchain.service.js';import { crearSaneamiento,listarSaneamiento } from './saneamiento.repository.js';
+export const listarSaneamientoService=()=>listarSaneamiento();export async function crearSaneamientoService(d,u){const r=await crearSaneamiento(d,u.sub);const blockchain=d.estado==='ejecutada'?await registrarEventoCritico('actividad_saneamiento',r.id_actividad,u.email):null;return {registro:r,blockchain};}
