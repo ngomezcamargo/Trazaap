@@ -43,8 +43,8 @@ router.get('/productos', rolesMiddleware('gerente', 'operario'), manejarAsync(li
 router.get('/productos/:productoId', rolesMiddleware('gerente', 'operario'), manejarAsync(obtenerDetalleProductoFabricadoController));
 router.get('/recepciones-disponibles', rolesMiddleware('administrador'), manejarAsync(listarRecepcionesAceptadasController));
 router.post('/ordenes', rolesMiddleware('administrador'), validarSolicitud(crearOrdenProduccionSchema), manejarAsync(crearOrdenProduccionController));
-router.post('/productos', rolesMiddleware('administrador'), validarSolicitud(productoFabricadoSchema), manejarAsync(crearProductoFabricadoController));
-router.put('/productos/:productoId', rolesMiddleware('administrador'), validarSolicitud(productoFabricadoSchema), manejarAsync(actualizarProductoFabricadoController));
+router.post('/productos', rolesMiddleware('administrador', 'gerente'), validarSolicitud(productoFabricadoSchema), manejarAsync(crearProductoFabricadoController));
+router.put('/productos/:productoId', rolesMiddleware('administrador', 'gerente'), validarSolicitud(productoFabricadoSchema), manejarAsync(actualizarProductoFabricadoController));
 router.post('/calcular-insumos', rolesMiddleware('administrador'), validarSolicitud(calcularInsumosSchema), manejarAsync(calcularInsumosRequeridosController));
 router.put('/ordenes/:id/estado', rolesMiddleware('administrador'), validarSolicitud(actualizarEstadoOrdenSchema), manejarAsync(actualizarEstadoOrdenController));
 router.post('/ordenes/:id/materias', rolesMiddleware('administrador'), validarSolicitud(asociarMateriasSchema), manejarAsync(asociarMateriasController));

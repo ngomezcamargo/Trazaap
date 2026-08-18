@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ErrorOperacionFabric } from '../src/modulos/blockchain/fabric.client.js';
 import { crearLiberacionService } from '../src/modulos/liberacion/liberacion.service.js';
 import { confirmarRecepcionClienteService } from '../src/modulos/publico/publico.service.js';
 
@@ -8,11 +7,6 @@ const dataLiberacion = {
   id_manufactura: 8,
   responsable_liberacion_usuario_id: 3,
   tipo_empaque: 'Bolsa sellada',
-  numero_factura: 'FAC-100',
-  conductor: 'Conductor prueba',
-  placa_vehiculo: 'ABC123',
-  limpieza_vehiculo: 'cumple',
-  documentacion_dotacion: 'cumple',
   unidades_empacadas: 10,
   peso_neto: 5,
   fecha_vencimiento: '2099-12-31',
@@ -32,165 +26,131 @@ const manufactura = {
   producto: 'Bagel',
   tamano_presentacion: 'mediano',
   lote_producido: 'LT-001',
+  id_almacenamiento: 4,
+  estado_almacenamiento: 'listo_para_liberacion',
   unidades_producidas: 10,
-  requiere_inmersion: true,
-  tiempo_fermentacion_minutos: 30,
-  temperatura_fermentacion_c: 28,
-  tiempo_horneado_minutos: 20,
-  temperatura_horneado_c: 180,
-  tiempo_inmersion_minutos: 2,
-  temperatura_inmersion_c: 90,
-  tiempo_real_fermentacion_minutos: 30,
-  temperatura_real_fermentacion_c: 28,
-  tiempo_real_horneado_minutos: 20,
-  temperatura_real_horneado_c: 180,
-  tiempo_real_inmersion_minutos: 2,
-  temperatura_real_inmersion_c: 90
+  fecha_vencimiento_calculada: '2099-12-31'
 };
 
-function dependenciasBase(overrides = {}) {
+function dependenciasLiberacion(overrides = {}) {
   return {
     buscarManufacturaPorId: async () => manufactura,
     buscarLiberacionPorManufactura: async () => null,
     buscarUsuarioOperarioPorId: async () => ({ id: 3, email: 'operario@trazaap.local' }),
-    validarDespachoCritico: async () => ({ permitido: true, estado: 'APROBADO', motivos: [] }),
     ejecutarTransaccionLiberacion: async (callback) => callback({ query: async () => ({ rows: [] }) }),
-    crearLiberacionProducto: async () => ({
-      ...dataLiberacion,
+    crearLiberacionProducto: async (data) => ({
+      ...data,
       id_liberacion: 5,
-      id_orden_produccion: 17,
-      id_producto: 2,
-      lote_producido: 'LT-001',
-      unidades_producidas: 10,
-      fecha_liberacion: new Date().toISOString()
+      fecha_liberacion: '2026-08-08T12:00:00.000Z'
     }),
-    registrarDespachoCritico: async () => ({
-      estado: 'DESPACHADO',
-      transactionId: 'tx-despacho',
-      decisionChaincode: { permitido: true, estado: 'APROBADO', motivos: [] }
+    crearInventarioProductoTerminadoDesdeLiberacion: async (data) => ({
+      ...data,
+      id_inventario: 15,
+      unidades_disponibles: data.unidades_liberadas
     }),
-    crearInventarioProductoTerminadoDesdeLiberacion: async () => ({ id_inventario: 2 }),
+    actualizarAlmacenamientoDesdeLiberacion: async (_id, estado) => ({ id_almacenamiento: 4, estado }),
     registrarEventoTrazabilidad: async () => {},
-    registrarEventoCritico: async () => ({ estado: 'REGISTRADO' }),
+    encolarEventoBlockchain: async (evento) => evento,
     ...overrides
   };
 }
 
-test('devuelve 503 y no escribe si Fabric no esta disponible al validar despacho', async () => {
-  let transacciones = 0;
+test('liberar 10 unidades crea inventario disponible y no crea un despacho', async () => {
+  const inventarios = [];
+  const eventosOutbox = [];
+  const deps = dependenciasLiberacion({
+    crearInventarioProductoTerminadoDesdeLiberacion: async (data) => {
+      inventarios.push(data);
+      return { ...data, id_inventario: 15, unidades_disponibles: data.unidades_liberadas };
+    },
+    encolarEventoBlockchain: async (evento) => {
+      eventosOutbox.push(evento);
+      return evento;
+    }
+  });
+
+  const resultado = await crearLiberacionService(
+    dataLiberacion,
+    { email: 'calidad@trazaap.local' },
+    deps
+  );
+
+  assert.equal(inventarios.length, 1);
+  assert.equal(inventarios[0].unidades_liberadas, 10);
+  assert.equal(inventarios[0].estado, 'disponible');
+  assert.equal(resultado.inventario_producto_terminado.unidades_disponibles, 10);
+  assert.deepEqual(
+    eventosOutbox.map((evento) => evento.operacion || 'registrar'),
+    ['registrar', 'inicializar_inventario_terminado']
+  );
+  assert.equal(eventosOutbox.some((evento) => evento.tipoEvento === 'despacho_producto'), false);
+});
+
+test('una liberacion rechazada no ingresa producto al inventario despachable', async () => {
   let inventarios = 0;
-  const deps = dependenciasBase({
-    validarDespachoCritico: async () => {
-      throw new ErrorOperacionFabric('FABRIC_NO_DISPONIBLE', 'Fabric no disponible', 503);
-    },
-    ejecutarTransaccionLiberacion: async () => {
-      transacciones += 1;
-    },
+  let estadoAlmacenamiento = '';
+  const deps = dependenciasLiberacion({
     crearInventarioProductoTerminadoDesdeLiberacion: async () => {
       inventarios += 1;
+    },
+    actualizarAlmacenamientoDesdeLiberacion: async (_id, estado) => {
+      estadoAlmacenamiento = estado;
+      return { id_almacenamiento: 4, estado };
     }
   });
 
-  await assert.rejects(
-    crearLiberacionService(dataLiberacion, { email: 'operario@trazaap.local' }, deps),
-    (error) => error.status === 503
-  );
-  assert.equal(transacciones, 0);
+  const resultado = await crearLiberacionService({
+    ...dataLiberacion,
+    estado_liberacion: 'rechazado',
+    motivo_rechazo: 'Empaque no conforme'
+  }, { email: 'calidad@trazaap.local' }, deps);
+
   assert.equal(inventarios, 0);
+  assert.equal(estadoAlmacenamiento, 'rechazado');
+  assert.equal(resultado.inventario_producto_terminado, null);
 });
 
-test('un despacho bloqueado no descuenta inventario ni crea liberacion', async () => {
-  let liberaciones = 0;
-  let inventarios = 0;
-  const deps = dependenciasBase({
-    validarDespachoCritico: async () => ({
-      permitido: false,
-      estado: 'BLOQUEADO',
-      motivos: ['Temperatura de horneado fuera del rango permitido']
-    }),
-    crearLiberacionProducto: async () => {
-      liberaciones += 1;
-    },
-    crearInventarioProductoTerminadoDesdeLiberacion: async () => {
-      inventarios += 1;
-    }
-  });
-
+test('no permite liberar mas unidades que las producidas', async () => {
   await assert.rejects(
-    crearLiberacionService(dataLiberacion, { email: 'operario@trazaap.local' }, deps),
-    (error) => error.status === 422 && error.details.motivos.length === 1
+    crearLiberacionService(
+      { ...dataLiberacion, unidades_empacadas: 11 },
+      { email: 'calidad@trazaap.local' },
+      dependenciasLiberacion()
+    ),
+    (error) => error.status === 400 && /superar/.test(error.message)
   );
-  assert.equal(liberaciones, 0);
-  assert.equal(inventarios, 0);
 });
 
-test('un error al registrar despacho revierte la transaccion operativa', async () => {
-  let committed = false;
-  let inventoryWrites = 0;
-  const deps = dependenciasBase({
-    ejecutarTransaccionLiberacion: async (callback) => {
-      try {
-        const result = await callback({ query: async () => ({ rows: [] }) });
-        committed = true;
-        return result;
-      } catch (error) {
-        committed = false;
-        throw error;
-      }
-    },
-    registrarDespachoCritico: async () => {
-      throw new ErrorOperacionFabric('FABRIC_NO_DISPONIBLE', 'Fabric no disponible', 503);
-    },
-    crearInventarioProductoTerminadoDesdeLiberacion: async () => {
-      inventoryWrites += 1;
-    }
-  });
-
-  await assert.rejects(
-    crearLiberacionService(dataLiberacion, { email: 'operario@trazaap.local' }, deps),
-    (error) => error.status === 503
-  );
-  assert.equal(committed, false);
-  assert.equal(inventoryWrites, 0);
-});
-
-function trazabilidadCliente() {
-  return {
-    lote: 'LT-001',
-    liberacion: {
-      id_liberacion: 5,
-      numero_factura: 'FAC-100',
-      estado_liberacion: 'aprobado'
-    },
-    produccion: { orden: {}, manufactura: {} }
-  };
-}
-
-test('la confirmacion publica solo llega a Fabric con credenciales validas', async () => {
-  let llamadasFabric = 0;
+test('la confirmacion publica se vincula al despacho autorizado, no solamente al lote', async () => {
+  let confirmaciones = 0;
   const deps = {
-    consultarTrazabilidadPorLote: async () => trazabilidadCliente(),
-    confirmarRecepcionEnFabric: async () => {
-      llamadasFabric += 1;
-      return { estado: 'RECIBIDO_POR_CLIENTE', transactionId: 'tx-confirmacion' };
+    buscarDespachoCliente: async ({ factura }) => (
+      factura === 'FAC-100' ? { id_despacho: 20, numero_factura: 'FAC-100' } : null
+    ),
+    registrarConfirmacionEntregaService: async (data) => {
+      confirmaciones += 1;
+      return { ...data, estado: 'PENDIENTE_BLOCKCHAIN' };
     }
   };
 
   const confirmado = await confirmarRecepcionClienteService({
     lote: 'LT-001',
     factura: 'FAC-100',
-    receptor: 'Cliente prueba'
+    receptor: 'Cliente prueba',
+    temperatura_entrega_c: 18
   }, deps);
-  assert.equal(confirmado.confirmado, true);
-  assert.equal(llamadasFabric, 1);
+  assert.equal(confirmado.id_despacho, 20);
+  assert.equal(confirmado.temperatura_entrega_c, 18);
+  assert.equal(confirmaciones, 1);
 
   await assert.rejects(
     confirmarRecepcionClienteService({
       lote: 'LT-001',
       factura: 'FACTURA-INCORRECTA',
-      receptor: 'Cliente prueba'
+      receptor: 'Cliente prueba',
+      temperatura_entrega_c: 18
     }, deps),
     (error) => error.status === 403
   );
-  assert.equal(llamadasFabric, 1);
+  assert.equal(confirmaciones, 1);
 });

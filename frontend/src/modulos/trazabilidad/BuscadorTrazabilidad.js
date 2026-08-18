@@ -99,12 +99,55 @@ export function BuscadorTrazabilidad() {
               <p><strong>Materias primas:</strong> {(data.recepciones || []).length}</p>
               <p><strong>Proveedor principal:</strong> {data.proveedor ? `${data.proveedor.nombre} (${data.proveedor.nit})` : 'sin registro directo'}</p>
             </div>
+            <div className="tarjeta">
+              <h4>Almacenamiento</h4>
+              <p><strong>Estado:</strong> {data.almacenamiento?.estado || 'sin registro'}</p>
+              <p><strong>Ubicacion:</strong> {data.almacenamiento?.ubicacion || '-'}</p>
+              <p><strong>Rango esperado:</strong> {data.almacenamiento ? `${data.almacenamiento.temperatura_min_esperada_c} a ${data.almacenamiento.temperatura_max_esperada_c} C` : '-'}</p>
+              <p><strong>Controles:</strong> {data.almacenamiento?.controles?.length || 0}</p>
+            </div>
+            <div className="tarjeta">
+              <h4>Inventario terminado</h4>
+              <p><strong>Liberadas:</strong> {data.inventarioProductoTerminado?.unidades_liberadas ?? '-'}</p>
+              <p><strong>Despachadas:</strong> {data.inventarioProductoTerminado?.unidades_despachadas ?? '-'}</p>
+              <p><strong>Disponibles:</strong> {data.inventarioProductoTerminado?.unidades_disponibles ?? '-'}</p>
+              <p><strong>Estado:</strong> {data.inventarioProductoTerminado?.estado || 'sin registro'}</p>
+            </div>
           </div>
 
           <div className="tarjeta" style={{ marginTop: 12 }}>
             <h4>Linea de tiempo del lote</h4>
             <div className="flujo" style={{ fontSize: '0.95rem' }}>
-              Recepcion de materias primas <span>{'->'}</span> Inspeccion <span>{'->'}</span> Produccion <span>{'->'}</span> Despacho <span>{'->'}</span> Confirmacion del cliente
+              Recepcion de materias primas <span>{'->'}</span> Inspeccion <span>{'->'}</span> Produccion <span>{'->'}</span> Almacenamiento <span>{'->'}</span> Liberacion <span>{'->'}</span> Despacho(s) <span>{'->'}</span> Confirmacion por cliente
+            </div>
+          </div>
+
+          <div className="tarjeta" style={{ marginTop: 12 }}>
+            <h4>Despachos parciales del lote</h4>
+            <div className="tabla-contenedor">
+              <table className="tabla">
+                <thead><tr><th>Despacho</th><th>Cliente</th><th>Factura</th><th>Cantidad del lote</th><th>Fecha</th><th>Transporte</th><th>Estado</th><th>Confirmacion</th><th>Blockchain</th></tr></thead>
+                <tbody>
+                  {(data.despachos || []).map((despacho) => {
+                    const detallesLote = (despacho.detalles || []).filter((detalle) => String(detalle.lote) === String(data.lote));
+                    const cantidad = detallesLote.reduce((total, detalle) => total + Number(detalle.cantidad_despachada || 0), 0);
+                    return (
+                      <tr key={despacho.id_despacho}>
+                        <td>{despacho.codigo_despacho}</td>
+                        <td>{despacho.cliente || 'No disponible'}</td>
+                        <td>{despacho.numero_factura}</td>
+                        <td>{cantidad}</td>
+                        <td>{despacho.fecha_despacho ? new Date(despacho.fecha_despacho).toLocaleString() : '-'}</td>
+                        <td>{despacho.conductor || '-'} / {despacho.placa_vehiculo || '-'}</td>
+                        <td><span className={`estado ${despacho.estado_despacho}`}>{despacho.estado_despacho}</span></td>
+                        <td>{despacho.estado_confirmacion || 'Pendiente'}</td>
+                        <td><span className={`estado ${despacho.blockchain ? 'verificado' : 'pendiente'}`}>{despacho.blockchain ? 'Verificado' : 'Pendiente'}</span></td>
+                      </tr>
+                    );
+                  })}
+                  {!(data.despachos || []).length && <tr><td colSpan={9}>El lote aun no tiene despachos.</td></tr>}
+                </tbody>
+              </table>
             </div>
           </div>
 

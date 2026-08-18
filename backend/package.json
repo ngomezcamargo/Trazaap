@@ -10,6 +10,7 @@
     "seed": "node scripts/seed.js",
     "seed:materias": "node scripts/seed-materias-primas-pruebas.js",
     "blockchain:sync": "node scripts/sync-blockchain.js",
+    "test:rf05": "node scripts/verificar-rf05.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {

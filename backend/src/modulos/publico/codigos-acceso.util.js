@@ -18,18 +18,34 @@ export function generarCodigoCliente({ lote, numeroFactura, idLiberacion }) {
   return generarCodigo('CLI', lote, [numeroFactura, idLiberacion]);
 }
 
+export function generarCodigoClienteDespacho(datos) {
+  const codigoDespacho = datos.codigoDespacho || datos.codigo_despacho;
+  const numeroFactura = datos.numeroFactura || datos.numero_factura;
+  return generarCodigo('CLI', codigoDespacho, [numeroFactura]);
+}
+
 export function generarCodigosAcceso(data) {
   const lote = data.lote || data.loteConsultado;
   const liberacion = data.liberacion || {};
   const orden = data.produccion?.orden || {};
   const manufactura = data.produccion?.manufactura || {};
 
+  const despacho = data.despachos?.find((item) => !item.es_heredado) || null;
   return {
-    cliente: generarCodigoCliente({
-      lote,
-      numeroFactura: liberacion.numero_factura,
-      idLiberacion: liberacion.id_liberacion
-    }),
+    cliente: despacho
+      ? generarCodigoClienteDespacho(despacho)
+      : generarCodigoCliente({
+          lote,
+          numeroFactura: liberacion.numero_factura,
+          idLiberacion: liberacion.id_liberacion
+        }),
+    clientes: (data.despachos || [])
+      .filter((item) => !item.es_heredado)
+      .map((item) => ({
+        id_despacho: item.id_despacho,
+        codigo_despacho: item.codigo_despacho,
+        codigo: generarCodigoClienteDespacho(item)
+      })),
     auditoria: generarCodigo('AUD', lote, [orden.id, manufactura.id_manufactura, liberacion.id_liberacion])
   };
 }

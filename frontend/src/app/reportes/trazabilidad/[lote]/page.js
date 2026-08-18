@@ -14,6 +14,9 @@ const nombresEventos = {
   orden_produccion: 'ORDEN DE PRODUCCION',
   producto_fabricado_configurado: 'PRODUCTO / RECETA',
   registro_manufactura: 'FABRICACION',
+  ingreso_almacenamiento: 'INGRESO A ALMACENAMIENTO',
+  control_almacenamiento: 'CONTROL DE ALMACENAMIENTO',
+  salida_almacenamiento: 'SALIDA DE ALMACENAMIENTO',
   liberacion_producto: 'EMBALADO / LIBERACION',
   inventario_producto_terminado: 'INVENTARIO PRODUCTO TERMINADO',
   inventario_materia_prima: 'INVENTARIO MATERIA PRIMA',
@@ -144,6 +147,61 @@ function crearEventosReporte(data) {
     });
   }
 
+  const almacenamiento = data.almacenamiento;
+  if (almacenamiento) {
+    eventos.push({
+      tipoEvento: 'ingreso_almacenamiento',
+      idEntidad: almacenamiento.id_almacenamiento,
+      titulo: nombresEventos.ingreso_almacenamiento,
+      referencia: `Almacenamiento #${almacenamiento.id_almacenamiento}`,
+      lote: almacenamiento.lote_producido || data.lote,
+      filas: [
+        ['Ubicacion', almacenamiento.ubicacion || '-'],
+        ['Fecha de ingreso', fechaCorta(almacenamiento.fecha_ingreso)],
+        ['Temperatura de ingreso', `${almacenamiento.temperatura_ingreso_c} C`],
+        ['Rango esperado', `${almacenamiento.temperatura_min_esperada_c} a ${almacenamiento.temperatura_max_esperada_c} C`],
+        ['Estado', almacenamiento.estado || '-'],
+        ['Responsable', almacenamiento.responsable_ingreso_email || '-']
+      ]
+    });
+
+    for (const control of almacenamiento.controles || []) {
+      eventos.push({
+        tipoEvento: 'control_almacenamiento',
+        idEntidad: control.id_control,
+        titulo: nombresEventos.control_almacenamiento,
+        referencia: `Control #${control.id_control}`,
+        lote: almacenamiento.lote_producido || data.lote,
+        filas: [
+          ['Fecha', fechaCorta(control.fecha_control)],
+          ['Temperatura', `${control.temperatura_c} C`],
+          ['Condicion general', control.condicion_general || '-'],
+          ['Resultado', control.resultado || '-'],
+          ['Observaciones', control.observaciones || '-'],
+          ['Responsable', control.responsable_control_email || '-']
+        ]
+      });
+    }
+
+    if (almacenamiento.fecha_salida) {
+      eventos.push({
+        tipoEvento: 'salida_almacenamiento',
+        idEntidad: almacenamiento.id_almacenamiento,
+        titulo: nombresEventos.salida_almacenamiento,
+        referencia: `Salida #${almacenamiento.id_almacenamiento}`,
+        lote: almacenamiento.lote_producido || data.lote,
+        filas: [
+          ['Fecha de salida', fechaCorta(almacenamiento.fecha_salida)],
+          ['Temperatura de salida', `${almacenamiento.temperatura_salida_c} C`],
+          ['Estado del producto', almacenamiento.estado_producto_salida || '-'],
+          ['Decision', almacenamiento.decision_salida || '-'],
+          ['Observaciones', almacenamiento.observaciones_salida || '-'],
+          ['Responsable', almacenamiento.responsable_salida_email || '-']
+        ]
+      });
+    }
+  }
+
   if (data.liberacion) {
     eventos.push({
       tipoEvento: 'liberacion_producto',
@@ -155,9 +213,8 @@ function crearEventosReporte(data) {
         ['Lote liberado', data.liberacion.lote_producido || data.lote],
         ['Fecha y hora', fechaCorta(data.liberacion.fecha_liberacion || data.liberacion.created_at)],
         ['Cantidad liberada', data.liberacion.unidades_empacadas || data.liberacion.unidades_producidas || '-'],
-        ['Factura', data.liberacion.numero_factura || '-'],
-        ['Conductor', data.liberacion.conductor || '-'],
-        ['Placa', data.liberacion.placa_vehiculo || '-'],
+        ['Tipo de empaque', data.liberacion.tipo_empaque || '-'],
+        ['Fecha de vencimiento', fechaCorta(data.liberacion.fecha_vencimiento)],
         ['Resultado', data.liberacion.estado_liberacion || '-']
       ]
     });
@@ -173,11 +230,76 @@ function crearEventosReporte(data) {
       filas: [
         ['Producto', data.inventarioProductoTerminado.producto || '-'],
         ['Lote', data.inventarioProductoTerminado.lote || data.lote],
-        ['Unidades disponibles', data.inventarioProductoTerminado.unidades_disponibles || '-'],
+        ['Unidades liberadas', data.inventarioProductoTerminado.unidades_liberadas ?? '-'],
+        ['Unidades reservadas', data.inventarioProductoTerminado.unidades_reservadas ?? '-'],
+        ['Unidades despachadas', data.inventarioProductoTerminado.unidades_despachadas ?? '-'],
+        ['Unidades disponibles', data.inventarioProductoTerminado.unidades_disponibles ?? '-'],
         ['Fecha de vencimiento', fechaCorta(data.inventarioProductoTerminado.fecha_vencimiento)],
         ['Estado', data.inventarioProductoTerminado.estado || '-']
       ]
     });
+  }
+
+  for (const despacho of data.despachos || []) {
+    const detalles = (despacho.detalles || []).filter((detalle) => String(detalle.lote) === String(data.lote));
+    const cantidad = detalles.reduce((total, detalle) => total + Number(detalle.cantidad_despachada || 0), 0);
+    const evidencia = despacho.blockchain;
+    eventos.push({
+      tipoEvento: 'despacho_producto',
+      idEntidad: despacho.id_despacho,
+      titulo: nombresEventos.despacho_producto,
+      referencia: despacho.codigo_despacho || `Despacho #${despacho.id_despacho}`,
+      lote: data.lote,
+      filas: [
+        ['Cliente', despacho.cliente || 'No disponible en registro heredado'],
+        ['Factura', despacho.numero_factura || '-'],
+        ['Cantidad despachada de este lote', cantidad],
+        ['Fecha y hora', fechaCorta(despacho.fecha_despacho)],
+        ['Conductor', despacho.conductor || '-'],
+        ['Placa', despacho.placa_vehiculo || '-'],
+        ['Temperatura de salida', despacho.temperatura_salida_c == null ? '-' : `${despacho.temperatura_salida_c} C`],
+        ['Temperatura de transporte', despacho.temperatura_transporte_c == null ? '-' : `${despacho.temperatura_transporte_c} C`],
+        ['Estado', despacho.estado_despacho || '-']
+      ],
+      validacion: evidencia
+        ? {
+            estadoBlockchain: 'VERIFICADO',
+            hashActual: evidencia.hashRegistro,
+            hashBlockchain: evidencia.hashRegistro,
+            mensaje: 'Saldo y condiciones del despacho validados por chaincode',
+            transactionId: evidencia.txId,
+            decision: evidencia.decisionChaincode?.estado || evidencia.estado,
+            motivos: evidencia.decisionChaincode?.motivos || []
+          }
+        : obtenerValidacion(data, 'despacho_producto', despacho.id_despacho)
+    });
+
+    if (despacho.id_confirmacion) {
+      const confirmacionFabric = despacho.confirmacionBlockchain;
+      eventos.push({
+        tipoEvento: 'confirmacion_recepcion_cliente',
+        idEntidad: despacho.id_despacho,
+        titulo: nombresEventos.confirmacion_recepcion_cliente,
+        referencia: `Confirmacion de ${despacho.codigo_despacho}`,
+        lote: data.lote,
+        filas: [
+          ['Cliente', despacho.cliente || '-'],
+          ['Receptor', despacho.receptor || '-'],
+          ['Fecha y hora', fechaCorta(despacho.fecha_recepcion)],
+          ['Temperatura de entrega', despacho.temperatura_confirmada_c == null ? '-' : `${despacho.temperatura_confirmada_c} C`],
+          ['Estado', despacho.estado_confirmacion || '-']
+        ],
+        validacion: confirmacionFabric
+          ? {
+              estadoBlockchain: 'VERIFICADO',
+              hashActual: confirmacionFabric.hashRegistro,
+              hashBlockchain: confirmacionFabric.hashRegistro,
+              mensaje: 'Confirmacion del cliente registrada de forma inmutable',
+              transactionId: confirmacionFabric.txId
+            }
+          : obtenerValidacion(data, 'confirmacion_recepcion_cliente', despacho.id_despacho)
+      });
+    }
   }
 
   for (const movimiento of data.movimientosInventario || []) {
@@ -213,7 +335,10 @@ function crearEventosReporte(data) {
     });
   }
 
-  for (const decision of data.decisionesBlockchain || []) {
+  for (const decision of (data.decisionesBlockchain || []).filter((item) => ![
+    'despacho_producto',
+    'confirmacion_recepcion_cliente'
+  ].includes(item.tipoEvento))) {
     const motivos = decision.decisionChaincode?.motivos || [];
     eventos.push({
       tipoEvento: decision.tipoEvento,
@@ -367,7 +492,7 @@ export default function ReporteTrazabilidadPage() {
             <p><b>Reporte No:</b><br />{reporteId}</p>
             <p><b>Fecha de generacion:</b><br />{fechaCorta(generadoEn)}</p>
             <p><b>Generado por:</b><br />{usuario?.email || 'usuario@trazaap.local'}</p>
-            <p><b>Codigo cliente:</b><br />{data.codigosAcceso?.cliente || '-'}</p>
+            <p><b>Despachos registrados:</b><br />{data.despachos?.length || 0}</p>
             <p><b>Codigo auditoria:</b><br />{data.codigosAcceso?.auditoria || '-'}</p>
           </div>
         </header>
@@ -399,7 +524,7 @@ export default function ReporteTrazabilidadPage() {
                 Escanee el codigo QR o visite el enlace para verificar la autenticidad del reporte:<br />
                 <b>{verificarUrl}</b><br />
                 ID de verificacion: <b>{reporteId}</b><br />
-                Codigo cliente: <b>{data.codigosAcceso?.cliente || '-'}</b><br />
+                Despachos parciales: <b>{data.despachos?.length || 0}</b><br />
                 Codigo auditoria: <b>{data.codigosAcceso?.auditoria || '-'}</b>
               </p>
             </div>

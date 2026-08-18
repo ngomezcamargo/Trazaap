@@ -2,6 +2,15 @@ import bcrypt from 'bcryptjs';
 import { poolPostgres } from '../src/configuracion/postgresql.js';
 import { CATALOGO_PRODUCTOS } from './catalogo-productos.js';
 
+function prefijoLoteDesdeNombre(nombre) {
+  const palabras = String(nombre || '').trim().toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  if (!palabras.length) return 'PR';
+  if (palabras[0] === 'BAGEL') return 'BG';
+  if (palabras.length > 1) return palabras.map((palabra) => palabra[0]).join('').slice(0, 5).padEnd(2, 'X');
+  const consonantes = palabras[0].replace(/[AEIOU]/g, '');
+  return (consonantes.length >= 2 ? consonantes : palabras[0]).slice(0, 5).padEnd(2, 'X');
+}
+
 async function seedRoles() {
   const roles = ['administrador', 'gerente', 'operario'];
   for (const role of roles) {
@@ -124,6 +133,7 @@ async function seedCatalogoProductos() {
       let productoId = existente.rows[0]?.id;
       const valoresProducto = [
         ficha.nombre,
+        ficha.prefijo_lote || prefijoLoteDesdeNombre(ficha.nombre),
         ficha.categoria,
         ficha.descripcion,
         ficha.vida_util_dias,
@@ -142,43 +152,44 @@ async function seedCatalogoProductos() {
         await client.query(
           `UPDATE productos_fabricados
            SET nombre = $1,
-               categoria = $2,
-               descripcion = $3,
-               vida_util_dias = $4,
-               condiciones_almacenamiento = $5,
-               estado = $6,
-               requiere_inmersion = $7,
-               tiempo_fermentacion_minutos = $8,
-               temperatura_fermentacion_c = $9,
-               tiempo_horneado_minutos = $10,
-               temperatura_horneado_c = $11,
-               tiempo_inmersion_minutos = $12,
-               temperatura_inmersion_c = $13,
+               prefijo_lote = COALESCE(prefijo_lote, $2),
+               categoria = $3,
+               descripcion = $4,
+               vida_util_dias = $5,
+               condiciones_almacenamiento = $6,
+               estado = $7,
+               requiere_inmersion = $8,
+               tiempo_fermentacion_minutos = $9,
+               temperatura_fermentacion_c = $10,
+               tiempo_horneado_minutos = $11,
+               temperatura_horneado_c = $12,
+               tiempo_inmersion_minutos = $13,
+               temperatura_inmersion_c = $14,
                updated_at = NOW()
-           WHERE id = $14`,
+           WHERE id = $15`,
           [...valoresProducto, productoId]
         );
       } else {
         const creado = tieneTamanoProducto
           ? await client.query(
             `INSERT INTO productos_fabricados (
-               nombre, categoria, descripcion, vida_util_dias, condiciones_almacenamiento,
+               nombre, prefijo_lote, categoria, descripcion, vida_util_dias, condiciones_almacenamiento,
                estado, requiere_inmersion, tiempo_fermentacion_minutos,
                temperatura_fermentacion_c, tiempo_horneado_minutos, temperatura_horneado_c,
                tiempo_inmersion_minutos, temperatura_inmersion_c, tamano_presentacion
              )
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
              RETURNING id`,
             [...valoresProducto, ficha.variantes[0].tamano_presentacion]
           )
           : await client.query(
             `INSERT INTO productos_fabricados (
-               nombre, categoria, descripcion, vida_util_dias, condiciones_almacenamiento,
+               nombre, prefijo_lote, categoria, descripcion, vida_util_dias, condiciones_almacenamiento,
                estado, requiere_inmersion, tiempo_fermentacion_minutos,
                temperatura_fermentacion_c, tiempo_horneado_minutos, temperatura_horneado_c,
                tiempo_inmersion_minutos, temperatura_inmersion_c
              )
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
              RETURNING id`,
             valoresProducto
           );

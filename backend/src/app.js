@@ -13,6 +13,10 @@ import rutasProduccion from './modulos/produccion/produccion.routes.js';
 import rutasLiberacion from './modulos/liberacion/liberacion.routes.js';
 import rutasInventario from './modulos/inventario/inventario.routes.js';
 import rutasPublicas from './modulos/publico/publico.routes.js';
+import rutasAlmacenamiento from './modulos/almacenamiento/almacenamiento.routes.js';
+import rutasBlockchain from './modulos/blockchain/outbox.routes.js';
+import rutasClientes from './modulos/clientes/clientes.routes.js';
+import rutasDespachos from './modulos/despachos/despachos.routes.js';
 
 export function createApp() {
   const app = express();
@@ -34,6 +38,10 @@ export function createApp() {
   api.use('/materias-primas', rutasMateriasPrimas);
   api.use('/produccion', rutasProduccion);
   api.use('/liberacion', rutasLiberacion);
+  api.use('/almacenamiento', rutasAlmacenamiento);
+  api.use('/blockchain', rutasBlockchain);
+  api.use('/clientes', rutasClientes);
+  api.use('/despachos', rutasDespachos);
   api.use('/inventario-insumos', rutasInventario);
   api.use('/traceability', rutasTrazabilidad);
   api.use('/public', rutasPublicas);

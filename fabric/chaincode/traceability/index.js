@@ -11,6 +11,10 @@ const CODIGOS_ERROR = {
   RECEPCION_YA_CONFIRMADA: 'RECEPCION_YA_CONFIRMADA',
   DESPACHO_BLOQUEADO: 'DESPACHO_BLOQUEADO',
   DESPACHO_DUPLICADO: 'DESPACHO_DUPLICADO',
+  INVENTARIO_NO_ENCONTRADO: 'INVENTARIO_NO_ENCONTRADO',
+  INVENTARIO_DUPLICADO: 'INVENTARIO_DUPLICADO',
+  LOTE_SIN_EXISTENCIAS: 'LOTE_SIN_EXISTENCIAS',
+  STOCK_INSUFICIENTE: 'STOCK_INSUFICIENTE',
   ALERTA_DUPLICADA: 'ALERTA_DUPLICADA',
   LOTE_NO_VENCIDO: 'LOTE_NO_VENCIDO'
 };
@@ -174,6 +178,82 @@ class TraceabilityContract extends Contract {
     });
   }
 
+  async inicializarInventarioProductoTerminado(ctx, datosJson) {
+    this._requireText(datosJson, 'datosInventario');
+    const datos = this._stable(this._parsePayload(datosJson));
+    const idInventario = String(datos.idInventario || '');
+    const lote = String(datos.lote || '');
+    this._requireText(idInventario, 'idInventario');
+    this._requireText(lote, 'lote');
+
+    const liberadas = Number(datos.unidadesLiberadas);
+    const despachadas = Number(datos.unidadesDespachadas || 0);
+    const disponibles = Number(datos.unidadesDisponibles ?? (liberadas - despachadas));
+    if (![liberadas, despachadas, disponibles].every(Number.isInteger) || liberadas < 0 || despachadas < 0 || disponibles < 0) {
+      throw new Error('Las cantidades del inventario deben ser enteros no negativos');
+    }
+    if (liberadas !== despachadas + disponibles) {
+      throw new Error('El saldo inicial no coincide con las unidades liberadas');
+    }
+
+    const saldoKey = this._saldoInventarioKey(idInventario);
+    const saldoData = await ctx.stub.getState(saldoKey);
+    if (saldoData?.length) {
+      const existente = JSON.parse(saldoData.toString());
+      const coincide = existente.lote === lote &&
+        Number(existente.unidadesLiberadas) === liberadas &&
+        Number(existente.unidadesDespachadas) === despachadas &&
+        Number(existente.unidadesDisponibles) === disponibles;
+      if (!coincide) {
+        this._throw(CODIGOS_ERROR.INVENTARIO_DUPLICADO, `El inventario ${idInventario} ya fue inicializado con otro saldo`);
+      }
+      return JSON.stringify({ evento: existente.evento || null, saldo: existente, idempotente: true });
+    }
+
+    const estado = disponibles === 0
+      ? 'DESPACHADO_TOTAL'
+      : despachadas > 0 ? 'DESPACHO_PARCIAL' : 'DISPONIBLE';
+    const saldo = {
+      idInventario,
+      idLiberacion: String(datos.idLiberacion || ''),
+      lote,
+      producto: String(datos.producto || ''),
+      unidadesLiberadas: liberadas,
+      unidadesDespachadas: despachadas,
+      unidadesDisponibles: disponibles,
+      estado,
+      actualizadoEn: this._txTimestamp(ctx),
+      txId: ctx.stub.getTxID()
+    };
+
+    const eventKey = this._eventKey('inventario_producto_terminado', idInventario);
+    const eventData = await ctx.stub.getState(eventKey);
+    const event = eventData?.length
+      ? JSON.parse(eventData.toString())
+      : this._crearEvento(ctx, {
+          tipoEvento: 'inventario_producto_terminado',
+          idEntidad: idInventario,
+          lote,
+          actor: String(datos.actor || 'sistema'),
+          fechaEvento: String(datos.fechaEvento || this._txTimestamp(ctx)),
+          payload: datos.payload || { inventario: { ...datos, estado } },
+          estado: 'REGISTRADO'
+        });
+
+    if (!eventData?.length) await this._guardarEvento(ctx, eventKey, event);
+    await ctx.stub.putState(saldoKey, Buffer.from(JSON.stringify({ ...saldo, evento: eventKey })));
+    return JSON.stringify({ evento: event, saldo });
+  }
+
+  async consultarSaldoInventario(ctx, idInventario) {
+    this._requireText(idInventario, 'idInventario');
+    const data = await ctx.stub.getState(this._saldoInventarioKey(idInventario));
+    if (!data?.length) {
+      this._throw(CODIGOS_ERROR.INVENTARIO_NO_ENCONTRADO, `No existe saldo Fabric para el inventario ${idInventario}`);
+    }
+    return data.toString();
+  }
+
   async validarDespacho(ctx, datosJson) {
     this._requireText(datosJson, 'datosDespacho');
     const datos = this._stable(this._parsePayload(datosJson));
@@ -183,119 +263,144 @@ class TraceabilityContract extends Contract {
   async registrarDespacho(ctx, datosJson) {
     this._requireText(datosJson, 'datosDespacho');
     const datos = this._stable(this._parsePayload(datosJson));
+    this._requireText(String(datos.idEntidad || ''), 'idEntidad');
+    const eventKey = this._eventKey('despacho_producto', String(datos.idEntidad));
+    const hashSolicitud = this._hashPayload(datos);
+    const existenteData = await ctx.stub.getState(eventKey);
+    if (existenteData?.length) {
+      const existente = JSON.parse(existenteData.toString());
+      if (existente.hashSolicitud === hashSolicitud) return JSON.stringify(existente);
+      this._throw(CODIGOS_ERROR.DESPACHO_DUPLICADO, `El despacho ${datos.idEntidad} ya existe con otra informacion`);
+    }
+
     const decision = await this._evaluarDespacho(ctx, datos);
 
     if (!decision.permitido) {
-      this._throw(CODIGOS_ERROR.DESPACHO_BLOQUEADO, JSON.stringify(decision));
+      this._throw(decision.codigo || CODIGOS_ERROR.DESPACHO_BLOQUEADO, JSON.stringify(decision));
     }
 
-    this._requireText(String(datos.idEntidad || ''), 'idEntidad');
-    const eventKey = this._eventKey('despacho_producto', String(datos.idEntidad));
-    if (await this._exists(ctx, eventKey) || await this._exists(ctx, this._dispatchKey(datos.lote))) {
-      this._throw(CODIGOS_ERROR.DESPACHO_DUPLICADO, `El lote ${datos.lote} ya fue despachado`);
+    const saldosResultantes = [];
+    for (const evaluado of decision.saldos) {
+      const saldoKey = this._saldoInventarioKey(evaluado.idInventario);
+      const saldoData = await ctx.stub.getState(saldoKey);
+      if (!saldoData?.length) {
+        this._throw(CODIGOS_ERROR.INVENTARIO_NO_ENCONTRADO, `No existe saldo para ${evaluado.idInventario}`);
+      }
+      const saldo = JSON.parse(saldoData.toString());
+      const cantidad = Number(evaluado.cantidadDespachada);
+      if (Number(saldo.unidadesDisponibles) <= 0) {
+        this._throw(CODIGOS_ERROR.LOTE_SIN_EXISTENCIAS, `El lote ${saldo.lote} no tiene unidades disponibles`);
+      }
+      if (cantidad > Number(saldo.unidadesDisponibles)) {
+        this._throw(CODIGOS_ERROR.STOCK_INSUFICIENTE, `El lote ${saldo.lote} solo tiene ${saldo.unidadesDisponibles} unidades disponibles`);
+      }
+      const unidadesDisponibles = Number(saldo.unidadesDisponibles) - cantidad;
+      const unidadesDespachadas = Number(saldo.unidadesDespachadas) + cantidad;
+      const actualizado = {
+        ...saldo,
+        unidadesDisponibles,
+        unidadesDespachadas,
+        estado: unidadesDisponibles === 0 ? 'DESPACHADO_TOTAL' : 'DESPACHO_PARCIAL',
+        actualizadoEn: this._txTimestamp(ctx),
+        txId: ctx.stub.getTxID()
+      };
+      await ctx.stub.putState(saldoKey, Buffer.from(JSON.stringify(actualizado)));
+      saldosResultantes.push(actualizado);
     }
 
+    const lotePrincipal = decision.lotes[0];
     const event = this._crearEvento(ctx, {
       tipoEvento: 'despacho_producto',
       idEntidad: String(datos.idEntidad),
-      lote: datos.lote,
+      lote: lotePrincipal,
       actor: String(datos.actor || 'sistema'),
       fechaEvento: String(datos.fechaEvento || this._txTimestamp(ctx)),
       payload: {
         despacho: datos,
-        decisionChaincode: decision
+        decisionChaincode: decision,
+        saldosResultantes
       },
       estado: 'DESPACHADO',
       extra: {
-        decisionChaincode: decision
+        lotes: decision.lotes,
+        decisionChaincode: decision,
+        hashSolicitud
       }
     });
 
     await this._guardarEvento(ctx, eventKey, event);
-    await ctx.stub.putState(this._dispatchKey(datos.lote), Buffer.from(eventKey));
     return JSON.stringify(event);
   }
 
-  async confirmarRecepcionCliente(
-    ctx,
-    lote,
-    numeroFactura,
-    codigoCliente,
-    fechaRecepcion,
-    actor,
-    observaciones = ''
-  ) {
-    this._requireText(lote, 'lote');
-    this._requireText(fechaRecepcion, 'fechaRecepcion');
-    this._requireText(actor, 'actor');
-    if (!String(numeroFactura || '').trim() && !String(codigoCliente || '').trim()) {
+  async confirmarRecepcionCliente(ctx, datosJson) {
+    this._requireText(datosJson, 'datosConfirmacion');
+    const datos = this._stable(this._parsePayload(datosJson));
+    const idDespacho = String(datos.idDespacho || '');
+    const idConfirmacion = String(datos.idConfirmacion || '');
+    this._requireText(idDespacho, 'idDespacho');
+    this._requireText(idConfirmacion, 'idConfirmacion');
+    this._requireText(String(datos.fechaRecepcion || ''), 'fechaRecepcion');
+    this._requireText(String(datos.actor || ''), 'actor');
+    if (!String(datos.numeroFactura || '').trim() && !String(datos.codigoCliente || '').trim()) {
       throw new Error('numeroFactura o codigoCliente es requerido');
     }
 
-    const events = await this._obtenerEventosPorLote(ctx, lote);
-    if (!events.length) {
-      this._throw(CODIGOS_ERROR.LOTE_NO_ENCONTRADO, `No existe evidencia blockchain para el lote ${lote}`);
+    const dispatchData = await ctx.stub.getState(this._eventKey('despacho_producto', idDespacho));
+    if (!dispatchData?.length) {
+      this._throw(CODIGOS_ERROR.EVENTO_NO_ENCONTRADO, `No existe el despacho ${idDespacho}`);
     }
-
-    const dispatch = events.find((item) => item.tipoEvento === 'despacho_producto');
-    const release = events.find((item) => (
-      item.tipoEvento === 'liberacion_producto' &&
-      item.payload?.liberacion?.estado_liberacion === 'aprobado'
-    ));
-    const source = dispatch || release;
-    if (!source) {
-      this._throw(CODIGOS_ERROR.DESPACHO_BLOQUEADO, 'El lote no tiene liberacion o despacho aprobado');
-    }
-
-    const dispatchData = source.payload?.despacho || source.payload?.liberacion || {};
-    const facturaLedger = this._normalizeCredential(dispatchData.numeroFactura || dispatchData.numero_factura);
-    const codigoLedger = this._normalizeCredential(dispatchData.codigoCliente || dispatchData.codigo_cliente);
+    const dispatch = JSON.parse(dispatchData.toString());
+    const despacho = dispatch.payload?.despacho || {};
+    const facturaLedger = this._normalizeCredential(despacho.numeroFactura || despacho.numero_factura);
+    const codigoLedger = this._normalizeCredential(despacho.codigoCliente || despacho.codigo_cliente);
     const facturaValida = Boolean(
-      facturaLedger && this._normalizeCredential(numeroFactura) === facturaLedger
+      facturaLedger && this._normalizeCredential(datos.numeroFactura) === facturaLedger
     );
     const codigoValido = Boolean(
-      codigoLedger && this._normalizeCredential(codigoCliente) === codigoLedger
+      codigoLedger && this._normalizeCredential(datos.codigoCliente) === codigoLedger
     );
 
     if (!facturaValida && !codigoValido) {
       this._throw(CODIGOS_ERROR.CREDENCIALES_CLIENTE_INVALIDAS, 'La factura o el codigo no corresponde al lote');
     }
 
-    const confirmationKey = this._eventKey('confirmacion_recepcion_cliente', lote);
+    const confirmationKey = this._confirmationKey(idDespacho);
     if (await this._exists(ctx, confirmationKey)) {
-      this._throw(CODIGOS_ERROR.RECEPCION_YA_CONFIRMADA, `El lote ${lote} ya fue confirmado por el cliente`);
+      const existente = JSON.parse((await ctx.stub.getState(confirmationKey)).toString());
+      if (String(existente.payload?.confirmacion?.idConfirmacion) === idConfirmacion) {
+        return JSON.stringify(existente);
+      }
+      this._throw(CODIGOS_ERROR.RECEPCION_YA_CONFIRMADA, `El despacho ${idDespacho} ya fue confirmado por el cliente`);
     }
 
     const event = this._crearEvento(ctx, {
       tipoEvento: 'confirmacion_recepcion_cliente',
-      idEntidad: lote,
-      lote,
-      actor,
-      fechaEvento: fechaRecepcion,
+      idEntidad: idDespacho,
+      lote: dispatch.lote,
+      actor: datos.actor,
+      fechaEvento: datos.fechaRecepcion,
       payload: {
         confirmacion: {
-          lote,
+          idConfirmacion,
+          idDespacho,
+          lotes: dispatch.lotes || [dispatch.lote],
           numeroFactura: facturaLedger,
-          fechaRecepcion,
-          receptor: actor,
-          observaciones: String(observaciones || '')
+          fechaRecepcion: datos.fechaRecepcion,
+          receptor: datos.actor,
+          temperaturaEntregaC: Number(datos.temperaturaEntregaC),
+          observaciones: String(datos.observaciones || '')
         }
       },
       estado: 'RECIBIDO_POR_CLIENTE',
       extra: {
+        lotes: dispatch.lotes || [dispatch.lote],
         confirmado: true,
-        fechaConfirmacion: fechaRecepcion
+        fechaConfirmacion: datos.fechaRecepcion
       }
     });
 
     await this._guardarEvento(ctx, confirmationKey, event);
-    return JSON.stringify({
-      confirmado: true,
-      estado: event.estado,
-      lote,
-      fechaConfirmacion: fechaRecepcion,
-      txId: event.txId
-    });
+    return JSON.stringify(event);
   }
 
   async registrarAlertaVencimiento(ctx, datosJson) {
@@ -309,10 +414,6 @@ class TraceabilityContract extends Contract {
     if (await this._exists(ctx, alertKey)) {
       this._throw(CODIGOS_ERROR.ALERTA_DUPLICADA, `Ya existe una alerta de vencimiento para ${datos.lote}`);
     }
-    if (await this._exists(ctx, this._dispatchKey(datos.lote))) {
-      this._throw(CODIGOS_ERROR.DESPACHO_DUPLICADO, `El lote ${datos.lote} ya fue despachado`);
-    }
-
     const hoy = this._txTimestamp(ctx).slice(0, 10);
     if (String(datos.fechaVencimiento).slice(0, 10) > hoy) {
       this._throw(CODIGOS_ERROR.LOTE_NO_VENCIDO, `El lote ${datos.lote} todavia no esta vencido`);
@@ -382,60 +483,24 @@ class TraceabilityContract extends Contract {
   async _evaluarDespacho(ctx, datos) {
     const motivos = [];
     const reglas = [];
+    const saldos = [];
+    let codigo = null;
     const agregarRegla = (regla, cumple, mensaje) => {
       reglas.push({ regla, cumple: Boolean(cumple), mensaje: cumple ? 'Cumple' : mensaje });
       if (!cumple) motivos.push(mensaje);
     };
 
-    const lote = String(datos.lote || '');
-    const idManufactura = String(datos.idManufactura || '');
-    const manufacturaData = idManufactura
-      ? await ctx.stub.getState(this._eventKey('registro_manufactura', idManufactura))
-      : Buffer.alloc(0);
-    const manufactura = manufacturaData?.length ? JSON.parse(manufacturaData.toString()) : null;
-    agregarRegla('manufactura_registrada', Boolean(
-      manufactura
-    ), 'No existe evidencia Fabric de la manufactura asociada');
+    const idDespacho = String(datos.idEntidad || '');
+    agregarRegla('despacho_identificado', Boolean(idDespacho), 'El identificador del despacho es obligatorio');
     agregarRegla(
-      'manufactura_corresponde_lote',
-      Boolean(manufactura && manufactura.lote === lote),
-      'La manufactura indicada no corresponde al lote que se intenta despachar'
+      'despacho_no_registrado',
+      Boolean(idDespacho && !(await this._exists(ctx, this._eventKey('despacho_producto', idDespacho)))),
+      'El despacho ya fue registrado'
     );
-    agregarRegla(
-      'lote_no_despachado',
-      Boolean(lote && !(await this._exists(ctx, this._dispatchKey(lote)))),
-      'El lote ya fue despachado previamente'
-    );
-    agregarRegla(
-      'estado_aprobado',
-      datos.estadoLiberacion === 'aprobado',
-      `El estado de liberacion ${datos.estadoLiberacion || 'no informado'} no permite despacho`
-    );
+    agregarRegla('cliente_identificado', Boolean(String(datos.cliente?.nombre || '').trim()), 'El cliente receptor es obligatorio');
     agregarRegla('factura_registrada', Boolean(String(datos.numeroFactura || '').trim()), 'El numero de factura es obligatorio');
     agregarRegla('conductor_identificado', Boolean(String(datos.transporte?.conductor || '').trim()), 'El conductor es obligatorio');
     agregarRegla('placa_registrada', Boolean(String(datos.transporte?.placaVehiculo || '').trim()), 'La placa del vehiculo es obligatoria');
-
-    const fechaVencimiento = String(datos.fechaVencimiento || '').slice(0, 10);
-    const hoy = this._txTimestamp(ctx).slice(0, 10);
-    agregarRegla(
-      'lote_no_vencido',
-      Boolean(fechaVencimiento && fechaVencimiento >= hoy),
-      'El lote se encuentra vencido'
-    );
-
-    const validaciones = datos.validaciones || {};
-    const nombresValidaciones = {
-      etiquetaVerificada: 'La etiqueta no fue verificada',
-      loteVisible: 'El lote no es visible',
-      fechaVencimientoVisible: 'La fecha de vencimiento no es visible',
-      empaqueConforme: 'El empaque no es conforme',
-      productoBuenEstado: 'El producto no se encuentra en buen estado',
-      verificacionEnvase: 'La verificacion del envase no es conforme'
-    };
-    for (const [campo, mensaje] of Object.entries(nombresValidaciones)) {
-      agregarRegla(campo, validaciones[campo] === true, mensaje);
-    }
-
     agregarRegla(
       'limpieza_vehiculo',
       datos.transporte?.limpiezaVehiculo === 'cumple',
@@ -447,34 +512,106 @@ class TraceabilityContract extends Contract {
       'La documentacion y dotacion del conductor no cumple'
     );
 
-    for (const control of Array.isArray(datos.controlesCriticos) ? datos.controlesCriticos : []) {
-      const valor = Number(control.valor);
-      const minimo = Number(control.minimo);
-      const maximo = Number(control.maximo);
-      const cumple = Number.isFinite(valor) && Number.isFinite(minimo) && Number.isFinite(maximo) &&
-        minimo <= maximo && valor >= minimo && valor <= maximo;
-      agregarRegla(
-        `control_${control.variable}`,
-        cumple,
-        `${control.etiqueta || control.variable} fuera del rango permitido (${control.minimo} - ${control.maximo})`
-      );
-    }
-
-    const disponibles = Number(datos.inventarioDisponible);
-    const solicitadas = Number(datos.unidadesDespachar);
+    const detalles = Array.isArray(datos.detalles) ? datos.detalles : [];
+    agregarRegla('detalle_registrado', detalles.length > 0, 'El despacho debe contener al menos un lote');
+    const idsInventario = detalles.map((detalle) => String(detalle.idInventario || ''));
     agregarRegla(
-      'inventario_suficiente',
-      Number.isFinite(disponibles) && Number.isFinite(solicitadas) && solicitadas > 0 && disponibles >= solicitadas,
-      'No existe inventario suficiente de producto terminado'
+      'inventarios_no_repetidos',
+      new Set(idsInventario).size === idsInventario.length,
+      'Un inventario no puede repetirse dentro del mismo despacho'
     );
+
+    const lotes = [];
+    for (const detalle of detalles) {
+      const idInventario = String(detalle.idInventario || '');
+      const lote = String(detalle.lote || '');
+      const prefijo = `inventario_${idInventario || 'sin_id'}`;
+      if (lote && !lotes.includes(lote)) lotes.push(lote);
+      agregarRegla(`${prefijo}_identificado`, Boolean(idInventario), 'El inventario del detalle es obligatorio');
+
+      const saldoData = idInventario
+        ? await ctx.stub.getState(this._saldoInventarioKey(idInventario))
+        : Buffer.alloc(0);
+      const saldo = saldoData?.length ? JSON.parse(saldoData.toString()) : null;
+      agregarRegla(`${prefijo}_registrado_fabric`, Boolean(saldo), `No existe saldo Fabric para el inventario ${idInventario}`);
+      agregarRegla(`${prefijo}_lote_corresponde`, Boolean(saldo && saldo.lote === lote), `El inventario ${idInventario} no corresponde al lote ${lote}`);
+      agregarRegla(`${prefijo}_liberacion_aprobada`, detalle.estadoLiberacion === 'aprobado', `El lote ${lote} no tiene liberacion aprobada`);
+      agregarRegla(
+        `${prefijo}_almacenamiento_conforme`,
+        ['liberado', 'despacho_parcial'].includes(detalle.almacenamiento?.estado),
+        `El lote ${lote} no completo almacenamiento y liberacion antes del despacho`
+      );
+
+      const cantidad = Number(detalle.cantidadDespachada);
+      const disponibles = Number(saldo?.unidadesDisponibles);
+      const cantidadValida = Number.isInteger(cantidad) && cantidad > 0;
+      agregarRegla(`${prefijo}_cantidad_valida`, cantidadValida, `La cantidad del lote ${lote} debe ser un entero mayor que cero`);
+      const tieneExistencias = Boolean(saldo && Number.isFinite(disponibles) && disponibles > 0);
+      agregarRegla(`${prefijo}_con_existencias`, tieneExistencias, `El lote ${lote} no tiene productos disponibles`);
+      const stockSuficiente = Boolean(tieneExistencias && cantidadValida && cantidad <= disponibles);
+      agregarRegla(
+        `${prefijo}_stock_suficiente`,
+        stockSuficiente,
+        `El lote ${lote} solo tiene ${Number.isFinite(disponibles) ? disponibles : 0} unidades disponibles`
+      );
+      if (!tieneExistencias && saldo) codigo = CODIGOS_ERROR.LOTE_SIN_EXISTENCIAS;
+      else if (!stockSuficiente && saldo && cantidadValida) codigo = codigo || CODIGOS_ERROR.STOCK_INSUFICIENTE;
+
+      const fechaVencimiento = String(detalle.fechaVencimiento || '').slice(0, 10);
+      const fechaDespacho = String(datos.fechaEvento || this._txTimestamp(ctx)).slice(0, 10);
+      agregarRegla(
+        `${prefijo}_no_vencido`,
+        Boolean(fechaVencimiento && fechaVencimiento >= fechaDespacho),
+        `El lote ${lote} se encuentra vencido`
+      );
+
+      const minimo = Number(detalle.temperaturaMinEsperadaC);
+      const maximo = Number(detalle.temperaturaMaxEsperadaC);
+      const temperaturaSalida = Number(datos.temperaturaSalidaC);
+      const temperaturaTransporte = Number(datos.transporte?.temperaturaTransporteC);
+      const rangoValido = Number.isFinite(minimo) && Number.isFinite(maximo) && minimo <= maximo;
+      agregarRegla(
+        `${prefijo}_temperatura_salida`,
+        Boolean(rangoValido && Number.isFinite(temperaturaSalida) && temperaturaSalida >= minimo && temperaturaSalida <= maximo),
+        `La temperatura de salida del lote ${lote} esta fuera del rango ${minimo} - ${maximo} C`
+      );
+      agregarRegla(
+        `${prefijo}_temperatura_transporte`,
+        Boolean(rangoValido && Number.isFinite(temperaturaTransporte) && temperaturaTransporte >= minimo && temperaturaTransporte <= maximo),
+        `La temperatura de transporte del lote ${lote} esta fuera del rango ${minimo} - ${maximo} C`
+      );
+
+      for (const control of Array.isArray(detalle.controlesCriticos) ? detalle.controlesCriticos : []) {
+        const valor = Number(control.valor);
+        const controlMinimo = Number(control.minimo);
+        const controlMaximo = Number(control.maximo);
+        const cumple = Number.isFinite(valor) && Number.isFinite(controlMinimo) && Number.isFinite(controlMaximo) &&
+          controlMinimo <= controlMaximo && valor >= controlMinimo && valor <= controlMaximo;
+        agregarRegla(
+          `${prefijo}_control_${control.variable}`,
+          cumple,
+          `${control.etiqueta || control.variable} del lote ${lote} fuera del rango permitido (${control.minimo} - ${control.maximo})`
+        );
+      }
+
+      saldos.push({
+        idInventario,
+        lote,
+        cantidadDespachada: cantidad,
+        unidadesDisponibles: saldo ? Number(saldo.unidadesDisponibles) : null,
+        unidadesDespachadas: saldo ? Number(saldo.unidadesDespachadas) : null
+      });
+    }
 
     const motivosUnicos = [...new Set(motivos)];
     return {
       permitido: motivosUnicos.length === 0,
       estado: motivosUnicos.length === 0 ? 'APROBADO' : 'BLOQUEADO',
+      codigo: motivosUnicos.length === 0 ? null : codigo || CODIGOS_ERROR.DESPACHO_BLOQUEADO,
       motivos: motivosUnicos,
       reglas,
-      lote,
+      lotes,
+      saldos,
       evaluadoEn: this._txTimestamp(ctx)
     };
   }
@@ -499,12 +636,15 @@ class TraceabilityContract extends Contract {
 
   async _guardarEvento(ctx, key, event) {
     await ctx.stub.putState(key, Buffer.from(JSON.stringify(event)));
-    const lotIndexKey = ctx.stub.createCompositeKey('lote~tipo~id', [
-      event.lote,
-      event.tipoEvento,
-      String(event.idEntidad)
-    ]);
-    await ctx.stub.putState(lotIndexKey, Buffer.from(key));
+    const lotes = [...new Set((Array.isArray(event.lotes) ? event.lotes : [event.lote]).filter(Boolean))];
+    for (const lote of lotes) {
+      const lotIndexKey = ctx.stub.createCompositeKey('lote~tipo~id', [
+        String(lote),
+        event.tipoEvento,
+        String(event.idEntidad)
+      ]);
+      await ctx.stub.putState(lotIndexKey, Buffer.from(key));
+    }
   }
 
   async _obtenerEventosPorLote(ctx, lote) {
@@ -561,8 +701,12 @@ class TraceabilityContract extends Contract {
     return `${tipoEvento}:${idEntidad}`;
   }
 
-  _dispatchKey(lote) {
-    return `despacho~lote:${lote}`;
+  _saldoInventarioKey(idInventario) {
+    return `saldo_producto_terminado:${idInventario}`;
+  }
+
+  _confirmationKey(idDespacho) {
+    return `confirmacion_recepcion_cliente:${idDespacho}`;
   }
 
   async _exists(ctx, key) {

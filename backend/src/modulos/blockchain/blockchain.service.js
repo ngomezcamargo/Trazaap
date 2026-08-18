@@ -4,6 +4,8 @@ import {
   consultarEventoBlockchain,
   consultarEventosPorLote,
   consultarHistorialBlockchain,
+  consultarSaldoInventarioBlockchain,
+  inicializarInventarioTerminadoBlockchain,
   registrarAlertaVencimientoBlockchain,
   registrarCorreccionBlockchain,
   registrarDespachoBlockchain,
@@ -14,6 +16,12 @@ import {
 import { construirPayloadInspeccion } from './payloads/inspeccion.payload.js';
 import { construirPayloadInventarioMateriaPrima } from './payloads/inventarioMateriaPrima.payload.js';
 import { construirPayloadInventarioProductoTerminado } from './payloads/inventarioProductoTerminado.payload.js';
+import { construirInicializacionInventarioTerminado } from './payloads/inventarioProductoTerminado.payload.js';
+import { construirPayloadDespacho } from './payloads/despacho.payload.js';
+import { construirPayloadConfirmacionEntrega } from './payloads/confirmacionEntrega.payload.js';
+import { construirPayloadIngresoAlmacenamiento } from './payloads/ingresoAlmacenamiento.payload.js';
+import { construirPayloadControlAlmacenamiento } from './payloads/controlAlmacenamiento.payload.js';
+import { construirPayloadSalidaAlmacenamiento } from './payloads/salidaAlmacenamiento.payload.js';
 import { construirPayloadLiberacion } from './payloads/liberacion.payload.js';
 import { construirPayloadManufactura } from './payloads/manufactura.payload.js';
 import { construirPayloadMovimientoInventario } from './payloads/movimientoInventario.payload.js';
@@ -21,6 +29,7 @@ import { construirPayloadOrdenProduccion } from './payloads/ordenProduccion.payl
 import { construirPayloadProductoFabricado } from './payloads/productoFabricado.payload.js';
 import { construirPayloadRecepcion } from './payloads/recepcion.payload.js';
 import { fechaISO, fechaSimple, numero, ordenarValor, serializarEstable } from './payloads/helpers.js';
+import { encolarEventoBlockchain } from './outbox.repository.js';
 
 const constructoresPayload = {
   recepcion_materia_prima: construirPayloadRecepcion,
@@ -31,7 +40,10 @@ const constructoresPayload = {
   liberacion_producto: construirPayloadLiberacion,
   inventario_producto_terminado: construirPayloadInventarioProductoTerminado,
   inventario_materia_prima: construirPayloadInventarioMateriaPrima,
-  movimiento_inventario: construirPayloadMovimientoInventario
+  movimiento_inventario: construirPayloadMovimientoInventario,
+  ingreso_almacenamiento: construirPayloadIngresoAlmacenamiento,
+  control_almacenamiento: construirPayloadControlAlmacenamiento,
+  salida_almacenamiento: construirPayloadSalidaAlmacenamiento
 };
 
 export { ordenarValor, serializarEstable };
@@ -109,7 +121,12 @@ export async function construirEventoBlockchain(tipoEvento, idEntidad) {
   };
 }
 
-export async function registrarEventoCritico(tipoEvento, idEntidad, actorFallback = 'sistema') {
+export async function registrarEventoCritico(
+  tipoEvento,
+  idEntidad,
+  actorFallback = 'sistema',
+  { encolarSiPendiente = true } = {}
+) {
   const evento = await construirEventoBlockchain(tipoEvento, idEntidad);
   if (!evento) return null;
 
@@ -146,6 +163,9 @@ export async function registrarEventoCritico(tipoEvento, idEntidad, actorFallbac
   }
 
   if (validacionExistente.estado === 'PENDIENTE') {
+    if (encolarSiPendiente) {
+      await encolarEventoBlockchain({ tipoEvento, idEntidad: evento.idEntidad, actor: actorFallback });
+    }
     return {
       tipoEvento,
       idEntidad: evento.idEntidad,
@@ -160,6 +180,10 @@ export async function registrarEventoCritico(tipoEvento, idEntidad, actorFallbac
     actor: evento.actor || actorFallback,
     payload
   });
+
+  if (resultado.estado === 'PENDIENTE' && encolarSiPendiente) {
+    await encolarEventoBlockchain({ tipoEvento, idEntidad: evento.idEntidad, actor: actorFallback });
+  }
 
   return {
     tipoEvento,
@@ -214,17 +238,28 @@ export async function registrarVersionEventoCritico(
   tipoEvento,
   idEntidad,
   actor = 'sistema',
-  motivoCorreccion = 'Actualizacion funcional del registro operativo'
+  motivoCorreccion = 'Actualizacion funcional del registro operativo',
+  opciones = {}
 ) {
-  const resultado = await registrarEventoCritico(tipoEvento, idEntidad, actor);
+  const resultado = await registrarEventoCritico(tipoEvento, idEntidad, actor, opciones);
   if (resultado?.estado !== 'ALTERADO') return resultado;
-
-  const correccion = await registrarCorreccionCritica({
-    tipoEventoOriginal: tipoEvento,
-    idEntidadOriginal: idEntidad,
-    motivoCorreccion,
-    actor: actor || 'sistema'
-  });
+  let correccion;
+  try {
+    correccion = await registrarCorreccionCritica({
+      tipoEventoOriginal: tipoEvento,
+      idEntidadOriginal: idEntidad,
+      motivoCorreccion,
+      actor: actor || 'sistema'
+    });
+  } catch (error) {
+    if (opciones.encolarSiPendiente !== false) {
+      await encolarEventoBlockchain({
+        tipoEvento, idEntidad, actor: actor || 'sistema', operacion: 'versionar'
+      });
+      return { ...resultado, estado: 'PENDIENTE', mensaje: error.message };
+    }
+    throw error;
+  }
 
   return {
     tipoEvento,
@@ -248,6 +283,28 @@ export function validarDespachoCritico(datos) {
 
 export function registrarDespachoCritico(datos) {
   return registrarDespachoBlockchain(ordenarValor(datos));
+}
+
+export async function inicializarInventarioTerminadoCritico(idInventario) {
+  const datos = await construirInicializacionInventarioTerminado(idInventario);
+  if (!datos) throw new Error(`Inventario terminado ${idInventario} no encontrado`);
+  return inicializarInventarioTerminadoBlockchain(datos);
+}
+
+export function consultarSaldoInventarioTerminado(idInventario) {
+  return consultarSaldoInventarioBlockchain(String(idInventario));
+}
+
+export async function registrarDespachoPorId(idDespacho) {
+  const datos = await construirPayloadDespacho(idDespacho);
+  if (!datos) throw new Error(`Despacho ${idDespacho} no encontrado`);
+  return registrarDespachoBlockchain(datos);
+}
+
+export async function confirmarEntregaPorId(idConfirmacion) {
+  const datos = await construirPayloadConfirmacionEntrega(idConfirmacion);
+  if (!datos) throw new Error(`Confirmacion ${idConfirmacion} no encontrada`);
+  return confirmarRecepcionClienteBlockchain(datos);
 }
 
 export function confirmarRecepcionCliente(datos) {

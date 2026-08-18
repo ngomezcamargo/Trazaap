@@ -28,11 +28,15 @@ export async function construirPayloadLiberacion(idLiberacion) {
       fecha_liberacion: fechaISO(row.fecha_liberacion),
       responsable_liberacion: texto(row.responsable_liberacion_email || row.responsable_liberacion),
       tipo_empaque: texto(row.tipo_empaque),
-      numero_factura: texto(row.numero_factura),
-      conductor: texto(row.conductor),
-      placa_vehiculo: texto(row.placa_vehiculo),
-      limpieza_vehiculo: texto(row.limpieza_vehiculo),
-      documentacion_dotacion: texto(row.documentacion_dotacion),
+      ...(row.numero_factura !== null || row.conductor !== null || row.placa_vehiculo !== null
+        ? {
+            numero_factura: texto(row.numero_factura),
+            conductor: texto(row.conductor),
+            placa_vehiculo: texto(row.placa_vehiculo),
+            limpieza_vehiculo: texto(row.limpieza_vehiculo),
+            documentacion_dotacion: texto(row.documentacion_dotacion)
+          }
+        : {}),
       unidades_producidas: numero(row.unidades_producidas),
       unidades_empacadas: numero(row.unidades_empacadas),
       peso_neto: numero(row.peso_neto),

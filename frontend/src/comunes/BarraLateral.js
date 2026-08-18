@@ -12,7 +12,10 @@ const linksAdministrador = [
   { href: '/materias-primas', label: 'Materias primas' },
   { href: '/recepciones', label: 'Recepciones' },
   { href: '/produccion', label: 'Produccion' },
+  { href: '/almacenamiento', label: 'Almacenamiento' },
   { href: '/liberacion', label: 'Liberacion' },
+  { href: '/despachos', label: 'Despachos' },
+  { href: '/clientes', label: 'Clientes' },
   { href: '/trazabilidad', label: 'Trazabilidad' },
   { href: '/inventario', label: 'Inventario' },
   { href: '/reportes', label: 'Reportes' }
@@ -24,7 +27,10 @@ const linksGerente = [
   { href: '/materias-primas', label: 'Materias primas' },
   { href: '/recepciones', label: 'Recepciones' },
   { href: '/produccion', label: 'Produccion' },
+  { href: '/almacenamiento', label: 'Almacenamiento' },
   { href: '/liberacion', label: 'Liberacion' },
+  { href: '/despachos', label: 'Despachos' },
+  { href: '/clientes', label: 'Clientes' },
   { href: '/trazabilidad', label: 'Trazabilidad' },
   { href: '/inventario', label: 'Inventario' },
   { href: '/reportes', label: 'Reportes' }
@@ -35,7 +41,9 @@ const linksOperario = [
   { href: '/recepciones', label: 'Recepciones' },
   { href: '/recepciones/nueva', label: 'Nueva recepcion' },
   { href: '/produccion', label: 'Produccion' },
+  { href: '/almacenamiento', label: 'Almacenamiento' },
   { href: '/liberacion', label: 'Liberacion' },
+  { href: '/despachos', label: 'Despachos' },
   { href: '/trazabilidad', label: 'Trazabilidad' }
 ];
 

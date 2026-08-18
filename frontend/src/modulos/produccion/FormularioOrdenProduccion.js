@@ -25,6 +25,15 @@ function alertaRango(label, valor, min, max) {
 
 const recetaVacia = () => ({ materia_prima_id: '', cantidad_requerida: '', observaciones: '' });
 
+function sugerirPrefijoLote(nombre) {
+  const palabras = String(nombre || '').trim().toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  if (!palabras.length) return '';
+  if (palabras[0] === 'BAGEL') return 'BG';
+  if (palabras.length > 1) return palabras.map((palabra) => palabra[0]).join('').slice(0, 5);
+  const consonantes = palabras[0].replace(/[AEIOU]/g, '');
+  return (consonantes.length >= 2 ? consonantes : palabras[0]).slice(0, 5).padEnd(2, 'X');
+}
+
 const varianteVacia = () => ({
   tamano_presentacion: 'mediano',
   peso_estimado_unidad: '',
@@ -36,10 +45,14 @@ const varianteVacia = () => ({
 const productoVacio = () => ({
   id: null,
   nombre: '',
+  prefijo_lote: '',
   categoria: '',
   descripcion: '',
   vida_util_dias: '',
   condiciones_almacenamiento: '',
+  temperatura_almacenamiento_min_c: '15',
+  temperatura_almacenamiento_max_c: '25',
+  requiere_refrigeracion: false,
   estado: 'activo',
   requiere_inmersion: false,
   tiempo_fermentacion_minutos: '',
@@ -69,7 +82,6 @@ const ordenVacia = (usuarioId = '') => ({
 });
 
 const manufacturaVacia = () => ({
-  lote_producido: '',
   unidades_producidas: '',
   tiempo_real_fermentacion_minutos: '',
   temperatura_real_fermentacion_c: '',
@@ -144,6 +156,7 @@ export function FormularioOrdenProduccion() {
   const esAdministrador = rol === ROLES.ADMINISTRADOR;
   const esGerente = rol === ROLES.GERENTE;
   const esOperario = rol === ROLES.OPERARIO;
+  const puedeGestionarProductos = esAdministrador || esGerente;
   const nuevaManufactura = () => ({
     ...manufacturaVacia(),
     responsable_usuario_id: esOperario ? String(usuario?.id || '') : ''
@@ -177,6 +190,13 @@ export function FormularioOrdenProduccion() {
   const [manufacturaSeleccionada, setManufacturaSeleccionada] = useState(null);
   const [contextoManufactura, setContextoManufactura] = useState(null);
   const [formManufactura, setFormManufactura] = useState(nuevaManufactura());
+  const [guardandoManufactura, setGuardandoManufactura] = useState(false);
+
+  useEffect(() => {
+    if (mostrarFormularioProducto && detalleProducto && formProducto.id === detalleProducto.id && !formProducto.prefijo_lote) {
+      setFormProducto((actual) => ({ ...actual, prefijo_lote: detalleProducto.prefijo_lote || sugerirPrefijoLote(detalleProducto.nombre) }));
+    }
+  }, [mostrarFormularioProducto, detalleProducto, formProducto.id, formProducto.prefijo_lote]);
 
   const [formOrden, setFormOrden] = useState(ordenVacia(usuario?.id));
   const [productos, setProductos] = useState([productoOrdenVacio()]);
@@ -266,10 +286,13 @@ export function FormularioOrdenProduccion() {
   const hayInventarioInsuficiente = resumenInsumos.some((r) => r.estado === 'insuficiente');
   const modalConFormularioAbierto = mostrarFormularioOrden || Boolean(contextoManufactura) || mostrarFormularioProducto || mostrarFormularioMateria;
   const mensajesModal = (
-    <>
+    <div aria-live="polite">
+      {guardandoManufactura && contextoManufactura && (
+        <div className="alerta info alerta-modal">Guardando la manufactura y validando su evidencia en blockchain...</div>
+      )}
       {message && <div className="alerta ok alerta-modal">{message}</div>}
       {error && <div className="alerta error alerta-modal">{error}</div>}
-    </>
+    </div>
   );
   const resetFormularioOrden = () => {
     setFormOrden(ordenVacia(usuario?.id));
@@ -311,6 +334,75 @@ export function FormularioOrdenProduccion() {
     setMostrarFormularioMateria(true);
   };
 
+  const cerrarFormularioManufactura = () => {
+    if (guardandoManufactura) return;
+    setError('');
+    setMessage('');
+    setContextoManufactura(null);
+    setManufacturaSeleccionada(null);
+    setFormManufactura(nuevaManufactura());
+  };
+
+  const guardarManufactura = async (event) => {
+    event.preventDefault();
+    if (!contextoManufactura || guardandoManufactura) return;
+
+    setError('');
+    setMessage('');
+    setGuardandoManufactura(true);
+
+    const ordenId = Number(contextoManufactura.orden.id);
+    const productoOrdenId = Number(contextoManufactura.producto.id);
+    const productoNombre = manufacturaSeleccionada?.producto || contextoManufactura.producto.producto || 'producto';
+
+    try {
+      const payload = {
+        ...formManufactura,
+        unidades_producidas: Number(formManufactura.unidades_producidas),
+        tiempo_real_fermentacion_minutos: Number(formManufactura.tiempo_real_fermentacion_minutos || 0),
+        temperatura_real_fermentacion_c: Number(formManufactura.temperatura_real_fermentacion_c || 0),
+        tiempo_real_horneado_minutos: Number(formManufactura.tiempo_real_horneado_minutos || 0),
+        temperatura_real_horneado_c: Number(formManufactura.temperatura_real_horneado_c || 0),
+        tiempo_real_inmersion_minutos: contextoManufactura.producto.requiere_inmersion
+          ? Number(formManufactura.tiempo_real_inmersion_minutos || 0)
+          : null,
+        temperatura_real_inmersion_c: contextoManufactura.producto.requiere_inmersion
+          ? Number(formManufactura.temperatura_real_inmersion_c || 0)
+          : null,
+        hora_inicio: new Date(formManufactura.hora_inicio).toISOString(),
+        hora_fin: new Date(formManufactura.hora_fin).toISOString()
+      };
+
+      const resultado = await produccionServicio.registrarManufactura(ordenId, productoOrdenId, payload);
+
+      setContextoManufactura(null);
+      setManufacturaSeleccionada(null);
+      setFormManufactura(nuevaManufactura());
+      setMessage(
+        `Manufactura de ${productoNombre} guardada correctamente para el lote ${resultado?.registro?.lote_producido || 'generado automáticamente'}.`
+        + (resultado?.orden_finalizada ? ' La orden de produccion quedo finalizada.' : '')
+      );
+
+      const [detalleRes, manufacturaRes, ordenesRes] = await Promise.allSettled([
+        produccionServicio.obtenerOrden(ordenId),
+        produccionServicio.listarOrdenesManufactura(),
+        produccionServicio.listarOrdenes()
+      ]);
+
+      if (detalleRes.status === 'fulfilled') setDetalle(detalleRes.value);
+      if (manufacturaRes.status === 'fulfilled') setOrdenesManufactura(manufacturaRes.value);
+      if (ordenesRes.status === 'fulfilled') setOrdenes(ordenesRes.value);
+
+      if ([detalleRes, manufacturaRes, ordenesRes].some((item) => item.status === 'rejected')) {
+        setError('La manufactura se guardo correctamente, pero no fue posible actualizar todos los listados. Recarga la pagina para verlos al dia.');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGuardandoManufactura(false);
+    }
+  };
+
   return (
     <div className="tarjeta">
       <div className="tabs-produccion">
@@ -320,6 +412,11 @@ export function FormularioOrdenProduccion() {
           </button>
         ))}
       </div>
+      {!modalConFormularioAbierto && (message || error) && (
+        <div className={`alerta ${error ? 'error' : 'ok'} notificacion-formulario`} role={error ? 'alert' : 'status'} aria-live="polite">
+          {error || message}
+        </div>
+      )}
 
       {tab === TABS.ORDENES && !esOperario && (
         <>
@@ -492,52 +589,14 @@ export function FormularioOrdenProduccion() {
           )}
 
           {contextoManufactura && (
-            <div className="modal-fondo" onClick={() => {
-              setError('');
-              setContextoManufactura(null);
-              setManufacturaSeleccionada(null);
-              setFormManufactura(nuevaManufactura());
-            }}>
+            <div className="modal-fondo" onClick={cerrarFormularioManufactura}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-encabezado-form">
-              <button className="boton secundario modal-cancelar" type="button" onClick={() => {
-                setError('');
-                setContextoManufactura(null);
-                setManufacturaSeleccionada(null);
-                setFormManufactura(nuevaManufactura());
-              }}>Cancelar</button>
+              <button className="boton secundario modal-cancelar" type="button" onClick={cerrarFormularioManufactura} disabled={guardandoManufactura}>Cancelar</button>
               <h3>Registro de manufactura: {manufacturaSeleccionada?.producto}</h3>
             </div>
             {mensajesModal}
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              setError('');
-              setMessage('');
-              try {
-                const payload = {
-                  ...formManufactura,
-                  unidades_producidas: Number(formManufactura.unidades_producidas),
-                  tiempo_real_fermentacion_minutos: Number(formManufactura.tiempo_real_fermentacion_minutos || 0),
-                  temperatura_real_fermentacion_c: Number(formManufactura.temperatura_real_fermentacion_c || 0),
-                  tiempo_real_horneado_minutos: Number(formManufactura.tiempo_real_horneado_minutos || 0),
-                  temperatura_real_horneado_c: Number(formManufactura.temperatura_real_horneado_c || 0),
-                  tiempo_real_inmersion_minutos: contextoManufactura.producto.requiere_inmersion ? Number(formManufactura.tiempo_real_inmersion_minutos || 0) : null,
-                  temperatura_real_inmersion_c: contextoManufactura.producto.requiere_inmersion ? Number(formManufactura.temperatura_real_inmersion_c || 0) : null,
-                  hora_inicio: new Date(formManufactura.hora_inicio).toISOString(),
-                  hora_fin: new Date(formManufactura.hora_fin).toISOString()
-                };
-                await produccionServicio.registrarManufactura(contextoManufactura.orden.id, contextoManufactura.producto.id, payload);
-                setMessage('Registro de manufactura guardado');
-                const detalleActualizado = await produccionServicio.obtenerOrden(contextoManufactura.orden.id);
-                setDetalle(detalleActualizado);
-                setOrdenesManufactura(await produccionServicio.listarOrdenesManufactura());
-                setContextoManufactura(null);
-                setManufacturaSeleccionada(null);
-                setFormManufactura(nuevaManufactura());
-              } catch (err) {
-                setError(err.message);
-              }
-            }}>
+            <form onSubmit={guardarManufactura}>
               <div className="grid grid-2">
                 <div>
                   <h4>Datos del producto</h4>
@@ -568,7 +627,7 @@ export function FormularioOrdenProduccion() {
                     {operarios.map((u) => <option key={u.id} value={u.id}>{u.email} - {u.role}</option>)}
                   </select>
                 </div>
-                <div className="campo"><label>Lote producido</label><input value={formManufactura.lote_producido} onChange={(e) => setFormManufactura({ ...formManufactura, lote_producido: e.target.value })} required /></div>
+                <div className="campo"><label>Lote producido</label><input value="Se genera automáticamente al guardar" readOnly /></div>
                 <div className="campo"><label>Unidades producidas</label><input type="number" min="0" value={formManufactura.unidades_producidas} onChange={(e) => setFormManufactura({ ...formManufactura, unidades_producidas: e.target.value })} required /></div>
                 <div className="campo"><label>Hora inicio</label><input type="datetime-local" value={formManufactura.hora_inicio} onChange={(e) => setFormManufactura({ ...formManufactura, hora_inicio: e.target.value })} required /></div>
                 <div className="campo"><label>Hora fin</label><input type="datetime-local" value={formManufactura.hora_fin} onChange={(e) => setFormManufactura({ ...formManufactura, hora_fin: e.target.value })} required /></div>
@@ -586,7 +645,11 @@ export function FormularioOrdenProduccion() {
                 <thead><tr><th>Variable</th><th>Esperado</th><th>Real</th><th>Estado</th></tr></thead>
                 <tbody>{comparacionManufactura.map((fila) => <tr key={fila.variable}><td>{fila.variable}</td><td>{fila.esperado}</td><td>{fila.real}</td><td><span className={`estado ${fila.desviado ? 'retenido' : 'aceptado'}`}>{fila.desviado ? 'desviado' : 'conforme'}</span></td></tr>)}</tbody>
               </table>
-              <div className="acciones"><button className="boton" type="submit">Guardar manufactura</button></div>
+              <div className="acciones">
+                <button className="boton" type="submit" disabled={guardandoManufactura}>
+                  {guardandoManufactura ? 'Guardando y validando...' : 'Guardar manufactura'}
+                </button>
+              </div>
             </form>
             </div>
             </div>
@@ -597,15 +660,17 @@ export function FormularioOrdenProduccion() {
       {tab === TABS.PRODUCTOS && !esOperario && (
         <>
           <div className="campo" style={{ marginBottom: 10 }}><label>Buscar productos</label><input value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.target.value)} /></div>
-          {esAdministrador && <div className="acciones"><button className="boton" type="button" onClick={abrirFormularioProducto}>Agregar producto</button></div>}
-          <table className="tabla" style={{ marginTop: 10 }}><thead><tr><th>Nombre</th><th>Categoria</th><th>Variantes</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{productosFabricados.map((p) => <tr key={p.id}><td>{p.nombre}</td><td>{p.categoria || '-'}</td><td>{p.variantes?.length || 0}</td><td>{p.estado}</td><td><div className="acciones" style={{ marginTop: 0 }}><button className="boton secundario" type="button" onClick={async () => { const det = await produccionServicio.obtenerProducto(p.id); setDetalleProducto(det); }}>Ver detalle</button>{esAdministrador && <button className="boton secundario" type="button" onClick={async () => { setError(''); setMessage(''); const det = await produccionServicio.obtenerProducto(p.id); const variantesEditables = (det.variantes || []).map((v) => ({ tamano_presentacion: v.tamano_presentacion, peso_estimado_unidad: v.peso_estimado_unidad || '', unidad_medida: v.unidad_medida || 'unidad', estado: v.estado || 'activo', receta: (v.receta || []).map((x) => ({ materia_prima_id: String(x.materia_prima_id), cantidad_requerida: String(x.cantidad_requerida), observaciones: x.observaciones || '' })) })); setDetalleProducto(det); setMostrarFormularioProducto(true); setFormProducto({ id: det.id, nombre: det.nombre, categoria: det.categoria || '', descripcion: det.descripcion || '', vida_util_dias: det.vida_util_dias, condiciones_almacenamiento: det.condiciones_almacenamiento || '', estado: det.estado, requiere_inmersion: Boolean(det.requiere_inmersion), tiempo_fermentacion_minutos: det.tiempo_fermentacion_minutos ?? '', temperatura_fermentacion_c: det.temperatura_fermentacion_c ?? '', tiempo_horneado_minutos: det.tiempo_horneado_minutos ?? '', temperatura_horneado_c: det.temperatura_horneado_c ?? '', tiempo_inmersion_minutos: det.tiempo_inmersion_minutos ?? '', temperatura_inmersion_c: det.temperatura_inmersion_c ?? '', variantes: variantesEditables.length ? variantesEditables : [varianteVacia()] }); }}>Actualizar informacion</button>}</div></td></tr>)}</tbody></table>
-          {esAdministrador && mostrarFormularioProducto && <div className="modal-fondo" onClick={cerrarFormularioProducto}><div className="modal" onClick={(e) => e.stopPropagation()}><div className="modal-encabezado-form"><button className="boton secundario modal-cancelar" type="button" onClick={cerrarFormularioProducto}>Cancelar</button><h3>{formProducto.id ? 'Actualizar producto' : 'Agregar producto'}</h3></div>{mensajesModal}<form onSubmit={async (e) => {
+          {puedeGestionarProductos && <div className="acciones"><button className="boton" type="button" onClick={abrirFormularioProducto}>Agregar producto</button></div>}
+          <table className="tabla" style={{ marginTop: 10 }}><thead><tr><th>Nombre</th><th>Prefijo lote</th><th>Categoria</th><th>Variantes</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{productosFabricados.map((p) => <tr key={p.id}><td>{p.nombre}</td><td><strong>{p.prefijo_lote || '-'}</strong></td><td>{p.categoria || '-'}</td><td>{p.variantes?.length || 0}</td><td>{p.estado}</td><td><div className="acciones" style={{ marginTop: 0 }}><button className="boton secundario" type="button" onClick={async () => { const det = await produccionServicio.obtenerProducto(p.id); setDetalleProducto(det); }}>Ver detalle</button>{puedeGestionarProductos && <button className="boton secundario" type="button" onClick={async () => { setError(''); setMessage(''); const det = await produccionServicio.obtenerProducto(p.id); const variantesEditables = (det.variantes || []).map((v) => ({ tamano_presentacion: v.tamano_presentacion, peso_estimado_unidad: v.peso_estimado_unidad || '', unidad_medida: v.unidad_medida || 'unidad', estado: v.estado || 'activo', receta: (v.receta || []).map((x) => ({ materia_prima_id: String(x.materia_prima_id), cantidad_requerida: String(x.cantidad_requerida), observaciones: x.observaciones || '' })) })); setDetalleProducto(det); setMostrarFormularioProducto(true); setFormProducto({ id: det.id, nombre: det.nombre, prefijo_lote: det.prefijo_lote || sugerirPrefijoLote(det.nombre), categoria: det.categoria || '', descripcion: det.descripcion || '', vida_util_dias: det.vida_util_dias, condiciones_almacenamiento: det.condiciones_almacenamiento || '', temperatura_almacenamiento_min_c: det.temperatura_almacenamiento_min_c ?? 15, temperatura_almacenamiento_max_c: det.temperatura_almacenamiento_max_c ?? 25, requiere_refrigeracion: Boolean(det.requiere_refrigeracion), estado: det.estado, requiere_inmersion: Boolean(det.requiere_inmersion), tiempo_fermentacion_minutos: det.tiempo_fermentacion_minutos ?? '', temperatura_fermentacion_c: det.temperatura_fermentacion_c ?? '', tiempo_horneado_minutos: det.tiempo_horneado_minutos ?? '', temperatura_horneado_c: det.temperatura_horneado_c ?? '', tiempo_inmersion_minutos: det.tiempo_inmersion_minutos ?? '', temperatura_inmersion_c: det.temperatura_inmersion_c ?? '', variantes: variantesEditables.length ? variantesEditables : [varianteVacia()] }); }}>Actualizar informacion</button>}</div></td></tr>)}</tbody></table>
+          {puedeGestionarProductos && mostrarFormularioProducto && <div className="modal-fondo" onClick={cerrarFormularioProducto}><div className="modal" onClick={(e) => e.stopPropagation()}><div className="modal-encabezado-form"><button className="boton secundario modal-cancelar" type="button" onClick={cerrarFormularioProducto}>Cancelar</button><h3>{formProducto.id ? 'Actualizar producto' : 'Agregar producto'}</h3></div>{mensajesModal}<form onSubmit={async (e) => {
             e.preventDefault();
             setError('');
             setMessage('');
             try {
               const payload = {
                 ...formProducto,
+                temperatura_almacenamiento_min_c: Number(formProducto.temperatura_almacenamiento_min_c),
+                temperatura_almacenamiento_max_c: Number(formProducto.temperatura_almacenamiento_max_c),
                 tiempo_fermentacion_minutos: Number(formProducto.tiempo_fermentacion_minutos || 0),
                 temperatura_fermentacion_c: Number(formProducto.temperatura_fermentacion_c || 0),
                 tiempo_horneado_minutos: Number(formProducto.tiempo_horneado_minutos || 0),
@@ -630,11 +695,15 @@ export function FormularioOrdenProduccion() {
             } catch (err) { setError(err.message); }
           }} style={{ marginTop: 12 }}>
             <div className="grid grid-3">
-              <div className="campo"><label>Nombre</label><input value={formProducto.nombre} onChange={(e) => setFormProducto({ ...formProducto, nombre: e.target.value })} required /></div>
+              <div className="campo"><label>Nombre</label><input value={formProducto.nombre} onChange={(e) => { const nombre = e.target.value; const esBagel = nombre.trim().toLowerCase().startsWith('bagel'); setFormProducto({ ...formProducto, nombre, prefijo_lote: esBagel ? 'BG' : (formProducto.prefijo_lote || sugerirPrefijoLote(nombre)) }); }} required /></div>
+              <div className="campo"><label>Prefijo de lote</label><input value={formProducto.nombre.trim().toLowerCase().startsWith('bagel') ? 'BG' : formProducto.prefijo_lote} onChange={(e) => setFormProducto({ ...formProducto, prefijo_lote: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) })} readOnly={formProducto.nombre.trim().toLowerCase().startsWith('bagel')} minLength="2" maxLength="5" pattern="[A-Z0-9]{2,5}" required /><small>Ejemplo para Bagel: BG. El lote se generara como BG-AAAAMMDD-001.</small></div>
               <div className="campo"><label>Categoria</label><input value={formProducto.categoria} onChange={(e) => setFormProducto({ ...formProducto, categoria: e.target.value })} /></div>
               <div className="campo"><label>Vida util (dias)</label><input type="number" min="1" value={formProducto.vida_util_dias} onChange={(e) => setFormProducto({ ...formProducto, vida_util_dias: e.target.value })} required /></div>
               <div className="campo"><label>Estado</label><select value={formProducto.estado} onChange={(e) => setFormProducto({ ...formProducto, estado: e.target.value })}><option value="activo">activo</option><option value="inactivo">inactivo</option></select></div>
               <div className="campo"><label>Condiciones almacenamiento</label><input value={formProducto.condiciones_almacenamiento} onChange={(e) => setFormProducto({ ...formProducto, condiciones_almacenamiento: e.target.value })} /></div>
+              <div className="campo"><label>Temperatura minima almacenamiento (C)</label><input type="number" step="0.1" value={formProducto.temperatura_almacenamiento_min_c} onChange={(e) => setFormProducto({ ...formProducto, temperatura_almacenamiento_min_c: e.target.value })} required /></div>
+              <div className="campo"><label>Temperatura maxima almacenamiento (C)</label><input type="number" step="0.1" value={formProducto.temperatura_almacenamiento_max_c} onChange={(e) => setFormProducto({ ...formProducto, temperatura_almacenamiento_max_c: e.target.value })} required /></div>
+              <div className="campo"><label>Requiere refrigeracion</label><select value={String(formProducto.requiere_refrigeracion)} onChange={(e) => setFormProducto({ ...formProducto, requiere_refrigeracion: e.target.value === 'true' })}><option value="false">no</option><option value="true">si</option></select></div>
               <div className="campo"><label>Requiere inmersion</label><select value={String(formProducto.requiere_inmersion)} onChange={(e) => setFormProducto({ ...formProducto, requiere_inmersion: e.target.value === 'true' })}><option value="false">no</option><option value="true">si</option></select></div>
               <div className="campo"><label>Tiempo fermentacion (min)</label><input type="number" min="0" value={formProducto.tiempo_fermentacion_minutos} onChange={(e) => setFormProducto({ ...formProducto, tiempo_fermentacion_minutos: e.target.value })} /></div>
               <div className="campo"><label>Temperatura fermentacion (C)</label><input type="number" value={formProducto.temperatura_fermentacion_c} onChange={(e) => setFormProducto({ ...formProducto, temperatura_fermentacion_c: e.target.value })} /></div>
@@ -667,7 +736,7 @@ export function FormularioOrdenProduccion() {
             ))}
             <div className="acciones"><button type="button" className="boton secundario" onClick={() => setFormProducto({ ...formProducto, variantes: [...formProducto.variantes, varianteVacia()] })}>Agregar variante</button><button className="boton" type="submit">{formProducto.id ? 'Actualizar producto' : 'Crear producto'}</button></div>
           </form></div></div>}
-          {detalleProducto && <div className="tarjeta" style={{ marginTop: 10 }}><h4>Detalle de producto: {detalleProducto.nombre}</h4><p><strong>Categoria:</strong> {detalleProducto.categoria || '-'}</p><p><strong>Vida util:</strong> {detalleProducto.vida_util_dias} dias</p><p><strong>Tiempos estandar:</strong> Fermentacion {detalleProducto.tiempo_fermentacion_minutos}m ({detalleProducto.temperatura_fermentacion_c}C), Horneado {detalleProducto.tiempo_horneado_minutos}m ({detalleProducto.temperatura_horneado_c}C), {detalleProducto.requiere_inmersion ? `Inmersion ${detalleProducto.tiempo_inmersion_minutos}m (${detalleProducto.temperatura_inmersion_c}C)` : 'Sin inmersion'}</p>{detalleProducto.variantes?.map((v) => <div key={v.id} style={{ marginTop: 10 }}><h4>{v.tamano_presentacion}</h4><table className="tabla"><thead><tr><th>Materia prima</th><th>Cantidad por unidad</th><th>Unidad</th><th>Obs</th></tr></thead><tbody>{v.receta.map((r, i) => <tr key={i}><td>{r.materia_prima}</td><td>{r.cantidad_requerida}</td><td>{r.unidad_medida_base || r.unidad_medida}</td><td>{r.observaciones || '-'}</td></tr>)}</tbody></table></div>)}</div>}
+          {detalleProducto && <div className="tarjeta" style={{ marginTop: 10 }}><h4>Detalle de producto: {detalleProducto.nombre}</h4><p><strong>Categoria:</strong> {detalleProducto.categoria || '-'}</p><p><strong>Vida util:</strong> {detalleProducto.vida_util_dias} dias</p><p><strong>Almacenamiento:</strong> {detalleProducto.condiciones_almacenamiento || 'Sin descripcion'}; rango {detalleProducto.temperatura_almacenamiento_min_c ?? 15} a {detalleProducto.temperatura_almacenamiento_max_c ?? 25} C; {detalleProducto.requiere_refrigeracion ? 'requiere refrigeracion' : 'sin refrigeracion obligatoria'}.</p><p><strong>Tiempos estandar:</strong> Fermentacion {detalleProducto.tiempo_fermentacion_minutos}m ({detalleProducto.temperatura_fermentacion_c}C), Horneado {detalleProducto.tiempo_horneado_minutos}m ({detalleProducto.temperatura_horneado_c}C), {detalleProducto.requiere_inmersion ? `Inmersion ${detalleProducto.tiempo_inmersion_minutos}m (${detalleProducto.temperatura_inmersion_c}C)` : 'Sin inmersion'}</p>{detalleProducto.variantes?.map((v) => <div key={v.id} style={{ marginTop: 10 }}><h4>{v.tamano_presentacion}</h4><table className="tabla"><thead><tr><th>Materia prima</th><th>Cantidad por unidad</th><th>Unidad</th><th>Obs</th></tr></thead><tbody>{v.receta.map((r, i) => <tr key={i}><td>{r.materia_prima}</td><td>{r.cantidad_requerida}</td><td>{r.unidad_medida_base || r.unidad_medida}</td><td>{r.observaciones || '-'}</td></tr>)}</tbody></table></div>)}</div>}
         </>
       )}
 
@@ -737,8 +806,6 @@ export function FormularioOrdenProduccion() {
         </>
       )}
 
-      {!modalConFormularioAbierto && message && <div className="alerta ok">{message}</div>}
-      {!modalConFormularioAbierto && error && <div className="alerta error">{error}</div>}
     </div>
   );
 }

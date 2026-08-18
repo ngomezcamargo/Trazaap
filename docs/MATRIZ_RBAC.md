@@ -29,6 +29,8 @@ Los actores `INVIMA`, `cliente/receptor` y `consumidor final` no son usuarios in
 | Ordenes de produccion | Crear, consultar, editar estado y materias | Consultar | Consultar ordenes activas |
 | Registro de manufactura | Puede operar por privilegio administrativo | No permitido | Registrar |
 | Liberacion de producto | Puede operar por privilegio administrativo | Consultar | Registrar |
+| Clientes comerciales | Crear, consultar y editar | Consultar | Consulta tecnica desde despacho |
+| Despachos | Puede operar por privilegio administrativo | Consultar | Registrar y consultar |
 | Inventario | Consultar | Consultar | Sin acceso administrativo |
 | Trazabilidad interna | Consultar | Consultar | Consultar |
 | Reportes | Generar | Generar | No permitido |
@@ -38,7 +40,7 @@ Los actores `INVIMA`, `cliente/receptor` y `consumidor final` no son usuarios in
 
 Las rutas bajo `/api/public` no exigen JWT. Deben exponer solo informacion de consulta y no datos administrativos sensibles.
 
-Actualmente la consulta publica de trazabilidad se usa para QR y portal externo del lote.
+Actualmente la consulta publica de trazabilidad se usa para QR y portal externo del lote. El cliente solo confirma la recepcion de un despacho si presenta la factura o el codigo privado correspondiente; no recibe una cuenta ni acceso al panel interno.
 
 ## Sesion
 

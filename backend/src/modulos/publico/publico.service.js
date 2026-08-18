@@ -1,7 +1,10 @@
 import { ErrorHttp } from '../../middlewares/errorHttp.js';
-import { confirmarRecepcionCliente as confirmarRecepcionEnFabric } from '../blockchain/blockchain.service.js';
 import { consultarTrazabilidadPorLote } from '../trazabilidad/trazabilidad.service.js';
-import { generarCodigosAcceso, normalizarCodigo } from './codigos-acceso.util.js';
+import {
+  buscarDespachoCliente,
+  registrarConfirmacionEntregaService
+} from '../despachos/despachos.service.js';
+import { generarCodigoClienteDespacho, generarCodigosAcceso, normalizarCodigo } from './codigos-acceso.util.js';
 
 function estadoBlockchain(validaciones) {
   if (!validaciones?.length) return 'PENDIENTE';
@@ -149,72 +152,145 @@ function construirEventos(data, nivel = 'consumidor') {
     }));
   }
 
+  const almacenamiento = data.almacenamiento;
+  if (almacenamiento) {
+    const controles = almacenamiento.controles || [];
+    const conforme = ['listo_para_liberacion', 'liberado', 'despacho_parcial', 'despachado'].includes(almacenamiento.estado);
+    eventos.push(evento({
+      tipo: 'ingreso_almacenamiento',
+      titulo: 'Ingreso a almacenamiento',
+      fecha: almacenamiento.fecha_ingreso,
+      estado: almacenamiento.estado,
+      descripcion: 'Conservacion controlada del lote antes de su liberacion.',
+      validacion: buscarValidacion(validaciones, 'ingreso_almacenamiento', almacenamiento.id_almacenamiento),
+      incluirHashes,
+      datos: [
+        { etiqueta: 'Condiciones', valor: almacenamiento.condiciones_almacenamiento || 'Conservacion segun ficha tecnica' },
+        { etiqueta: 'Resultado', valor: conforme ? 'Conforme' : 'En seguimiento' },
+        { etiqueta: 'Ubicacion', valor: incluirResponsables ? almacenamiento.ubicacion : null },
+        { etiqueta: 'Rango esperado', valor: nivel !== 'consumidor' ? `${almacenamiento.temperatura_min_esperada_c} a ${almacenamiento.temperatura_max_esperada_c} C` : null },
+        { etiqueta: 'Temperatura de ingreso', valor: nivel === 'auditoria' ? `${almacenamiento.temperatura_ingreso_c} C` : null },
+        { etiqueta: 'Responsable', valor: incluirResponsables ? almacenamiento.responsable_ingreso_email : null },
+        { etiqueta: 'Observaciones', valor: incluirResponsables ? almacenamiento.observaciones_ingreso : null }
+      ]
+    }));
+
+    for (const control of controles) {
+      eventos.push(evento({
+        tipo: 'control_almacenamiento',
+        titulo: 'Control de almacenamiento',
+        fecha: control.fecha_control,
+        estado: control.resultado,
+        descripcion: 'Verificacion periodica de las condiciones de conservacion.',
+        validacion: buscarValidacion(validaciones, 'control_almacenamiento', control.id_control),
+        incluirHashes,
+        datos: [
+          { etiqueta: 'Resultado', valor: control.resultado === 'conforme' ? 'Conforme' : 'Fuera de rango' },
+          { etiqueta: 'Condicion general', valor: nivel !== 'consumidor' ? control.condicion_general : null },
+          { etiqueta: 'Temperatura', valor: nivel === 'auditoria' ? `${control.temperatura_c} C` : null },
+          { etiqueta: 'Responsable', valor: incluirResponsables ? control.responsable_control_email : null },
+          { etiqueta: 'Observaciones', valor: incluirResponsables ? control.observaciones : null }
+        ]
+      }));
+    }
+
+    if (almacenamiento.fecha_salida) {
+      eventos.push(evento({
+        tipo: 'salida_almacenamiento',
+        titulo: 'Salida de almacenamiento',
+        fecha: almacenamiento.fecha_salida,
+        estado: almacenamiento.decision_salida,
+        descripcion: 'Decision de salida del lote hacia liberacion de producto.',
+        validacion: buscarValidacion(validaciones, 'salida_almacenamiento', almacenamiento.id_almacenamiento),
+        incluirHashes,
+        datos: [
+          { etiqueta: 'Decision', valor: almacenamiento.decision_salida },
+          { etiqueta: 'Estado del producto', valor: almacenamiento.estado_producto_salida },
+          { etiqueta: 'Temperatura de salida', valor: nivel === 'auditoria' ? `${almacenamiento.temperatura_salida_c} C` : null },
+          { etiqueta: 'Responsable', valor: incluirResponsables ? almacenamiento.responsable_salida_email : null },
+          { etiqueta: 'Observaciones', valor: incluirResponsables ? almacenamiento.observaciones_salida : null }
+        ]
+      }));
+    }
+  }
+
   const liberacion = data.liberacion;
   if (liberacion) {
     eventos.push(evento({
       tipo: 'liberacion_producto',
-      titulo: 'Liberacion y salida del producto',
+      titulo: 'Liberacion del producto',
       fecha: liberacion.fecha_liberacion || liberacion.created_at,
       estado: liberacion.estado_liberacion,
-      descripcion: 'Control final del producto terminado antes de su entrega.',
+      descripcion: 'Control final que habilita el producto para ingresar al inventario terminado.',
       validacion: buscarValidacion(validaciones, 'liberacion_producto', liberacion.id_liberacion),
       incluirHashes,
       datos: [
         { etiqueta: 'Unidades liberadas', valor: nivel !== 'consumidor' ? (liberacion.unidades_empacadas || liberacion.unidades_producidas) : null },
         { etiqueta: 'Fecha de vencimiento', valor: liberacion.fecha_vencimiento },
         { etiqueta: 'Empaque', valor: nivel !== 'consumidor' ? liberacion.tipo_empaque : null },
-        { etiqueta: 'Factura', valor: incluirTransporte ? liberacion.numero_factura : null },
-        { etiqueta: 'Conductor', valor: incluirTransporte ? liberacion.conductor : null },
-        { etiqueta: 'Placa', valor: incluirTransporte ? liberacion.placa_vehiculo : null },
         { etiqueta: 'Responsable liberacion', valor: incluirResponsables ? liberacion.responsable_liberacion : null }
       ]
     }));
   }
 
-  if (data.despachoBlockchain) {
+  for (const despacho of data.despachos || []) {
+    const cantidad = (despacho.detalles || [])
+      .filter((detalle) => String(detalle.lote) === String(data.lote))
+      .reduce((total, detalle) => total + Number(detalle.cantidad_despachada || 0), 0);
+    const evidencia = despacho.blockchain || null;
     eventos.push(evento({
       tipo: 'despacho_producto',
       titulo: 'Despacho del producto',
-      fecha: data.despachoBlockchain.fechaEvento || data.despachoBlockchain.timestampBlockchain,
-      estado: data.despachoBlockchain.decisionChaincode?.estado || data.despachoBlockchain.estado,
-      descripcion: 'Decision automatica del chaincode previa a la salida del lote.',
+      fecha: despacho.fecha_despacho,
+      estado: despacho.estado_despacho,
+      descripcion: 'Salida parcial o total del lote, validada contra las existencias disponibles.',
       incluirHashes,
-      validacion: {
-        estadoBlockchain: 'VERIFICADO',
-        valido: true,
-        mensaje: 'Despacho autorizado y registrado de forma inmutable',
-        hashActual: data.despachoBlockchain.hashRegistro,
-        hashBlockchain: data.despachoBlockchain.hashRegistro
-      },
+      validacion: evidencia
+        ? {
+            estadoBlockchain: 'VERIFICADO',
+            valido: true,
+            mensaje: 'Despacho autorizado y registrado de forma inmutable',
+            hashActual: evidencia.hashRegistro,
+            hashBlockchain: evidencia.hashRegistro
+          }
+        : buscarValidacion(validaciones, 'despacho_producto', despacho.id_despacho),
       datos: [
-        { etiqueta: 'Lote', valor: data.despachoBlockchain.lote },
-        { etiqueta: 'Decision', valor: data.despachoBlockchain.decisionChaincode?.estado || 'APROBADO' },
-        { etiqueta: 'Transaccion Fabric', valor: nivel === 'auditoria' ? data.despachoBlockchain.txId : null }
+        { etiqueta: 'Despacho', valor: nivel !== 'consumidor' ? despacho.codigo_despacho : null },
+        { etiqueta: 'Cantidad despachada', valor: cantidad },
+        { etiqueta: 'Cliente', valor: nivel !== 'consumidor' ? despacho.cliente : null },
+        { etiqueta: 'Factura', valor: nivel !== 'consumidor' ? despacho.numero_factura : null },
+        { etiqueta: 'Conductor', valor: incluirTransporte ? despacho.conductor : null },
+        { etiqueta: 'Placa', valor: incluirTransporte ? despacho.placa_vehiculo : null },
+        { etiqueta: 'Transaccion Fabric', valor: nivel === 'auditoria' ? evidencia?.txId : null }
       ]
     }));
-  }
 
-  if (data.confirmacionCliente) {
-    eventos.push(evento({
-      tipo: 'confirmacion_recepcion_cliente',
-      titulo: 'Recepcion confirmada por el cliente',
-      fecha: data.confirmacionCliente.fechaConfirmacion || data.confirmacionCliente.fechaEvento,
-      estado: data.confirmacionCliente.estado,
-      descripcion: 'El cliente receptor confirmo la entrega del lote mediante acceso controlado.',
-      incluirHashes,
-      validacion: {
-        estadoBlockchain: 'VERIFICADO',
-        valido: true,
-        mensaje: 'Confirmacion registrada de forma inmutable',
-        hashActual: data.confirmacionCliente.hashRegistro,
-        hashBlockchain: data.confirmacionCliente.hashRegistro
-      },
-      datos: [
-        { etiqueta: 'Lote', valor: data.confirmacionCliente.lote },
-        { etiqueta: 'Fecha de confirmacion', valor: data.confirmacionCliente.fechaConfirmacion || data.confirmacionCliente.fechaEvento },
-        { etiqueta: 'Transaccion Fabric', valor: nivel === 'auditoria' ? data.confirmacionCliente.txId : null }
-      ]
-    }));
+    if (despacho.id_confirmacion) {
+      const confirmacionFabric = despacho.confirmacionBlockchain || null;
+      eventos.push(evento({
+        tipo: 'confirmacion_recepcion_cliente',
+        titulo: 'Recepcion confirmada por el cliente',
+        fecha: despacho.fecha_recepcion,
+        estado: despacho.estado_confirmacion,
+        descripcion: 'El cliente receptor confirmo este despacho mediante acceso controlado.',
+        incluirHashes,
+        validacion: confirmacionFabric
+          ? {
+              estadoBlockchain: 'VERIFICADO',
+              valido: true,
+              mensaje: 'Confirmacion registrada de forma inmutable',
+              hashActual: confirmacionFabric.hashRegistro,
+              hashBlockchain: confirmacionFabric.hashRegistro
+            }
+          : buscarValidacion(validaciones, 'confirmacion_recepcion_cliente', despacho.id_despacho),
+        datos: [
+          { etiqueta: 'Despacho', valor: nivel !== 'consumidor' ? despacho.codigo_despacho : null },
+          { etiqueta: 'Fecha de confirmacion', valor: despacho.fecha_recepcion },
+          { etiqueta: 'Receptor', valor: nivel !== 'consumidor' ? despacho.receptor : null },
+          { etiqueta: 'Transaccion Fabric', valor: nivel === 'auditoria' ? confirmacionFabric?.txId : null }
+        ]
+      }));
+    }
   }
 
   return eventos;
@@ -224,6 +300,7 @@ function construirBasePublica(data) {
   const productoPrincipal = data.produccion?.productos?.[0] || null;
   const manufactura = data.produccion?.manufactura || null;
   const liberacion = data.liberacion || null;
+  const almacenamiento = data.almacenamiento || null;
 
   return {
     lote: data.lote,
@@ -239,6 +316,16 @@ function construirBasePublica(data) {
           lote_producido: manufactura.lote_producido,
           fecha_inicio: manufactura.hora_inicio,
           fecha_fin: manufactura.hora_fin
+        }
+      : null,
+    almacenamiento: almacenamiento
+      ? {
+          estado: almacenamiento.estado,
+          fecha_ingreso: almacenamiento.fecha_ingreso,
+          fecha_salida: almacenamiento.fecha_salida,
+          condiciones: almacenamiento.condiciones_almacenamiento || 'Conservacion segun ficha tecnica',
+          controles_registrados: (almacenamiento.controles || []).length,
+          conservacion_conforme: ['listo_para_liberacion', 'despachado'].includes(almacenamiento.estado)
         }
       : null,
     liberacion: liberacion
@@ -302,29 +389,66 @@ export async function consultarTrazabilidadCliente({ lote, factura, codigo }) {
   if (!factura && !codigo) throw new ErrorHttp(400, 'Debes indicar la factura o el codigo de cliente');
 
   const data = await consultarTrazabilidadPorLote(lote);
-  const codigos = generarCodigosAcceso(data);
-  const autorizacion = autorizarCredencialesCliente(data, { factura, codigo });
-
-  if (!autorizacion.autorizado) {
+  const despacho = await buscarDespachoCliente({ lote, factura, codigo });
+  if (!despacho) {
     throw new ErrorHttp(403, 'Factura o codigo de cliente no valido para este lote');
   }
+  const codigoCliente = despacho.es_heredado ? null : generarCodigoClienteDespacho(despacho);
 
   return {
     ...construirBasePublica(data),
     alcance: 'cliente_receptor',
-    factura: data.liberacion?.numero_factura || null,
-    codigo_verificacion: codigos.cliente,
-    despacho_liberacion: data.liberacion
+    factura: despacho.numero_factura,
+    codigo_verificacion: codigoCliente,
+    despacho_liberacion: {
+      id_despacho: despacho.id_despacho,
+      codigo_despacho: despacho.codigo_despacho,
+      fecha_despacho: despacho.fecha_despacho,
+      fecha_entrega: despacho.fecha_entrega,
+      estado_despacho: despacho.estado_despacho,
+      numero_factura: despacho.numero_factura,
+      conductor: despacho.conductor,
+      placa_vehiculo: despacho.placa_vehiculo,
+      temperatura_salida_c: despacho.temperatura_salida_c,
+      temperatura_transporte_c: despacho.temperatura_transporte_c,
+      temperatura_entrega_c: despacho.temperatura_entrega_c,
+      limpieza_vehiculo: despacho.limpieza_vehiculo,
+      documentacion_dotacion: despacho.documentacion_dotacion,
+      canal_distribucion: despacho.canal_distribucion,
+      detalles: despacho.detalles.map((detalle) => ({
+        lote: detalle.lote,
+        producto: detalle.producto,
+        cantidad_despachada: detalle.cantidad_despachada,
+        fecha_vencimiento: detalle.fecha_vencimiento
+      }))
+    },
+    cliente: despacho.cliente
       ? {
-          fecha_liberacion: data.liberacion.fecha_liberacion || data.liberacion.created_at,
-          estado_liberacion: data.liberacion.estado_liberacion,
-          unidades_empacadas: data.liberacion.unidades_empacadas,
-          tipo_empaque: data.liberacion.tipo_empaque,
-          numero_factura: data.liberacion.numero_factura,
-          conductor: data.liberacion.conductor,
-          placa_vehiculo: data.liberacion.placa_vehiculo,
-          limpieza_vehiculo: data.liberacion.limpieza_vehiculo,
-          documentacion_dotacion: data.liberacion.documentacion_dotacion
+          nombre_razon_social: despacho.cliente,
+          nombre_contacto: despacho.cliente_contacto
+        }
+      : null,
+    confirmacionCliente: despacho.id_confirmacion
+      ? {
+          confirmado: despacho.estado_confirmacion === 'confirmada',
+          estado: despacho.estado_confirmacion,
+          fechaConfirmacion: despacho.fecha_recepcion,
+          receptor: despacho.receptor
+        }
+      : { confirmado: false, estado: 'PENDIENTE_RECEPCION' },
+    almacenamiento_detalle: data.almacenamiento
+      ? {
+          estado: data.almacenamiento.estado,
+          fecha_ingreso: data.almacenamiento.fecha_ingreso,
+          fecha_salida: data.almacenamiento.fecha_salida,
+          condiciones: data.almacenamiento.condiciones_almacenamiento,
+          temperatura_min_esperada_c: data.almacenamiento.temperatura_min_esperada_c,
+          temperatura_max_esperada_c: data.almacenamiento.temperatura_max_esperada_c,
+          controles: (data.almacenamiento.controles || []).map((control) => ({
+            fecha_control: control.fecha_control,
+            condicion_general: control.condicion_general,
+            resultado: control.resultado
+          }))
         }
       : null,
     origenes: (data.recepciones || []).map((recepcion) => ({
@@ -333,59 +457,31 @@ export async function consultarTrazabilidadCliente({ lote, factura, codigo }) {
       proveedor: recepcion.proveedor?.nombre || null,
       estado_recepcion: recepcion.estado_recepcion
     })),
-    eventos: construirEventos(data, 'cliente')
+    eventos: construirEventos({ ...data, despachos: [despacho] }, 'cliente')
   };
 }
 
 export async function confirmarRecepcionClienteService(datos, deps = {
-  consultarTrazabilidadPorLote,
-  confirmarRecepcionEnFabric
+  buscarDespachoCliente,
+  registrarConfirmacionEntregaService
 }) {
   const lote = String(datos.lote || '').trim();
-  const receptor = String(datos.receptor || '').trim();
-  if (!lote) throw new ErrorHttp(400, 'Debes indicar el lote');
-  if (!datos.factura && !datos.codigo) throw new ErrorHttp(400, 'Debes indicar la factura o el codigo de cliente');
-  if (receptor.length < 2) throw new ErrorHttp(400, 'Debes identificar a la persona que recibe');
-
-  const fechaRecepcion = datos.fecha_recepcion || new Date().toISOString();
-  if (Number.isNaN(Date.parse(fechaRecepcion))) {
-    throw new ErrorHttp(400, 'La fecha de recepcion no es valida');
+  let idDespacho = Number(datos.id_despacho);
+  if (!idDespacho) {
+    if (!lote) throw new ErrorHttp(400, 'Debes indicar el lote o el despacho');
+    const despacho = await deps.buscarDespachoCliente({ lote, factura: datos.factura, codigo: datos.codigo });
+    if (!despacho) throw new ErrorHttp(403, 'Factura o codigo de cliente no valido para este lote');
+    idDespacho = Number(despacho.id_despacho);
   }
 
-  const data = await deps.consultarTrazabilidadPorLote(lote);
-  const autorizacion = autorizarCredencialesCliente(data, {
-    factura: datos.factura,
-    codigo: datos.codigo
+  return deps.registrarConfirmacionEntregaService({
+    id_despacho: idDespacho,
+    factura: String(datos.factura || ''),
+    codigo: String(datos.codigo || ''),
+    receptor: String(datos.receptor || '').trim(),
+    temperatura_entrega_c: Number(datos.temperatura_entrega_c),
+    observaciones: String(datos.observaciones || '')
   });
-  if (!autorizacion.autorizado) {
-    throw new ErrorHttp(403, 'Factura o codigo de cliente no valido para este lote');
-  }
-  if (data.liberacion?.estado_liberacion !== 'aprobado') {
-    throw new ErrorHttp(409, 'El lote no tiene un despacho aprobado para confirmar');
-  }
-
-  try {
-    const confirmation = await deps.confirmarRecepcionEnFabric({
-      lote: data.lote,
-      numeroFactura: data.liberacion.numero_factura,
-      codigoCliente: datos.codigo || autorizacion.codigoEsperado,
-      fechaRecepcion: new Date(fechaRecepcion).toISOString(),
-      actor: receptor,
-      observaciones: String(datos.observaciones || '')
-    });
-    return {
-      confirmado: true,
-      estado: confirmation.estado || 'RECIBIDO_POR_CLIENTE',
-      lote: data.lote,
-      fechaConfirmacion: confirmation.fechaConfirmacion || fechaRecepcion,
-      transactionId: confirmation.transactionId || confirmation.txId || null
-    };
-  } catch (error) {
-    if (error?.name === 'ErrorOperacionFabric') {
-      throw new ErrorHttp(error.status || 503, error.message, { codigo: error.codigo });
-    }
-    throw error;
-  }
 }
 
 export async function consultarTrazabilidadAuditoria({ lote, codigo }) {
@@ -407,7 +503,9 @@ export async function consultarTrazabilidadAuditoria({ lote, codigo }) {
     recepciones: data.recepciones,
     inspecciones: data.inspecciones,
     produccion: data.produccion,
+    almacenamiento: data.almacenamiento,
     liberacion: data.liberacion,
+    despachos: data.despachos,
     validacionesBlockchain: data.validacionesBlockchain,
     decisionesBlockchain: data.decisionesBlockchain,
     historialCorrecciones: data.historialCorrecciones,

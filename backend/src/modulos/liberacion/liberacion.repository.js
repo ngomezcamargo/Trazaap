@@ -11,15 +11,19 @@ export async function listarPendientesLiberacion() {
        opp.tamano_presentacion,
        opp.estado_manufactura,
        rm.lote_producido,
+       to_char(COALESCE(rm.fecha_vencimiento_calculada, op.fecha_produccion + pf.vida_util_dias), 'YYYY-MM-DD') AS fecha_vencimiento_calculada,
        rm.unidades_producidas,
        rm.created_at AS fecha_manufactura,
        rm.registrado_por AS responsable_manufactura
      FROM registro_manufactura rm
      JOIN ordenes_produccion op ON op.id = rm.id_orden_produccion
      JOIN ordenes_produccion_productos opp ON opp.id = rm.id_producto
+     LEFT JOIN productos_fabricados pf ON pf.id = opp.producto_fabricado_id
      LEFT JOIN liberacion_producto lp ON lp.id_manufactura = rm.id_manufactura
+     JOIN almacenamientos_lote al ON al.id_manufactura = rm.id_manufactura
      WHERE lp.id_liberacion IS NULL
        AND rm.lote_producido IS NOT NULL
+       AND al.estado = 'listo_para_liberacion'
      ORDER BY rm.created_at ASC`
   );
   return rows;
@@ -33,6 +37,7 @@ export async function buscarManufacturaPorId(idManufactura) {
        rm.id_producto,
        op.codigo_orden,
        rm.lote_producido,
+       to_char(COALESCE(rm.fecha_vencimiento_calculada, op.fecha_produccion + pf.vida_util_dias), 'YYYY-MM-DD') AS fecha_vencimiento_calculada,
        rm.unidades_producidas,
        rm.created_at AS fecha_manufactura,
        COALESCE(um.email, rm.registrado_por) AS responsable_manufactura,
@@ -46,11 +51,16 @@ export async function buscarManufacturaPorId(idManufactura) {
        pf.temperatura_horneado_c,
        pf.tiempo_inmersion_minutos,
        pf.temperatura_inmersion_c
+       ,al.id_almacenamiento
+       ,al.estado AS estado_almacenamiento
+       ,al.temperatura_salida_c AS temperatura_salida_almacenamiento_c
+       ,al.fecha_salida AS fecha_salida_almacenamiento
      FROM registro_manufactura rm
      JOIN ordenes_produccion op ON op.id = rm.id_orden_produccion
      JOIN ordenes_produccion_productos opp ON opp.id = rm.id_producto
      LEFT JOIN productos_fabricados pf ON pf.id = opp.producto_fabricado_id
      LEFT JOIN users um ON um.id = rm.registrado_por_usuario_id
+     LEFT JOIN almacenamientos_lote al ON al.id_manufactura = rm.id_manufactura
      WHERE rm.id_manufactura = $1`,
     [idManufactura]
   );
@@ -88,11 +98,6 @@ export async function crearLiberacionProducto(data, db = poolPostgres) {
       fecha_liberacion,
       responsable_liberacion,
       tipo_empaque,
-      numero_factura,
-      conductor,
-      placa_vehiculo,
-      limpieza_vehiculo,
-      documentacion_dotacion,
       unidades_producidas,
       unidades_empacadas,
       peso_neto,
@@ -108,7 +113,7 @@ export async function crearLiberacionProducto(data, db = poolPostgres) {
       motivo_rechazo,
       observaciones
     )
-     VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+     VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
      RETURNING *`,
     [
       data.id_manufactura,
@@ -117,11 +122,6 @@ export async function crearLiberacionProducto(data, db = poolPostgres) {
       data.lote_producido,
       data.responsable_liberacion,
       data.tipo_empaque,
-      data.numero_factura,
-      data.conductor,
-      data.placa_vehiculo,
-      data.limpieza_vehiculo,
-      data.documentacion_dotacion,
       data.unidades_producidas,
       data.unidades_empacadas,
       data.peso_neto,
@@ -147,15 +147,21 @@ export async function crearInventarioProductoTerminadoDesdeLiberacion(data, db =
       id_liberacion,
       producto,
       lote,
+      unidades_liberadas,
+      unidades_reservadas,
+      unidades_despachadas,
       unidades_disponibles,
       fecha_vencimiento,
       estado
     )
-     VALUES ($1, $2, $3, $4, $5, $6)
+     VALUES ($1, $2, $3, $4, 0, 0, $4, $5, $6)
      ON CONFLICT (id_liberacion) DO UPDATE SET
-       producto = EXCLUDED.producto,
-       lote = EXCLUDED.lote,
-       unidades_disponibles = EXCLUDED.unidades_disponibles,
+      producto = EXCLUDED.producto,
+      lote = EXCLUDED.lote,
+      unidades_liberadas = EXCLUDED.unidades_liberadas,
+      unidades_reservadas = EXCLUDED.unidades_reservadas,
+      unidades_despachadas = EXCLUDED.unidades_despachadas,
+      unidades_disponibles = EXCLUDED.unidades_disponibles,
        fecha_vencimiento = EXCLUDED.fecha_vencimiento,
        estado = EXCLUDED.estado,
        updated_at = NOW()
@@ -164,12 +170,23 @@ export async function crearInventarioProductoTerminadoDesdeLiberacion(data, db =
       data.id_liberacion,
       data.producto,
       data.lote,
-      data.unidades_disponibles,
+      data.unidades_liberadas,
       data.fecha_vencimiento,
       data.estado
     ]
   );
   return rows[0];
+}
+
+export async function actualizarAlmacenamientoDesdeLiberacion(idAlmacenamiento, estado, db = poolPostgres) {
+  const { rows } = await db.query(
+    `UPDATE almacenamientos_lote
+     SET estado = $2, updated_at = NOW()
+     WHERE id_almacenamiento = $1 AND estado = 'listo_para_liberacion'
+     RETURNING *`,
+    [idAlmacenamiento, estado]
+  );
+  return rows[0] || null;
 }
 
 export async function listarLiberaciones() {
@@ -223,7 +240,7 @@ export async function listarLotesVencidosSinDespacho() {
      FROM inventario_producto_terminado
      WHERE fecha_vencimiento <= CURRENT_DATE
        AND unidades_disponibles > 0
-       AND estado IN ('disponible', 'reservado')
+       AND estado IN ('disponible', 'despacho_parcial')
      ORDER BY fecha_vencimiento, lote`
   );
   return rows;

@@ -148,15 +148,19 @@ export class FabricTraceabilityService {
     return this.enviarTransaccion('registrarDespacho', [JSON.stringify(datos)]);
   }
 
+  inicializarInventarioProductoTerminado(datos) {
+    return this.enviarTransaccion('inicializarInventarioProductoTerminado', [JSON.stringify(datos)]);
+  }
+
+  async consultarSaldoInventario(idInventario) {
+    return this.usarContrato(async (contract) => {
+      const result = await contract.evaluateTransaction('consultarSaldoInventario', String(idInventario));
+      return normalizarEventoFabric(result);
+    });
+  }
+
   confirmarRecepcionCliente(datos) {
-    return this.enviarTransaccion('confirmarRecepcionCliente', [
-      datos.lote,
-      datos.numeroFactura || '',
-      datos.codigoCliente || '',
-      datos.fechaRecepcion,
-      datos.actor,
-      datos.observaciones || ''
-    ]);
+    return this.enviarTransaccion('confirmarRecepcionCliente', [JSON.stringify(datos)]);
   }
 
   registrarAlertaVencimiento(datos) {

@@ -206,10 +206,14 @@ DROP TABLE IF EXISTS traceability_events;
 CREATE TABLE IF NOT EXISTS productos_fabricados (
   id BIGSERIAL PRIMARY KEY,
   nombre VARCHAR(140) NOT NULL,
+  prefijo_lote VARCHAR(5),
   categoria VARCHAR(80) NOT NULL DEFAULT '',
   descripcion TEXT,
   vida_util_dias INTEGER NOT NULL CHECK (vida_util_dias > 0),
   condiciones_almacenamiento TEXT,
+  temperatura_almacenamiento_min_c NUMERIC(6,2) NOT NULL DEFAULT 15,
+  temperatura_almacenamiento_max_c NUMERIC(6,2) NOT NULL DEFAULT 25,
+  requiere_refrigeracion BOOLEAN NOT NULL DEFAULT false,
   estado VARCHAR(20) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo')),
   requiere_inmersion BOOLEAN NOT NULL DEFAULT false,
   tiempo_fermentacion_minutos NUMERIC(10,2) NOT NULL DEFAULT 0,
@@ -220,6 +224,106 @@ CREATE TABLE IF NOT EXISTS productos_fabricados (
   temperatura_inmersion_c NUMERIC(10,2) NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE productos_fabricados
+  ADD COLUMN IF NOT EXISTS prefijo_lote VARCHAR(5);
+ALTER TABLE productos_fabricados
+  ADD COLUMN IF NOT EXISTS temperatura_almacenamiento_min_c NUMERIC(6,2) NOT NULL DEFAULT 15;
+ALTER TABLE productos_fabricados
+  ADD COLUMN IF NOT EXISTS temperatura_almacenamiento_max_c NUMERIC(6,2) NOT NULL DEFAULT 25;
+ALTER TABLE productos_fabricados
+  ADD COLUMN IF NOT EXISTS requiere_refrigeracion BOOLEAN NOT NULL DEFAULT false;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'productos_fabricados'::regclass
+      AND conname = 'productos_fabricados_rango_almacenamiento_check'
+  ) THEN
+    ALTER TABLE productos_fabricados
+      ADD CONSTRAINT productos_fabricados_rango_almacenamiento_check
+      CHECK (temperatura_almacenamiento_min_c <= temperatura_almacenamiento_max_c);
+  END IF;
+END $$;
+
+DO $$
+DECLARE
+  producto RECORD;
+  base TEXT;
+  candidato TEXT;
+  sufijo INTEGER;
+BEGIN
+  FOR producto IN
+    SELECT id, nombre
+    FROM productos_fabricados
+    WHERE prefijo_lote IS NULL OR btrim(prefijo_lote) = ''
+    ORDER BY id
+  LOOP
+    IF lower(btrim(producto.nombre)) LIKE 'bagel%' THEN
+      base := 'BG';
+    ELSE
+      base := upper(left(regexp_replace(btrim(producto.nombre), '[^A-Za-z0-9]', '', 'g'), 5));
+      IF length(base) < 2 THEN
+        base := rpad(base, 2, 'X');
+      END IF;
+    END IF;
+
+    candidato := left(base, 5);
+    sufijo := 1;
+    WHILE EXISTS (
+      SELECT 1 FROM productos_fabricados p
+      WHERE p.prefijo_lote = candidato AND p.id <> producto.id
+    ) LOOP
+      candidato := left(base, greatest(2, 5 - length(sufijo::TEXT))) || sufijo::TEXT;
+      sufijo := sufijo + 1;
+    END LOOP;
+
+    UPDATE productos_fabricados SET prefijo_lote = candidato WHERE id = producto.id;
+  END LOOP;
+END $$;
+
+ALTER TABLE productos_fabricados
+  ALTER COLUMN prefijo_lote SET NOT NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'productos_fabricados'::regclass
+      AND conname = 'productos_fabricados_prefijo_lote_key'
+  ) THEN
+    ALTER TABLE productos_fabricados
+      ADD CONSTRAINT productos_fabricados_prefijo_lote_key UNIQUE (prefijo_lote);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'productos_fabricados'::regclass
+      AND conname = 'productos_fabricados_prefijo_lote_check'
+  ) THEN
+    ALTER TABLE productos_fabricados
+      ADD CONSTRAINT productos_fabricados_prefijo_lote_check
+      CHECK (prefijo_lote ~ '^[A-Z0-9]{2,5}$');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'productos_fabricados'::regclass
+      AND conname = 'productos_fabricados_bagel_prefijo_check'
+  ) THEN
+    ALTER TABLE productos_fabricados
+      ADD CONSTRAINT productos_fabricados_bagel_prefijo_check
+      CHECK (lower(btrim(nombre)) NOT LIKE 'bagel%' OR prefijo_lote = 'BG');
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS consecutivos_lote (
+  prefijo_producto VARCHAR(5) NOT NULL,
+  fecha_produccion DATE NOT NULL,
+  ultimo_consecutivo INTEGER NOT NULL DEFAULT 0 CHECK (ultimo_consecutivo >= 0),
+  PRIMARY KEY (prefijo_producto, fecha_produccion)
 );
 
 DO $$
@@ -431,6 +535,7 @@ CREATE TABLE IF NOT EXISTS registro_manufactura (
   id_orden_produccion BIGINT NOT NULL REFERENCES ordenes_produccion(id) ON DELETE CASCADE,
   id_producto BIGINT NOT NULL REFERENCES ordenes_produccion_productos(id) ON DELETE CASCADE,
   lote_producido VARCHAR(100) NOT NULL UNIQUE,
+  fecha_vencimiento_calculada DATE,
   unidades_producidas INTEGER NOT NULL CHECK (unidades_producidas >= 0),
   tiempo_real_fermentacion_minutos NUMERIC(10,2) NOT NULL DEFAULT 0,
   temperatura_real_fermentacion_c NUMERIC(10,2) NOT NULL DEFAULT 0,
@@ -450,8 +555,124 @@ CREATE TABLE IF NOT EXISTS registro_manufactura (
 ALTER TABLE registro_manufactura DROP COLUMN IF EXISTS carro_escabiladero;
 ALTER TABLE registro_manufactura
   ADD COLUMN IF NOT EXISTS registrado_por_usuario_id BIGINT REFERENCES users(id);
+ALTER TABLE registro_manufactura
+  ADD COLUMN IF NOT EXISTS fecha_vencimiento_calculada DATE;
+
+UPDATE registro_manufactura rm
+SET fecha_vencimiento_calculada = op.fecha_produccion + pf.vida_util_dias
+FROM ordenes_produccion op
+JOIN ordenes_produccion_productos opp ON opp.orden_produccion_id = op.id
+JOIN productos_fabricados pf ON pf.id = opp.producto_fabricado_id
+WHERE rm.id_orden_produccion = op.id
+  AND rm.id_producto = opp.id
+  AND rm.fecha_vencimiento_calculada IS NULL;
+
+INSERT INTO consecutivos_lote (prefijo_producto, fecha_produccion, ultimo_consecutivo)
+SELECT p.prefijo_lote,
+       to_date(split_part(rm.lote_producido, '-', 2), 'YYYYMMDD'),
+       MAX(COALESCE(NULLIF(split_part(rm.lote_producido, '-', 3), '')::INTEGER, 0))
+FROM registro_manufactura rm
+JOIN ordenes_produccion_productos opp ON opp.id = rm.id_producto
+JOIN productos_fabricados p ON p.id = opp.producto_fabricado_id
+WHERE rm.lote_producido ~ '^[A-Z0-9]{2,5}-[0-9]{8}-[0-9]+$'
+GROUP BY p.prefijo_lote, to_date(split_part(rm.lote_producido, '-', 2), 'YYYYMMDD')
+ON CONFLICT (prefijo_producto, fecha_produccion) DO UPDATE
+SET ultimo_consecutivo = GREATEST(consecutivos_lote.ultimo_consecutivo, EXCLUDED.ultimo_consecutivo);
+
 
 DROP TABLE IF EXISTS lotes_producto_terminado CASCADE;
+
+CREATE TABLE IF NOT EXISTS ubicaciones_almacenamiento (
+  id_ubicacion BIGSERIAL PRIMARY KEY,
+  nombre VARCHAR(100) NOT NULL UNIQUE,
+  descripcion TEXT,
+  tipo VARCHAR(20) NOT NULL DEFAULT 'ambiente' CHECK (tipo IN ('ambiente', 'refrigerado', 'congelado')),
+  activo BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO ubicaciones_almacenamiento (nombre, descripcion, tipo, activo)
+VALUES ('Zona de producto terminado', 'Ubicacion general para lotes fabricados pendientes de liberacion.', 'ambiente', true)
+ON CONFLICT (nombre) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS almacenamientos_lote (
+  id_almacenamiento BIGSERIAL PRIMARY KEY,
+  id_manufactura BIGINT NOT NULL REFERENCES registro_manufactura(id_manufactura) ON DELETE RESTRICT,
+  id_orden_produccion BIGINT NOT NULL REFERENCES ordenes_produccion(id) ON DELETE RESTRICT,
+  id_producto BIGINT NOT NULL REFERENCES ordenes_produccion_productos(id) ON DELETE RESTRICT,
+  lote_producido VARCHAR(100) NOT NULL,
+  id_ubicacion BIGINT NOT NULL REFERENCES ubicaciones_almacenamiento(id_ubicacion),
+  fecha_ingreso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  temperatura_min_esperada_c NUMERIC(6,2) NOT NULL,
+  temperatura_max_esperada_c NUMERIC(6,2) NOT NULL,
+  temperatura_ingreso_c NUMERIC(6,2) NOT NULL,
+  requiere_refrigeracion BOOLEAN NOT NULL DEFAULT false,
+  estado VARCHAR(30) NOT NULL DEFAULT 'almacenado' CHECK (
+    estado IN ('almacenado', 'en_observacion', 'retenido', 'listo_para_liberacion', 'liberado', 'despacho_parcial', 'despachado', 'rechazado')
+  ),
+  observaciones_ingreso TEXT,
+  responsable_ingreso BIGINT NOT NULL REFERENCES users(id),
+  fecha_salida TIMESTAMPTZ,
+  temperatura_salida_c NUMERIC(6,2),
+  estado_producto_salida VARCHAR(20) CHECK (estado_producto_salida IS NULL OR estado_producto_salida IN ('conforme', 'no_conforme')),
+  decision_salida VARCHAR(20) CHECK (decision_salida IS NULL OR decision_salida IN ('liberar', 'retener', 'rechazar')),
+  observaciones_salida TEXT,
+  responsable_salida BIGINT REFERENCES users(id),
+  resolucion_fecha TIMESTAMPTZ,
+  resolucion_decision VARCHAR(30) CHECK (
+    resolucion_decision IS NULL OR resolucion_decision IN ('liberar', 'mantener_retenido', 'rechazar')
+  ),
+  resolucion_motivo TEXT,
+  resolucion_observaciones TEXT,
+  responsable_resolucion BIGINT REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT almacenamientos_rango_temperatura_check CHECK (
+    temperatura_min_esperada_c <= temperatura_max_esperada_c
+  ),
+  CONSTRAINT almacenamientos_salida_completa_check CHECK (
+    (fecha_salida IS NULL AND temperatura_salida_c IS NULL AND estado_producto_salida IS NULL AND decision_salida IS NULL AND responsable_salida IS NULL)
+    OR
+    (fecha_salida IS NOT NULL AND temperatura_salida_c IS NOT NULL AND estado_producto_salida IS NOT NULL AND decision_salida IS NOT NULL AND responsable_salida IS NOT NULL)
+  )
+);
+
+CREATE TABLE IF NOT EXISTS controles_almacenamiento (
+  id_control BIGSERIAL PRIMARY KEY,
+  id_almacenamiento BIGINT NOT NULL REFERENCES almacenamientos_lote(id_almacenamiento) ON DELETE RESTRICT,
+  fecha_control TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  temperatura_c NUMERIC(6,2) NOT NULL,
+  condicion_general VARCHAR(20) NOT NULL CHECK (condicion_general IN ('conforme', 'no_conforme')),
+  resultado VARCHAR(20) NOT NULL CHECK (resultado IN ('conforme', 'fuera_rango')),
+  observaciones TEXT,
+  responsable_control BIGINT NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT controles_desviacion_observada_check CHECK (
+    resultado <> 'fuera_rango' OR length(btrim(COALESCE(observaciones, ''))) > 0
+  )
+);
+
+CREATE TABLE IF NOT EXISTS blockchain_outbox (
+  id_outbox BIGSERIAL PRIMARY KEY,
+  tipo_evento VARCHAR(80) NOT NULL,
+  id_entidad VARCHAR(120) NOT NULL,
+  operacion VARCHAR(40) NOT NULL DEFAULT 'registrar' CHECK (
+    operacion IN ('registrar', 'versionar', 'inicializar_inventario_terminado', 'registrar_despacho', 'confirmar_entrega')
+  ),
+  actor VARCHAR(120) NOT NULL DEFAULT 'sistema',
+  estado VARCHAR(20) NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'procesando', 'enviado', 'fallido')),
+  intentos INTEGER NOT NULL DEFAULT 0 CHECK (intentos >= 0),
+  proximo_intento TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ultimo_error TEXT,
+  transaccion_fabric VARCHAR(180),
+  deduplicacion_clave VARCHAR(260) NOT NULL UNIQUE,
+  version_solicitud INTEGER NOT NULL DEFAULT 1 CHECK (version_solicitud > 0),
+  bloqueado_en TIMESTAMPTZ,
+  procesado_en TIMESTAMPTZ,
+  creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS liberacion_producto (
   id_liberacion BIGSERIAL PRIMARY KEY,
@@ -462,11 +683,11 @@ CREATE TABLE IF NOT EXISTS liberacion_producto (
   fecha_liberacion TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   responsable_liberacion BIGINT NOT NULL REFERENCES users(id),
   tipo_empaque VARCHAR(80) NOT NULL,
-  numero_factura VARCHAR(80) NOT NULL,
-  conductor VARCHAR(120) NOT NULL,
-  placa_vehiculo VARCHAR(20) NOT NULL,
-  limpieza_vehiculo VARCHAR(20) NOT NULL CHECK (limpieza_vehiculo IN ('cumple', 'no_cumple')),
-  documentacion_dotacion VARCHAR(20) NOT NULL CHECK (documentacion_dotacion IN ('cumple', 'no_cumple')),
+  numero_factura VARCHAR(80),
+  conductor VARCHAR(120),
+  placa_vehiculo VARCHAR(20),
+  limpieza_vehiculo VARCHAR(20) CHECK (limpieza_vehiculo IS NULL OR limpieza_vehiculo IN ('cumple', 'no_cumple')),
+  documentacion_dotacion VARCHAR(20) CHECK (documentacion_dotacion IS NULL OR documentacion_dotacion IN ('cumple', 'no_cumple')),
   unidades_producidas INTEGER NOT NULL CHECK (unidades_producidas >= 0),
   unidades_empacadas INTEGER NOT NULL CHECK (unidades_empacadas > 0),
   peso_neto NUMERIC(12,3) NOT NULL CHECK (peso_neto > 0),
@@ -496,11 +717,90 @@ CREATE TABLE IF NOT EXISTS inventario_producto_terminado (
   id_liberacion BIGINT UNIQUE NOT NULL REFERENCES liberacion_producto(id_liberacion) ON DELETE CASCADE,
   producto VARCHAR(120) NOT NULL,
   lote VARCHAR(100) UNIQUE NOT NULL,
+  unidades_liberadas INTEGER NOT NULL CHECK (unidades_liberadas >= 0),
+  unidades_reservadas INTEGER NOT NULL DEFAULT 0 CHECK (unidades_reservadas >= 0),
+  unidades_despachadas INTEGER NOT NULL DEFAULT 0 CHECK (unidades_despachadas >= 0),
   unidades_disponibles INTEGER NOT NULL CHECK (unidades_disponibles >= 0),
   fecha_vencimiento DATE NOT NULL,
-  estado VARCHAR(30) NOT NULL DEFAULT 'disponible' CHECK (estado IN ('disponible', 'reservado', 'despachado', 'retenido')),
+  estado VARCHAR(30) NOT NULL DEFAULT 'disponible' CHECK (estado IN ('disponible', 'despacho_parcial', 'despachado_total', 'retenido')),
+  es_heredado BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT inventario_producto_terminado_saldos_check CHECK (
+    unidades_liberadas = unidades_reservadas + unidades_despachadas + unidades_disponibles
+  )
+);
+
+CREATE TABLE IF NOT EXISTS clientes (
+  id_cliente BIGSERIAL PRIMARY KEY,
+  nombre_razon_social VARCHAR(180) NOT NULL,
+  nit_documento VARCHAR(50) NOT NULL UNIQUE,
+  nombre_contacto VARCHAR(120) NOT NULL,
+  telefono VARCHAR(40) NOT NULL,
+  email VARCHAR(120),
+  direccion VARCHAR(255) NOT NULL,
+  estado VARCHAR(20) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE SEQUENCE IF NOT EXISTS despachos_codigo_seq;
+
+CREATE TABLE IF NOT EXISTS despachos (
+  id_despacho BIGSERIAL PRIMARY KEY,
+  codigo_despacho VARCHAR(40) NOT NULL UNIQUE,
+  id_cliente BIGINT REFERENCES clientes(id_cliente) ON DELETE RESTRICT,
+  numero_factura VARCHAR(80) NOT NULL,
+  fecha_despacho TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  fecha_entrega TIMESTAMPTZ,
+  responsable_despacho BIGINT NOT NULL REFERENCES users(id),
+  conductor VARCHAR(120),
+  placa_vehiculo VARCHAR(20),
+  temperatura_salida_c NUMERIC(6,2),
+  temperatura_transporte_c NUMERIC(6,2),
+  temperatura_entrega_c NUMERIC(6,2),
+  limpieza_vehiculo VARCHAR(20) CHECK (limpieza_vehiculo IS NULL OR limpieza_vehiculo IN ('cumple', 'no_cumple')),
+  documentacion_dotacion VARCHAR(20) CHECK (documentacion_dotacion IS NULL OR documentacion_dotacion IN ('cumple', 'no_cumple')),
+  canal_distribucion VARCHAR(60),
+  estado_despacho VARCHAR(40) NOT NULL DEFAULT 'pendiente_validacion_blockchain' CHECK (
+    estado_despacho IN ('pendiente_validacion_blockchain', 'despachado', 'entregado', 'bloqueado', 'cancelado')
+  ),
+  motivo_bloqueo TEXT,
+  observaciones TEXT,
+  es_heredado BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS despacho_detalle (
+  id_detalle BIGSERIAL PRIMARY KEY,
+  id_despacho BIGINT NOT NULL REFERENCES despachos(id_despacho) ON DELETE RESTRICT,
+  id_inventario_producto_terminado BIGINT NOT NULL REFERENCES inventario_producto_terminado(id_inventario) ON DELETE RESTRICT,
+  id_liberacion BIGINT NOT NULL REFERENCES liberacion_producto(id_liberacion) ON DELETE RESTRICT,
+  cantidad_despachada INTEGER NOT NULL CHECK (cantidad_despachada > 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (id_despacho, id_inventario_producto_terminado)
+);
+
+CREATE TABLE IF NOT EXISTS confirmaciones_entrega (
+  id_confirmacion BIGSERIAL PRIMARY KEY,
+  id_despacho BIGINT NOT NULL UNIQUE REFERENCES despachos(id_despacho) ON DELETE RESTRICT,
+  receptor VARCHAR(160) NOT NULL,
+  fecha_recepcion TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  temperatura_entrega_c NUMERIC(6,2) NOT NULL,
+  observaciones TEXT,
+  estado_confirmacion VARCHAR(30) NOT NULL DEFAULT 'pendiente_blockchain' CHECK (
+    estado_confirmacion IN ('pendiente_blockchain', 'confirmada', 'bloqueada')
+  ),
+  motivo_bloqueo TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+SELECT setval(
+  pg_get_serial_sequence('despachos', 'id_despacho'),
+  GREATEST((SELECT COALESCE(MAX(id_despacho), 0) FROM despachos), 100000),
+  true
 );
 
 DROP TABLE IF EXISTS liberaciones_producto CASCADE;
@@ -517,9 +817,23 @@ CREATE INDEX IF NOT EXISTS idx_ordenes_produccion_fecha ON ordenes_produccion(fe
 CREATE INDEX IF NOT EXISTS idx_ordenes_materiales_orden ON ordenes_produccion_materias(orden_produccion_id);
 CREATE INDEX IF NOT EXISTS idx_registro_manufactura_lote ON registro_manufactura(lote_producido);
 CREATE INDEX IF NOT EXISTS idx_registro_manufactura_orden ON registro_manufactura(id_orden_produccion);
+CREATE INDEX IF NOT EXISTS idx_almacenamientos_lote ON almacenamientos_lote(lote_producido, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_almacenamientos_estado ON almacenamientos_lote(estado, fecha_ingreso);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_almacenamiento_activo_manufactura
+  ON almacenamientos_lote(id_manufactura)
+  WHERE estado NOT IN ('despachado', 'rechazado');
+CREATE INDEX IF NOT EXISTS idx_controles_almacenamiento_fecha
+  ON controles_almacenamiento(id_almacenamiento, fecha_control DESC);
+CREATE INDEX IF NOT EXISTS idx_blockchain_outbox_trabajo
+  ON blockchain_outbox(estado, proximo_intento, creado_en);
 CREATE INDEX IF NOT EXISTS idx_liberacion_producto_lote ON liberacion_producto(lote_producido);
 CREATE INDEX IF NOT EXISTS idx_liberacion_producto_estado ON liberacion_producto(estado_liberacion);
 CREATE INDEX IF NOT EXISTS idx_inventario_producto_terminado_lote ON inventario_producto_terminado(lote);
+CREATE INDEX IF NOT EXISTS idx_clientes_estado_nombre ON clientes(estado, nombre_razon_social);
+CREATE INDEX IF NOT EXISTS idx_despachos_cliente_fecha ON despachos(id_cliente, fecha_despacho DESC);
+CREATE INDEX IF NOT EXISTS idx_despachos_estado_fecha ON despachos(estado_despacho, fecha_despacho DESC);
+CREATE INDEX IF NOT EXISTS idx_despacho_detalle_inventario ON despacho_detalle(id_inventario_producto_terminado, id_despacho);
+CREATE INDEX IF NOT EXISTS idx_confirmaciones_estado ON confirmaciones_entrega(estado_confirmacion, fecha_recepcion);
 
 WITH recepciones_pendientes AS (
   SELECT

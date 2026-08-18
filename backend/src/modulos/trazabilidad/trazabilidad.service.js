@@ -14,6 +14,7 @@ import {
   obtenerDetalleProduccion
 } from './trazabilidad.repository.js';
 import { generarCodigosAcceso } from '../publico/codigos-acceso.util.js';
+import { buscarDespachosPorLote } from '../despachos/despachos.repository.js';
 
 async function construirValidacionesBlockchain(recepcion) {
   if (!recepcion) return [];
@@ -187,6 +188,14 @@ export async function consultarTrazabilidadPorLote(lote) {
       detalle?.manufactura?.id_manufactura
         ? validarSeguro('registro_manufactura', detalle.manufactura.id_manufactura)
         : null,
+      detalle?.almacenamiento?.id_almacenamiento
+        ? validarSeguro('ingreso_almacenamiento', detalle.almacenamiento.id_almacenamiento)
+        : null,
+      ...(detalle?.almacenamiento?.controles || [])
+        .map((control) => validarSeguro('control_almacenamiento', control.id_control)),
+      detalle?.almacenamiento?.fecha_salida
+        ? validarSeguro('salida_almacenamiento', detalle.almacenamiento.id_almacenamiento)
+        : null,
       detalle?.liberacion?.id_liberacion
         ? validarSeguro('liberacion_producto', detalle.liberacion.id_liberacion)
         : null,
@@ -215,6 +224,7 @@ export async function consultarTrazabilidadPorLote(lote) {
     correccionesPorEntidad
   ]);
   const loteProducido = detalle?.manufactura?.lote_producido || null;
+  const despachosOperativos = loteProducido ? await buscarDespachosPorLote(loteProducido) : [];
   const recepciones = recepcionesOrigen.map((recepcion) => mapearRecepcion(recepcion, blockchainPorEntidad));
   const inspecciones = recepcionesOrigen.map((recepcion) => mapearInspeccion(recepcion, blockchainPorEntidad)).filter(Boolean);
 
@@ -239,12 +249,34 @@ export async function consultarTrazabilidadPorLote(lote) {
         }
       : null,
     liberacion: detalle?.liberacion || null,
+    almacenamiento: detalle?.almacenamiento
+      ? {
+          ...detalle.almacenamiento,
+          blockchainIngreso: blockchainPorEntidad[`ingreso_almacenamiento:${detalle.almacenamiento.id_almacenamiento}`] || null,
+          blockchainSalida: blockchainPorEntidad[`salida_almacenamiento:${detalle.almacenamiento.id_almacenamiento}`] || null,
+          controles: (detalle.almacenamiento.controles || []).map((control) => ({
+            ...control,
+            blockchain: blockchainPorEntidad[`control_almacenamiento:${control.id_control}`] || null
+          }))
+        }
+      : null,
     inventarioProductoTerminado: detalle?.inventarioProductoTerminado
       ? {
           ...detalle.inventarioProductoTerminado,
           blockchain: blockchainPorEntidad[`inventario_producto_terminado:${detalle.inventarioProductoTerminado.id_inventario}`] || null
         }
       : null,
+    despachos: despachosOperativos.map((despacho) => ({
+      ...despacho,
+      blockchain: eventosFabric.find((evento) => (
+        evento.tipoEvento === 'despacho_producto' &&
+        String(evento.idEntidad) === String(despacho.id_despacho)
+      )) || null,
+      confirmacionBlockchain: eventosFabric.find((evento) => (
+        evento.tipoEvento === 'confirmacion_recepcion_cliente' &&
+        String(evento.idEntidad) === String(despacho.id_despacho)
+      )) || null
+    })),
     inventariosMateriaPrima: (detalle?.inventariosMateriaPrima || []).map((inventario) => ({
       ...inventario,
       blockchain: blockchainPorEntidad[`inventario_materia_prima:${inventario.id}`] || null

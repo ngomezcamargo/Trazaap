@@ -8,6 +8,10 @@ const ESTADOS_HTTP_FABRIC = {
   RECEPCION_YA_CONFIRMADA: 409,
   DESPACHO_BLOQUEADO: 422,
   DESPACHO_DUPLICADO: 409,
+  INVENTARIO_NO_ENCONTRADO: 404,
+  INVENTARIO_DUPLICADO: 409,
+  LOTE_SIN_EXISTENCIAS: 409,
+  STOCK_INSUFICIENTE: 409,
   ALERTA_DUPLICADA: 409,
   LOTE_NO_VENCIDO: 400
 };
@@ -24,10 +28,9 @@ export class ErrorOperacionFabric extends Error {
 }
 
 function extraerDetallesDespacho(message) {
-  const marker = '[DESPACHO_BLOQUEADO]';
-  const markerIndex = message.indexOf(marker);
+  const markerIndex = message.search(/\[(?:DESPACHO_BLOQUEADO|LOTE_SIN_EXISTENCIAS|STOCK_INSUFICIENTE)\]/);
   if (markerIndex < 0) return null;
-  const start = message.indexOf('{', markerIndex + marker.length);
+  const start = message.indexOf('{', markerIndex);
   const end = message.lastIndexOf('}');
   if (start < 0 || end < start) return null;
   try {
@@ -66,7 +69,7 @@ export function normalizarErrorFabric(error) {
   const message = codigo === 'FABRIC_NO_DISPONIBLE'
     ? 'Hyperledger Fabric no esta disponible. El despacho no fue registrado.'
     : rawMessage.replace(/^.*?\[([A-Z_]+)\]\s*/, '').trim();
-  const mensajeDespacho = mensajes.find((item) => item.includes('[DESPACHO_BLOQUEADO]')) || rawMessage;
+  const mensajeDespacho = mensajes.find((item) => /\[(?:DESPACHO_BLOQUEADO|LOTE_SIN_EXISTENCIAS|STOCK_INSUFICIENTE)\]/.test(item)) || rawMessage;
   return new ErrorOperacionFabric(codigo, message, status, extraerDetallesDespacho(mensajeDespacho));
 }
 
@@ -153,6 +156,14 @@ export function validarDespachoBlockchain(datos) {
 
 export function registrarDespachoBlockchain(datos) {
   return ejecutarEstricto(async () => resultadoTransaccion(await fabricTraceabilityService.registrarDespacho(datos)));
+}
+
+export function inicializarInventarioTerminadoBlockchain(datos) {
+  return ejecutarEstricto(async () => resultadoTransaccion(await fabricTraceabilityService.inicializarInventarioProductoTerminado(datos)));
+}
+
+export function consultarSaldoInventarioBlockchain(idInventario) {
+  return ejecutarEstricto(() => fabricTraceabilityService.consultarSaldoInventario(idInventario));
 }
 
 export function confirmarRecepcionClienteBlockchain(datos) {

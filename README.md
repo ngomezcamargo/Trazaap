@@ -1,4 +1,4 @@
-# Trazaap - Base Simplificada Sprint 2
+# Trazaap
 
 Trazaap queda refactorizado como una base academica limpia para Sprint 2, enfocada en operacion interna y trazabilidad extendida.
 
@@ -12,10 +12,14 @@ Trazaap queda refactorizado como una base academica limpia para Sprint 2, enfoca
 - Gestionar ordenes de produccion diarias
 - Orden de produccion basada en formato real de Angela's Bagels (encabezado, productos, ingredientes y mojes)
 - Registrar manufactura real por producto producido
+- Controlar ingreso, seguimiento y salida de almacenamiento antes de la liberacion
+- Generar automaticamente lotes unicos por producto y fecha de produccion
 - Comparar tiempos y temperaturas estandar contra valores reales
 - Generar lote producido desde el registro de manufactura
 - Registrar liberacion de producto
-- Consultar trazabilidad extendida por lote (recepcion, inspeccion, produccion, liberacion, blockchain)
+- Gestionar clientes comerciales sin convertirlos en usuarios internos
+- Registrar despachos parciales de uno o varios lotes y confirmar su entrega
+- Consultar trazabilidad extendida por lote (recepcion, inspeccion, produccion, liberacion, despacho, blockchain)
 
 ## Stack actual
 
@@ -48,7 +52,10 @@ src/
     materias_primas/
     recepciones/
     produccion/
+    almacenamiento/
     liberacion/
+    clientes/
+    despachos/
     trazabilidad/
     blockchain/
   app.js
@@ -70,7 +77,10 @@ src/
 |   |   |   |-- produccion/
 |   |   |   |-- recepciones/
 |   |   |   |-- materias_primas/
+|   |   |   |-- almacenamiento/
 |   |   |   |-- liberacion/
+|   |   |   |-- clientes/
+|   |   |   |-- despachos/
 |   |   |   `-- trazabilidad/
 |   |   |-- app.js
 |   |   `-- server.js
@@ -134,8 +144,26 @@ La matriz de permisos vigente esta documentada en [docs/MATRIZ_RBAC.md](docs/MAT
 - `POST /produccion/ordenes/:id/materias`
 - `PUT /produccion/ordenes/:id/materias/:materiaId`
 - `POST /produccion/ordenes/:id/tiempos`
+- `GET /almacenamiento/pendientes`
+- `GET /almacenamiento`
+- `GET /almacenamiento/:id`
+- `POST /almacenamiento/ingresos`
+- `POST /almacenamiento/:id/controles`
+- `POST /almacenamiento/:id/salida`
+- `POST /almacenamiento/:id/resolucion`
+- `GET /almacenamiento/ubicaciones`
+- `POST /almacenamiento/ubicaciones`
+- `PUT /almacenamiento/ubicaciones/:id`
 - `GET /liberacion`
 - `POST /liberacion`
+- `GET /clientes`
+- `GET /clientes/:id`
+- `POST /clientes`
+- `PUT /clientes/:id`
+- `GET /despachos/inventario-disponible`
+- `GET /despachos`
+- `GET /despachos/:id`
+- `POST /despachos`
 - `GET /public/traceability/lote/:lote`
 - `GET /public/traceability/cliente?lote=<lote>&factura=<factura>`
 - `GET /public/traceability/cliente?lote=<lote>&codigo=<codigo_cliente>`
@@ -172,12 +200,22 @@ El backend construye un payload estable y normalizado desde los registros operat
 - `consultarHistorialEvento`
 - `validarDespacho`
 - `registrarDespacho`
+- `inicializarInventarioProductoTerminado`
+- `consultarSaldoInventario`
 - `confirmarRecepcionCliente`
 - `registrarAlertaVencimiento`
 
 En la consulta de trazabilidad, el backend reconstruye el payload actual y Fabric responde si el registro esta `VERIFICADO`, `ALTERADO`, `PENDIENTE` o `NO_ENCONTRADO`.
 
 Desde la version 2.2 (secuencia 4), `registrarEvento` rechaza cualquier clave existente. Las correcciones se guardan como eventos nuevos que referencian el original y la validacion reconoce como vigente la ultima correccion inmutable autorizada. La aprobacion del despacho falla de forma cerrada si Fabric no esta disponible o si el chaincode detecta vencimiento, inventario insuficiente, controles de produccion fuera de rango o validaciones no conformes. El cliente receptor confirma la entrega desde el portal QR mediante factura o codigo, sin una cuenta interna.
+
+Desde la version 2.3 (secuencia 5), el despacho exige que el lote haya completado el almacenamiento y tenga estado `listo_para_liberacion`. El modulo registra de forma separada el ingreso, los controles de conservacion y la salida. Las temperaturas esperadas pertenecen a la ficha del producto; una desviacion no borra el dato ni bloquea su registro, pero exige observacion y retiene el lote hasta una resolucion gerencial documentada.
+
+Desde la version 2.4 (secuencia 6), liberacion y despacho son operaciones independientes. Una liberacion aprobada inicializa en Fabric el saldo del inventario terminado; cada despacho puede consumir parcialmente uno o varios lotes, pertenece a un cliente y una factura, y conserva las condiciones de transporte. El chaincode descuenta el saldo inmutable y rechaza `LOTE_SIN_EXISTENCIAS`, `STOCK_INSUFICIENTE` y `DESPACHO_DUPLICADO`. PostgreSQL mantiene saldos operativos de unidades liberadas, reservadas, despachadas y disponibles para soportar concurrencia y recuperacion mediante outbox.
+
+La implementacion de RF05 esta descrita en [docs/RF05_DESPACHOS_PARCIALES.md](docs/RF05_DESPACHOS_PARCIALES.md).
+
+La entrega de evidencias ordinarias a Fabric usa una bandeja tecnica `blockchain_outbox`. La misma transaccion PostgreSQL que guarda el evento operativo deja una referencia de entrega pendiente; un trabajador del backend reconstruye el payload desde las tablas del dominio y reintenta con espera exponencial. La bandeja no almacena payloads, hashes ni bloques, por lo que PostgreSQL no duplica el ledger. Los registros se reclaman con bloqueo concurrente y una clave de deduplicacion evita enviar dos veces el mismo evento.
 
 El backend revisa cada hora los lotes con unidades disponibles que alcanzaron su vencimiento. `registrarAlertaVencimiento` conserva una sola alerta inmutable por lote y el dashboard gerencial muestra la alerta operativa.
 
@@ -205,6 +243,7 @@ cd fabric
 ./scripts/start.sh
 ./scripts/create-channel.sh
 ./scripts/deploy-chaincode.sh
+./scripts/status.sh
 ```
 
 El despliegue instala el paquete en `peer0` y `peer1`, aprueba la definicion para `Org1MSP` y la confirma en `trazabilidad-channel`. Una actualizacion normal no debe ejecutar `clean.sh`, borrar volumenes, regenerar certificados ni recrear el canal.
@@ -214,6 +253,13 @@ Pruebas del chaincode:
 ```bash
 cd fabric/chaincode/traceability
 npm test
+```
+
+Prueba integral RF05 contra PostgreSQL y la red Fabric desplegada:
+
+```bash
+cd backend
+npm run test:rf05
 ```
 
 Detener red:
@@ -375,5 +421,9 @@ Tablas base de Sprint 2:
 - `producto_variante_materia_prima`
 - `ordenes_produccion_materias`
 - `registro_manufactura`
+- `ubicaciones_almacenamiento`
+- `almacenamientos_lote`
+- `controles_almacenamiento`
+- `blockchain_outbox` (solo estado tecnico de entrega; sin payload ni hash)
 - `tiempos_produccion`
 - `liberaciones_producto`

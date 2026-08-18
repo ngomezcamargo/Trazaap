@@ -27,7 +27,7 @@ Su acceso se realiza mediante rutas publicas bajo `/api/public`, sin JWT y sin p
 | Actor externo | Forma de acceso | Informacion visible |
 | --- | --- | --- |
 | Consumidor final | QR o enlace `/verificar/:lote` | lote final, producto, fechas principales, estado de liberacion, origen resumido de materias primas y estado general blockchain |
-| Cliente/receptor | lote + numero de factura o codigo de cliente | informacion publica, datos de liberacion/entrega, factura, conductor, placa, estado del transporte y validacion blockchain por etapa |
+| Cliente/receptor | lote + numero de factura o codigo privado del despacho | informacion publica y datos del despacho autorizado: factura, conductor, placa, cantidades, estado del transporte y validacion blockchain |
 | Auditoria/INVIMA | lote + codigo de auditoria | trazabilidad completa del lote, recepciones, inspecciones, produccion, manufactura, liberacion y hashes de validacion blockchain |
 
 ## Endpoints publicos
@@ -38,10 +38,11 @@ Base backend: `http://localhost:4000/api`
 - `GET /public/traceability/cliente?lote=<lote>&factura=<factura>`
 - `GET /public/traceability/cliente?lote=<lote>&codigo=<codigo_cliente>`
 - `GET /public/traceability/auditoria?lote=<lote>&codigo=<codigo_auditoria>`
+- `POST /public/traceability/cliente/confirmar`
 
 ## Codigos de acceso
 
-Los codigos de cliente y auditoria se generan a partir de datos operativos existentes del lote.
+Cada despacho tiene un codigo privado independiente, porque un mismo lote puede repartirse entre varios clientes. El codigo de auditoria permanece asociado al lote completo.
 
 El reporte privado de trazabilidad muestra:
 
@@ -54,6 +55,6 @@ Esos codigos se comparten solo cuando se necesita habilitar una consulta externa
 
 - Las rutas publicas no permiten crear, editar ni eliminar informacion.
 - La vista de consumidor final no muestra factura, conductor, placa, NIT, correos, responsables internos ni hashes.
-- La vista de cliente muestra informacion asociada a la entrega, pero no expone el detalle interno completo.
+- La vista de cliente muestra solo el despacho acreditado por su factura o codigo privado, aunque el lote tenga otras entregas a clientes distintos.
 - La vista de auditoria/INVIMA requiere codigo de auditoria y muestra trazabilidad tecnica completa.
 - El backend privado sigue siendo la unica capa con permisos administrativos.

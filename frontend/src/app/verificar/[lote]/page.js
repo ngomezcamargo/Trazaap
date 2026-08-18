@@ -38,6 +38,7 @@ export default function VerificacionLotePage() {
   const [cargandoControlado, setCargandoControlado] = useState(false);
   const [errorControlado, setErrorControlado] = useState('');
   const [receptor, setReceptor] = useState('');
+  const [temperaturaEntrega, setTemperaturaEntrega] = useState('');
   const [observacionesRecepcion, setObservacionesRecepcion] = useState('');
   const [confirmandoRecepcion, setConfirmandoRecepcion] = useState(false);
   const [confirmacionResultado, setConfirmacionResultado] = useState(null);
@@ -76,10 +77,11 @@ export default function VerificacionLotePage() {
     try {
       const resultado = await publicoServicio.confirmarRecepcion({
         lote,
+        id_despacho: dataControlada?.despacho_liberacion?.id_despacho,
         factura,
         codigo,
         receptor,
-        fecha_recepcion: new Date().toISOString(),
+        temperatura_entrega_c: Number(temperaturaEntrega),
         observaciones: observacionesRecepcion
       });
       setConfirmacionResultado(resultado);
@@ -150,6 +152,24 @@ export default function VerificacionLotePage() {
             <p><b>Fecha de liberacion:</b> {fecha(data.liberacion?.fecha_liberacion)}</p>
           </div>
         </div>
+
+        {data.almacenamiento && (
+          <section className="portal-origen">
+            <h2>Conservacion del producto</h2>
+            <div className="portal-qr-grid">
+              <div>
+                <p><b>Condiciones:</b> {data.almacenamiento.condiciones || '-'}</p>
+                <p><b>Ingreso:</b> {fechaCompleta(data.almacenamiento.fecha_ingreso)}</p>
+                <p><b>Salida:</b> {fechaCompleta(data.almacenamiento.fecha_salida)}</p>
+              </div>
+              <div>
+                <p><b>Estado:</b> {data.almacenamiento.estado || '-'}</p>
+                <p><b>Controles registrados:</b> {data.almacenamiento.controles_registrados || 0}</p>
+                <p><b>Resultado:</b> {data.almacenamiento.conservacion_conforme ? 'Conservacion conforme' : 'En seguimiento'}</p>
+              </div>
+            </div>
+          </section>
+        )}
 
         <section className="portal-origen">
           <h2>Origen publico de materias primas</h2>
@@ -275,11 +295,15 @@ export default function VerificacionLotePage() {
               {dataControlada.despacho_liberacion && (
                 <div className="portal-qr-grid">
                   <div>
-                    <h2>Liberacion / entrega</h2>
+                    <h2>Despacho autorizado</h2>
+                    <p><b>Codigo:</b> {dataControlada.despacho_liberacion.codigo_despacho || '-'}</p>
+                    <p><b>Cliente:</b> {dataControlada.cliente?.nombre_razon_social || '-'}</p>
                     <p><b>Factura:</b> {dataControlada.despacho_liberacion.numero_factura || '-'}</p>
-                    <p><b>Unidades:</b> {dataControlada.despacho_liberacion.unidades_empacadas || '-'}</p>
-                    <p><b>Empaque:</b> {dataControlada.despacho_liberacion.tipo_empaque || '-'}</p>
-                    <p><b>Estado:</b> {dataControlada.despacho_liberacion.estado_liberacion || '-'}</p>
+                    <p><b>Fecha:</b> {fechaCompleta(dataControlada.despacho_liberacion.fecha_despacho)}</p>
+                    <p><b>Estado:</b> {dataControlada.despacho_liberacion.estado_despacho || '-'}</p>
+                    {(dataControlada.despacho_liberacion.detalles || []).map((detalle) => (
+                      <p key={`${detalle.lote}-${detalle.producto}`}><b>{detalle.lote}:</b> {detalle.cantidad_despachada} unidades de {detalle.producto}</p>
+                    ))}
                   </div>
                   <div>
                     <h2>Transporte</h2>
@@ -287,6 +311,8 @@ export default function VerificacionLotePage() {
                     <p><b>Placa:</b> {dataControlada.despacho_liberacion.placa_vehiculo || '-'}</p>
                     <p><b>Limpieza vehiculo:</b> {dataControlada.despacho_liberacion.limpieza_vehiculo === 'cumple' ? 'Cumple' : 'No cumple / no registrado'}</p>
                     <p><b>Documentacion:</b> {dataControlada.despacho_liberacion.documentacion_dotacion === 'cumple' ? 'Cumple' : 'No cumple / no registrado'}</p>
+                    <p><b>Temperatura de salida:</b> {dataControlada.despacho_liberacion.temperatura_salida_c ?? '-'} C</p>
+                    <p><b>Temperatura de transporte:</b> {dataControlada.despacho_liberacion.temperatura_transporte_c ?? '-'} C</p>
                   </div>
                 </div>
               )}
@@ -294,10 +320,10 @@ export default function VerificacionLotePage() {
               {dataControlada.alcance === 'cliente_receptor' && (
                 <section className="portal-confirmacion">
                   <h2>Confirmacion de recepcion</h2>
-                  {confirmacionResultado?.confirmado ? (
+                  {confirmacionResultado?.confirmado || confirmacionResultado?.estado ? (
                     <div className="portal-confirmacion-ok">
-                      <strong>Recepcion confirmada en blockchain</strong>
-                      <span>{fechaCompleta(confirmacionResultado.fechaConfirmacion)}</span>
+                      <strong>{confirmacionResultado.confirmado ? 'Recepcion confirmada en blockchain' : 'Recepcion registrada y pendiente de blockchain'}</strong>
+                      <span>{fechaCompleta(confirmacionResultado.fechaConfirmacion || confirmacionResultado.fecha_recepcion)}</span>
                       {confirmacionResultado.transactionId && (
                         <small>Transaccion Fabric: {confirmacionResultado.transactionId}</small>
                       )}
@@ -315,6 +341,16 @@ export default function VerificacionLotePage() {
                         />
                       </label>
                       <label>
+                        Temperatura de entrega (C)
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={temperaturaEntrega}
+                          onChange={(event) => setTemperaturaEntrega(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
                         Observaciones
                         <input
                           value={observacionesRecepcion}
@@ -323,7 +359,7 @@ export default function VerificacionLotePage() {
                         />
                       </label>
                       <button type="submit" disabled={confirmandoRecepcion}>
-                        {confirmandoRecepcion ? 'Confirmando...' : 'Confirmar recepcion del lote'}
+                        {confirmandoRecepcion ? 'Confirmando...' : 'Confirmar recepcion del despacho'}
                       </button>
                     </form>
                   )}

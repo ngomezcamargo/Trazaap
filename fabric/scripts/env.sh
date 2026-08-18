@@ -3,8 +3,8 @@ set -eu
 
 export CHANNEL_NAME="${CHANNEL_NAME:-trazabilidad-channel}"
 export CHAINCODE_NAME="${CHAINCODE_NAME:-traceability}"
-export CHAINCODE_VERSION="${CHAINCODE_VERSION:-2.2}"
-export CHAINCODE_SEQUENCE="${CHAINCODE_SEQUENCE:-4}"
+export CHAINCODE_VERSION="${CHAINCODE_VERSION:-2.4}"
+export CHAINCODE_SEQUENCE="${CHAINCODE_SEQUENCE:-6}"
 
 SCRIPT_DIR="${FABRIC_SCRIPT_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
 export FABRIC_DIR="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"

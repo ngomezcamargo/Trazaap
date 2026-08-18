@@ -9,11 +9,6 @@ import { normalizarRol, ROLES } from '@/utilidades/roles';
 const formInicial = {
   responsable_liberacion_usuario_id: '',
   tipo_empaque: '',
-  numero_factura: '',
-  conductor: '',
-  placa_vehiculo: '',
-  limpieza_vehiculo: 'cumple',
-  documentacion_dotacion: 'cumple',
   unidades_empacadas: '',
   peso_neto: '',
   fecha_vencimiento: '',
@@ -30,18 +25,19 @@ const validaciones = [
   ['verificacion_envase', 'Verificacion envase']
 ];
 
-export function FormularioLiberacion({ pendiente, onGuardado }) {
+export function FormularioLiberacion({ pendiente, onGuardado, onGuardandoCambio }) {
   const usuario = obtenerUsuario();
   const esOperario = normalizarRol(usuario?.role) === ROLES.OPERARIO;
   const [form, setForm] = useState({
     ...formInicial,
     responsable_liberacion_usuario_id: esOperario ? String(usuario?.id || '') : '',
-    unidades_empacadas: pendiente?.unidades_producidas ? String(pendiente.unidades_producidas) : ''
+    unidades_empacadas: pendiente?.unidades_producidas ? String(pendiente.unidades_producidas) : '',
+    fecha_vencimiento: pendiente?.fecha_vencimiento_calculada ? String(pendiente.fecha_vencimiento_calculada).slice(0, 10) : ''
   });
   const [operarios, setOperarios] = useState([]);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [motivosBloqueo, setMotivosBloqueo] = useState([]);
+  const [guardando, setGuardando] = useState(false);
 
   const checksCompletos = validaciones.every(([key]) => form[key]);
 
@@ -51,14 +47,18 @@ export function FormularioLiberacion({ pendiente, onGuardado }) {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (guardando) return;
+
     setError('');
-    setMessage('');
     setMotivosBloqueo([]);
 
     if (!checksCompletos) {
-      setError('Debe completar todas las validaciones de liberación.');
+      setError('Debe completar todas las validaciones de liberacion.');
       return;
     }
+
+    setGuardando(true);
+    onGuardandoCambio?.(true);
 
     try {
       const payload = {
@@ -68,18 +68,34 @@ export function FormularioLiberacion({ pendiente, onGuardado }) {
         unidades_empacadas: Number(form.unidades_empacadas),
         peso_neto: Number(form.peso_neto)
       };
-      await liberacionServicio.crear(payload);
-      setMessage('Liberacion registrada');
-      onGuardado?.();
+      const resultado = await liberacionServicio.crear(payload);
+      onGuardado?.(resultado);
     } catch (err) {
       setError(err.message);
       setMotivosBloqueo(Array.isArray(err.motivos) ? err.motivos : []);
+    } finally {
+      setGuardando(false);
+      onGuardandoCambio?.(false);
     }
   };
 
   return (
     <form onSubmit={submit}>
       <h4>Liberacion de producto</h4>
+      {guardando && (
+        <div className="alerta info alerta-modal" role="status" aria-live="polite">
+          Guardando la liberacion y validando las reglas en blockchain...
+        </div>
+      )}
+      {error && <div className="alerta error alerta-modal" role="alert">{error}</div>}
+      {motivosBloqueo.length > 0 && (
+        <div className="alerta error alerta-modal" role="alert">
+          <strong>Motivos informados por el chaincode:</strong>
+          <ul>
+            {motivosBloqueo.map((motivo) => <li key={motivo}>{motivo}</li>)}
+          </ul>
+        </div>
+      )}
       <div className="grid grid-3">
         <div className="campo"><label>Orden de produccion</label><input value={pendiente.codigo_orden} readOnly /></div>
         <div className="campo"><label>Producto</label><input value={`${pendiente.producto} (${pendiente.tamano_presentacion})`} readOnly /></div>
@@ -102,16 +118,7 @@ export function FormularioLiberacion({ pendiente, onGuardado }) {
         <div className="campo"><label>Tipo de empaque</label><input value={form.tipo_empaque} onChange={(e) => setForm({ ...form, tipo_empaque: e.target.value })} required /></div>
         <div className="campo"><label>Unidades liberadas</label><input type="number" min="1" value={form.unidades_empacadas} onChange={(e) => setForm({ ...form, unidades_empacadas: e.target.value })} required /></div>
         <div className="campo"><label>Peso neto</label><input type="number" min="0.01" step="0.001" value={form.peso_neto} onChange={(e) => setForm({ ...form, peso_neto: e.target.value })} required /></div>
-        <div className="campo"><label>Fecha de vcto</label><input type="date" value={form.fecha_vencimiento} onChange={(e) => setForm({ ...form, fecha_vencimiento: e.target.value })} required /></div>
-      </div>
-
-      <h4>Despachado a - Vehiculo</h4>
-      <div className="grid grid-3">
-        <div className="campo"><label>Relacion numero factura</label><input value={form.numero_factura} onChange={(e) => setForm({ ...form, numero_factura: e.target.value })} required /></div>
-        <div className="campo"><label>Conductor</label><input value={form.conductor} onChange={(e) => setForm({ ...form, conductor: e.target.value })} required /></div>
-        <div className="campo"><label>Placa</label><input value={form.placa_vehiculo} onChange={(e) => setForm({ ...form, placa_vehiculo: e.target.value })} required /></div>
-        <div className="campo"><label>Limpieza vehiculo</label><select value={form.limpieza_vehiculo} onChange={(e) => setForm({ ...form, limpieza_vehiculo: e.target.value })} required><option value="cumple">C - cumple</option><option value="no_cumple">NC - no cumple</option></select></div>
-        <div className="campo"><label>Documentacion y dotacion</label><select value={form.documentacion_dotacion} onChange={(e) => setForm({ ...form, documentacion_dotacion: e.target.value })} required><option value="cumple">C - cumple</option><option value="no_cumple">NC - no cumple</option></select></div>
+        <div className="campo"><label>Fecha de vcto calculada</label><input type="date" value={form.fecha_vencimiento} readOnly required /><small>Se calcula con la fecha de produccion y la vida util del producto.</small></div>
       </div>
 
       <div className="grid grid-2" style={{ marginTop: 10 }}>
@@ -149,17 +156,11 @@ export function FormularioLiberacion({ pendiente, onGuardado }) {
         <textarea value={form.observaciones} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} />
       </div>
 
-      <div className="acciones"><button className="boton" type="submit">Registrar liberacion</button></div>
-      {message && <div className="alerta ok">{message}</div>}
-      {error && <div className="alerta error">{error}</div>}
-      {motivosBloqueo.length > 0 && (
-        <div className="alerta error">
-          <strong>Motivos informados por el chaincode:</strong>
-          <ul>
-            {motivosBloqueo.map((motivo) => <li key={motivo}>{motivo}</li>)}
-          </ul>
-        </div>
-      )}
+      <div className="acciones">
+        <button className="boton" type="submit" disabled={guardando}>
+          {guardando ? 'Guardando y validando...' : 'Registrar liberacion'}
+        </button>
+      </div>
     </form>
   );
 }

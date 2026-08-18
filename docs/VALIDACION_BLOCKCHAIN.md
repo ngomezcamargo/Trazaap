@@ -21,6 +21,8 @@ No se guarda una pseudo-blockchain en PostgreSQL y no se duplica el ledger de Fa
 | `registro_manufactura` | al registrar manufactura real | si |
 | `liberacion_producto` | al liberar producto | si |
 | `inventario_producto_terminado` | al aprobar liberacion y crear inventario terminado | si |
+| `despacho_producto` | al registrar un despacho parcial o total | si |
+| `confirmacion_recepcion_cliente` | al confirmar una entrega desde el acceso controlado | si |
 | `inventario_materia_prima` | al afectar inventario de materias primas | si |
 | `movimiento_inventario` | al registrar entradas/salidas de inventario | si |
 
@@ -74,11 +76,11 @@ Cada validacion retorna:
 
 ## RF13 - reglas ejecutadas por chaincode
 
-El chaincode 2.0 no permite sobrescribir eventos. Las correcciones son nuevos registros vinculados al original y conservan `txId`, timestamp, MSP e identidad Fabric del invocador.
+El chaincode 2.4, secuencia 6, no permite sobrescribir eventos. Las correcciones son nuevos registros vinculados al original y conservan `txId`, timestamp, MSP e identidad Fabric del invocador.
 
-Antes de un despacho aprobado, el backend construye los controles criticos usando los valores estandar del producto y los valores reales de manufactura. Fabric vuelve a comprobar los rangos, vencimiento, manufactura, inventario, empaque, etiqueta, lote visible, vehiculo y documentacion del conductor. Una respuesta `BLOQUEADO` no crea la liberacion ni modifica inventario; una indisponibilidad de Fabric responde HTTP 503.
+La liberacion aprobada inicializa un saldo por lote en el world state de Fabric. Al despachar, el backend envia el detalle de lotes y cantidades; el chaincode vuelve a comprobar almacenamiento, vencimiento, controles, transporte y saldo. Fabric calcula `disponibles = liberadas - despachadas` y rechaza `LOTE_SIN_EXISTENCIAS`, `STOCK_INSUFICIENTE` y `DESPACHO_DUPLICADO`. Una respuesta bloqueada revierte o libera la reserva operativa y una indisponibilidad de Fabric deja la entrega pendiente en la outbox para reintento controlado.
 
-Los eventos de decision son `despacho_producto`, `confirmacion_recepcion_cliente`, `correccion_evento` y `alerta_vencimiento`. Se consultan desde el ledger y aparecen en trazabilidad y reportes; no se replican en una tabla blockchain de PostgreSQL.
+Un despacho puede contener varios lotes y un lote puede tener varios despachos parciales. Los eventos de decision son `despacho_producto`, `confirmacion_recepcion_cliente`, `correccion_evento` y `alerta_vencimiento`. Se consultan desde el ledger y aparecen en trazabilidad y reportes; no se replican en una tabla blockchain de PostgreSQL.
 
 ## Reportes
 

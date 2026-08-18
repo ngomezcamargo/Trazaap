@@ -30,6 +30,8 @@ import {
   contarProductosPendientesManufactura,
   descontarInventarioMateria,
   devolverInventarioMateria,
+  ejecutarTransaccionProduccion,
+  generarLoteProducto,
   listarMateriasOrden,
   listarOrdenesManufactura,
   listarOrdenesProduccion,
@@ -162,7 +164,15 @@ export async function listarProductosFabricadosService(filtro) {
 }
 
 export async function crearProductoFabricadoService(data, actor = 'sistema') {
-  const producto = await crearProductoFabricado(data);
+  let producto;
+  try {
+    producto = await crearProductoFabricado(data);
+  } catch (error) {
+    if (error.code === '23505' && error.constraint === 'productos_fabricados_prefijo_lote_key') {
+      throw new ErrorHttp(409, `Ya existe un producto con el prefijo de lote ${data.prefijo_lote}.`);
+    }
+    throw error;
+  }
   await reemplazarVariantesProducto(producto.id, data.variantes);
   await registrarVersionEventoCritico(
     'producto_fabricado_configurado',
@@ -174,7 +184,15 @@ export async function crearProductoFabricadoService(data, actor = 'sistema') {
 }
 
 export async function actualizarProductoFabricadoService(id, data, actor = 'sistema') {
-  const producto = await actualizarProductoFabricado(id, data);
+  let producto;
+  try {
+    producto = await actualizarProductoFabricado(id, data);
+  } catch (error) {
+    if (error.code === '23505' && error.constraint === 'productos_fabricados_prefijo_lote_key') {
+      throw new ErrorHttp(409, `Ya existe un producto con el prefijo de lote ${data.prefijo_lote}.`);
+    }
+    throw error;
+  }
   if (!producto) throw new ErrorHttp(404, 'Producto no encontrado');
   await reemplazarVariantesProducto(producto.id, data.variantes);
   await registrarVersionEventoCritico(
@@ -344,8 +362,8 @@ function construirComparacionManufactura(producto, registro) {
   }));
 }
 
-async function descontarMateriasPorManufactura(orden, productoOrdenId, registro, actor) {
-  const materias = await buscarMateriasPorProductoOrdenId(orden.id, productoOrdenId);
+async function descontarMateriasPorManufactura(orden, productoOrdenId, registro, actor, db) {
+  const materias = await buscarMateriasPorProductoOrdenId(orden.id, productoOrdenId, db);
   const consumos = [];
 
   for (const materia of materias) {
@@ -354,7 +372,7 @@ async function descontarMateriasPorManufactura(orden, productoOrdenId, registro,
       tipo_movimiento: 'salida',
       referencia_tipo: 'registro_manufactura',
       referencia_id: registro.id_manufactura
-    });
+    }, db);
     if (movimientoManufactura) continue;
 
     const movimientoOrdenAnterior = await buscarMovimientoInventarioMateria({
@@ -362,7 +380,7 @@ async function descontarMateriasPorManufactura(orden, productoOrdenId, registro,
       tipo_movimiento: 'salida',
       referencia_tipo: 'orden_produccion',
       referencia_id: orden.id
-    });
+    }, db);
     if (movimientoOrdenAnterior) continue;
 
     const cantidad = Number(materia.cantidad_real);
@@ -374,23 +392,13 @@ async function descontarMateriasPorManufactura(orden, productoOrdenId, registro,
       referencia_id: registro.id_manufactura,
       actor,
       observaciones: `Consumo real por manufactura ${registro.lote_producido} en orden ${orden.codigo_orden}`
-    });
+    }, db);
 
     if (!inventario) {
       throw new ErrorHttp(
         400,
         `Inventario insuficiente para registrar consumo real de ${materia.nombre_ingrediente}. Requerido: ${cantidad} ${materia.unidad_medida}.`
       );
-    }
-
-    await registrarVersionEventoCritico(
-      'inventario_materia_prima',
-      inventario.id,
-      actor,
-      `Consumo de materia prima por manufactura ${registro.lote_producido}`
-    );
-    if (inventario.movimiento_id) {
-      await registrarEventoCritico('movimiento_inventario', inventario.movimiento_id, actor);
     }
 
     consumos.push({
@@ -405,8 +413,8 @@ async function descontarMateriasPorManufactura(orden, productoOrdenId, registro,
   return consumos;
 }
 
-async function validarDisponibilidadManufactura(orden, productoOrdenId) {
-  const materias = await buscarMateriasPorProductoOrdenId(orden.id, productoOrdenId);
+async function validarDisponibilidadManufactura(orden, productoOrdenId, db) {
+  const materias = await buscarMateriasPorProductoOrdenId(orden.id, productoOrdenId, db);
 
   for (const materia of materias) {
     const movimientoOrdenAnterior = await buscarMovimientoInventarioMateria({
@@ -414,7 +422,7 @@ async function validarDisponibilidadManufactura(orden, productoOrdenId) {
       tipo_movimiento: 'salida',
       referencia_tipo: 'orden_produccion',
       referencia_id: orden.id
-    });
+    }, db);
     if (movimientoOrdenAnterior) continue;
 
     const disponible = Number(materia.inventario_disponible || 0);
@@ -448,48 +456,73 @@ export async function registrarManufacturaService(ordenId, productoOrdenId, data
     throw new ErrorHttp(400, 'Selecciona un operario activo como responsable de la manufactura');
   }
 
-  await validarDisponibilidadManufactura(orden, productoOrdenId);
+  let resultadoOperativo;
+  try {
+    resultadoOperativo = await ejecutarTransaccionProduccion(async (db) => {
+      await validarDisponibilidadManufactura(orden, productoOrdenId, db);
+      const loteGenerado = await generarLoteProducto(ordenId, productoOrdenId, db);
+      const registro = await crearRegistroManufactura({
+        ...data,
+        id_orden_produccion: ordenId,
+        id_producto: productoOrdenId,
+        lote_producido: loteGenerado.lote_producido,
+        fecha_vencimiento_calculada: loteGenerado.fecha_vencimiento_calculada,
+        registrado_por_usuario_id: responsable.id,
+        registrado_por: responsable.email
+      }, db);
 
-  const registro = await crearRegistroManufactura({
-    ...data,
-    id_orden_produccion: ordenId,
-    id_producto: productoOrdenId,
-    registrado_por_usuario_id: responsable.id,
-    registrado_por: responsable.email
-  });
+      const comparacion = construirComparacionManufactura(producto, registro);
+      const consumosInventario = await descontarMateriasPorManufactura(orden, productoOrdenId, registro, actor, db);
+      const tieneDesviaciones = comparacion.some((item) => item.desviado);
+      await actualizarEstadoManufacturaProducto(productoOrdenId, tieneDesviaciones ? 'con_observaciones' : 'registrado', db);
 
-  const comparacion = construirComparacionManufactura(producto, registro);
-  const consumosInventario = await descontarMateriasPorManufactura(orden, productoOrdenId, registro, actor);
-  const tieneDesviaciones = comparacion.some((item) => item.desviado);
-  await actualizarEstadoManufacturaProducto(productoOrdenId, tieneDesviaciones ? 'con_observaciones' : 'registrado');
+      if (orden.estado === 'pendiente') {
+        await actualizarEstadoOrden(ordenId, 'en_proceso', db);
+      }
 
-  if (orden.estado === 'pendiente') {
-    await actualizarEstadoOrden(ordenId, 'en_proceso');
+      const pendientes = await contarProductosPendientesManufactura(ordenId, db);
+      if (pendientes === 0) {
+        await actualizarEstadoOrden(ordenId, 'finalizada', db);
+      }
+
+      await registrarEventoTrazabilidad({
+        recepcion_id: null,
+        lote: registro.lote_producido,
+        tipo_evento: 'MANUFACTURA_PRODUCTO_REGISTRADA',
+        actor,
+        payload: {
+          evento_futuro_blockchain: 'manufactura_producto',
+          orden_produccion_id: ordenId,
+          orden_producto_id: productoOrdenId,
+          producto: producto.producto,
+          lote_producido: registro.lote_producido,
+          unidades_producidas: registro.unidades_producidas,
+          consumos_inventario: consumosInventario,
+          responsable_usuario_id: responsable.id,
+          responsable_manufactura: responsable.email,
+          comparacion
+        }
+      }, db);
+
+      return { registro, comparacion, consumosInventario, tieneDesviaciones, pendientes };
+    });
+  } catch (error) {
+    throw new ErrorHttp(error.status || 400, error.message || 'No fue posible registrar la manufactura.');
   }
 
-  const pendientes = await contarProductosPendientesManufactura(ordenId);
-  if (pendientes === 0) {
-    await actualizarEstadoOrden(ordenId, 'finalizada');
-  }
+  const { registro, comparacion, consumosInventario, tieneDesviaciones, pendientes } = resultadoOperativo;
 
-  await registrarEventoTrazabilidad({
-    recepcion_id: null,
-    lote: registro.lote_producido,
-    tipo_evento: 'MANUFACTURA_PRODUCTO_REGISTRADA',
-    actor,
-    payload: {
-      evento_futuro_blockchain: 'manufactura_producto',
-      orden_produccion_id: ordenId,
-      orden_producto_id: productoOrdenId,
-      producto: producto.producto,
-      lote_producido: registro.lote_producido,
-      unidades_producidas: registro.unidades_producidas,
-      consumos_inventario: consumosInventario,
-      responsable_usuario_id: responsable.id,
-      responsable_manufactura: responsable.email,
-      comparacion
+  for (const consumo of consumosInventario) {
+    await registrarVersionEventoCritico(
+      'inventario_materia_prima',
+      consumo.inventario_id,
+      actor,
+      `Consumo de materia prima por manufactura ${registro.lote_producido}`
+    );
+    if (consumo.movimiento_id) {
+      await registrarEventoCritico('movimiento_inventario', consumo.movimiento_id, actor);
     }
-  });
+  }
 
   await registrarEventoCritico('registro_manufactura', registro.id_manufactura, actor);
   await registrarVersionEventoCritico(

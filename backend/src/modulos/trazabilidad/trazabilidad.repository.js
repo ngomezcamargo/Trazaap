@@ -51,6 +51,8 @@ export async function obtenerDetalleProduccion(ordenId, lote = '') {
     materiasRes,
     tiemposRes,
     manufacturaRes,
+    almacenamientoRes,
+    controlesAlmacenamientoRes,
     liberacionRes,
     inventarioTerminadoRes,
     movimientosInventarioRes,
@@ -114,6 +116,34 @@ export async function obtenerDetalleProduccion(ordenId, lote = '') {
       [ordenId, lote]
     ),
     poolPostgres.query(
+      `SELECT al.*, ua.nombre AS ubicacion, ua.tipo AS tipo_ubicacion,
+              pf.condiciones_almacenamiento,
+              ui.email AS responsable_ingreso_email,
+              us.email AS responsable_salida_email,
+              ur.email AS responsable_resolucion_email
+       FROM almacenamientos_lote al
+       JOIN ubicaciones_almacenamiento ua ON ua.id_ubicacion = al.id_ubicacion
+       JOIN ordenes_produccion_productos opp ON opp.id = al.id_producto
+       LEFT JOIN productos_fabricados pf ON pf.id = opp.producto_fabricado_id
+       LEFT JOIN users ui ON ui.id = al.responsable_ingreso
+       LEFT JOIN users us ON us.id = al.responsable_salida
+       LEFT JOIN users ur ON ur.id = al.responsable_resolucion
+       WHERE al.id_orden_produccion = $1
+       ORDER BY CASE WHEN al.lote_producido = $2 THEN 0 ELSE 1 END, al.id_almacenamiento
+       LIMIT 1`,
+      [ordenId, lote]
+    ),
+    poolPostgres.query(
+      `SELECT ca.*, u.email AS responsable_control_email
+       FROM controles_almacenamiento ca
+       JOIN almacenamientos_lote al ON al.id_almacenamiento = ca.id_almacenamiento
+       LEFT JOIN users u ON u.id = ca.responsable_control
+       WHERE al.id_orden_produccion = $1
+         AND ($2 = '' OR al.lote_producido = $2)
+       ORDER BY ca.fecha_control, ca.id_control`,
+      [ordenId, lote]
+    ),
+    poolPostgres.query(
       `SELECT lp.*, rm.lote_producido AS lote_producto
        FROM liberacion_producto lp
        JOIN registro_manufactura rm ON rm.id_manufactura = lp.id_manufactura
@@ -170,6 +200,9 @@ export async function obtenerDetalleProduccion(ordenId, lote = '') {
     materias: materiasRes.rows,
     tiempos: tiemposRes.rows,
     manufactura: manufacturaRes.rows[0] || null,
+    almacenamiento: almacenamientoRes.rows[0]
+      ? { ...almacenamientoRes.rows[0], controles: controlesAlmacenamientoRes.rows }
+      : null,
     liberacion: liberacionRes.rows[0] || null,
     inventarioProductoTerminado: inventarioTerminadoRes.rows[0] || null,
     movimientosInventario: movimientosInventarioRes.rows,

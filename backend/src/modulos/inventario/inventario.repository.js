@@ -21,18 +21,27 @@ export async function listarInventarioInsumos() {
 export async function listarInventarioProductoTerminado() {
   const query = `
     SELECT
-      id_inventario,
-      id_liberacion,
-      producto,
-      lote,
-      unidades_disponibles,
-      fecha_vencimiento,
-      estado,
-      updated_at
-    FROM inventario_producto_terminado
-    WHERE unidades_disponibles > 0
-      AND estado <> 'despachado'
-    ORDER BY updated_at DESC, producto ASC
+      ipt.id_inventario,
+      ipt.id_liberacion,
+      ipt.producto,
+      ipt.lote,
+      ipt.unidades_liberadas,
+      ipt.unidades_reservadas,
+      ipt.unidades_despachadas,
+      ipt.unidades_disponibles,
+      ipt.fecha_vencimiento,
+      ipt.estado,
+      ipt.es_heredado,
+      ipt.updated_at,
+      lp.estado_liberacion,
+      lp.tipo_empaque,
+      op.codigo_orden,
+      opp.tamano_presentacion
+    FROM inventario_producto_terminado ipt
+    JOIN liberacion_producto lp ON lp.id_liberacion = ipt.id_liberacion
+    JOIN ordenes_produccion op ON op.id = lp.id_orden_produccion
+    JOIN ordenes_produccion_productos opp ON opp.id = lp.id_producto
+    ORDER BY ipt.updated_at DESC, ipt.producto ASC
   `;
 
   const { rows } = await poolPostgres.query(query);
