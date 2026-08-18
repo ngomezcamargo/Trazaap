@@ -24,6 +24,7 @@ import rutasDevoluciones from './modulos/devoluciones/devoluciones.routes.js';
 import rutasDocumentos from './modulos/documentos/documentos.routes.js';
 import rutasCalidad from './modulos/calidad/calidad.routes.js';
 import rutasReportes from './modulos/reportes/reportes.routes.js';
+import rutasEpcis from './modulos/epcis/epcis.routes.js';
 
 export function createApp() {
   const app = express();
@@ -56,6 +57,7 @@ export function createApp() {
   api.use('/documentos', rutasDocumentos);
   api.use('/calidad', rutasCalidad);
   api.use('/reportes', rutasReportes);
+  api.use('/epcis', rutasEpcis);
   api.use('/inventario-insumos', rutasInventario);
   api.use('/traceability', rutasTrazabilidad);
   api.use('/public', rutasPublicas);

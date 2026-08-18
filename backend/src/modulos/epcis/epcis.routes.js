@@ -1,0 +1,12 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { autenticarJwt } from '../../middlewares/autenticarJwt.js';
+import { manejarAsync } from '../../middlewares/manejarAsync.js';
+import { requerirOAuth, requerirScopes } from '../../middlewares/oauthScopes.middleware.js';
+import { validarSolicitud } from '../../middlewares/validarSolicitud.js';
+import { capturar, consultar } from './epcis.controller.js';
+const router=Router();
+router.use(autenticarJwt,requerirOAuth);
+router.get('/events',requerirScopes('epcis.query'),validarSolicitud(z.object({lote:z.string().trim().min(1).max(100)}).strict(),'query'),manejarAsync(consultar));
+router.post('/capture',requerirScopes('epcis.capture'),manejarAsync(capturar));
+export default router;
