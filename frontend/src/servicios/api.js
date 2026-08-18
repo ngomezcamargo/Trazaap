@@ -76,13 +76,21 @@ async function descargar(path) {
   return response.blob();
 }
 
+async function descargarPost(path, body) {
+  const token = obtenerToken();
+  const response = await fetch(`${API_URL}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
+  if (!response.ok) { let data={}; try{data=await response.json();}catch{} throw new Error(data.message || 'No fue posible generar el archivo'); }
+  registrarActividadSesion(); return response.blob();
+}
+
 export const api = {
   get: (path) => request(path),
   post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
   put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
   del: (path) => request(path, { method: 'DELETE' }),
   postForm: (path, body) => request(path, { method: 'POST', body }),
-  descargar
+  descargar,
+  descargarPost
 };
 
 export const apiPublica = {
