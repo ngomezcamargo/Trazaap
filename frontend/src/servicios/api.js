@@ -10,7 +10,7 @@ async function request(path, options = {}) {
   }
 
   const headers = {
-    'Content-Type': 'application/json',
+    ...(!(typeof FormData !== 'undefined' && options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
     ...(options.headers || {})
   };
 
@@ -65,11 +65,24 @@ async function requestPublico(path, options = {}) {
   return data;
 }
 
+async function descargar(path) {
+  const token = obtenerToken();
+  const response = await fetch(`${API_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!response.ok) {
+    let data = {}; try { data = await response.json(); } catch {}
+    throw new Error(data.message || 'No fue posible descargar el archivo');
+  }
+  registrarActividadSesion();
+  return response.blob();
+}
+
 export const api = {
   get: (path) => request(path),
   post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
   put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
-  del: (path) => request(path, { method: 'DELETE' })
+  del: (path) => request(path, { method: 'DELETE' }),
+  postForm: (path, body) => request(path, { method: 'POST', body }),
+  descargar
 };
 
 export const apiPublica = {
