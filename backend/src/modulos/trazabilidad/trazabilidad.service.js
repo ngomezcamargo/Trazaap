@@ -16,8 +16,6 @@ import {
 import { generarCodigosAcceso } from '../publico/codigos-acceso.util.js';
 import { buscarDespachosPorLote } from '../despachos/despachos.repository.js';
 import { listarEnvasados } from '../envasado/envasado.repository.js';
-import { listarCasos } from '../devoluciones/devoluciones.repository.js';
-import { listarControles } from '../calidad/calidad.repository.js';
 
 async function construirValidacionesBlockchain(recepcion) {
   if (!recepcion) return [];
@@ -193,10 +191,6 @@ export async function consultarTrazabilidadPorLote(lote) {
         : null,
       ...(detalle?.manufactura?.lote_producido ? (await listarEnvasados(detalle.manufactura.lote_producido)) : [])
         .map((envasado) => validarSeguro('envasado_embalado', envasado.id_envasado)),
-      ...(detalle?.manufactura?.lote_producido ? (await listarCasos(detalle.manufactura.lote_producido)) : [])
-        .map((caso) => validarSeguro('devolucion_no_conformidad', caso.id_caso)),
-      ...(detalle?.manufactura?.lote_producido ? (await listarControles(detalle.manufactura.lote_producido)) : [])
-        .map((control) => validarSeguro('control_calidad_lote', control.id_control)),
       detalle?.almacenamiento?.id_almacenamiento
         ? validarSeguro('ingreso_almacenamiento', detalle.almacenamiento.id_almacenamiento)
         : null,
@@ -234,8 +228,6 @@ export async function consultarTrazabilidadPorLote(lote) {
   ]);
   const loteProducido = detalle?.manufactura?.lote_producido || null;
   const envasados = loteProducido ? await listarEnvasados(loteProducido) : [];
-  const devoluciones = loteProducido ? await listarCasos(loteProducido) : [];
-  const controlesCalidad = loteProducido ? await listarControles(loteProducido) : [];
   const despachosOperativos = loteProducido ? await buscarDespachosPorLote(loteProducido) : [];
   const recepciones = recepcionesOrigen.map((recepcion) => mapearRecepcion(recepcion, blockchainPorEntidad));
   const inspecciones = recepcionesOrigen.map((recepcion) => mapearInspeccion(recepcion, blockchainPorEntidad)).filter(Boolean);
@@ -265,14 +257,8 @@ export async function consultarTrazabilidadPorLote(lote) {
       ...envasado,
       blockchain: blockchainPorEntidad[`envasado_embalado:${envasado.id_envasado}`] || null
     })),
-    devoluciones: devoluciones.map((caso) => ({
-      ...caso,
-      blockchain: blockchainPorEntidad[`devolucion_no_conformidad:${caso.id_caso}`] || null
-    })),
-    controlesCalidad: controlesCalidad.map((control) => ({
-      ...control,
-      blockchain: blockchainPorEntidad[`control_calidad_lote:${control.id_control}`] || null
-    })),
+    devoluciones: [],
+    controlesCalidad: [],
     almacenamiento: detalle?.almacenamiento
       ? {
           ...detalle.almacenamiento,

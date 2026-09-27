@@ -20,9 +20,7 @@ import rutasDespachos from './modulos/despachos/despachos.routes.js';
 import rutasUsuarios from './modulos/usuarios/usuarios.routes.js';
 import rutasEnvasado from './modulos/envasado/envasado.routes.js';
 import rutasSaneamiento from './modulos/saneamiento/saneamiento.routes.js';
-import rutasDevoluciones from './modulos/devoluciones/devoluciones.routes.js';
 import rutasDocumentos from './modulos/documentos/documentos.routes.js';
-import rutasCalidad from './modulos/calidad/calidad.routes.js';
 import rutasReportes from './modulos/reportes/reportes.routes.js';
 import rutasEpcis from './modulos/epcis/epcis.routes.js';
 
@@ -57,9 +55,7 @@ export function createApp() {
   api.use('/usuarios', rutasUsuarios);
   api.use('/envasado', rutasEnvasado);
   api.use('/saneamiento', rutasSaneamiento);
-  api.use('/devoluciones', rutasDevoluciones);
   api.use('/documentos', rutasDocumentos);
-  api.use('/calidad', rutasCalidad);
   api.use('/reportes', rutasReportes);
   api.use('/epcis', rutasEpcis);
   api.use('/inventario-insumos', rutasInventario);
