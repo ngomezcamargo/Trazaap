@@ -1,4 +1,4 @@
-export const USUARIOS_QA = Object.freeze([
+export const USUARIOS_SEMILLA = Object.freeze([
   Object.freeze({
     email: 'admin@trazaap.local',
     rol: 'administrador',
@@ -21,7 +21,7 @@ export const USUARIOS_QA = Object.freeze([
 export function resolverPasswordSeed(usuario, variables = process.env) {
   const password = variables[usuario.variablePassword] || usuario.passwordDesarrolloExistente;
   if (!password) {
-    throw new Error(`Variable de entorno requerida para seed QA: ${usuario.variablePassword}`);
+    throw new Error(`Variable de entorno requerida para cargar el usuario: ${usuario.variablePassword}`);
   }
   return password;
 }

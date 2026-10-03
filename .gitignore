@@ -40,6 +40,14 @@ Thumbs.db
 coverage/
 .trazaap_tmp/
 .docker-temp/
+/tmp/
+/render_acta/
+/outputs/
+/docs/
+/pruebas/
+/backend/test/
+/frontend/pruebas/
+/fabric/chaincode/traceability/test/
 
 # PostgreSQL/local data
 postgres-data/

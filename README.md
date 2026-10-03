@@ -107,7 +107,7 @@ src/
 
 Base URL backend: `http://localhost:4000/api`
 
-La matriz de permisos vigente esta documentada en [docs/MATRIZ_RBAC.md](docs/MATRIZ_RBAC.md). Las rutas privadas requieren JWT y autorizacion por rol; las rutas publicas viven bajo `/public`. El alcance de informacion para consumidor final, cliente e INVIMA esta documentado en [docs/ACCESO_EXTERNO.md](docs/ACCESO_EXTERNO.md). El flujo de evidencia y validacion Fabric esta documentado en [docs/VALIDACION_BLOCKCHAIN.md](docs/VALIDACION_BLOCKCHAIN.md). La limpieza y organizacion del repositorio se registra en [docs/LIMPIEZA_TECNICA.md](docs/LIMPIEZA_TECNICA.md).
+Las rutas privadas requieren JWT y autorizacion por rol; las rutas publicas viven bajo `/public`. El backend controla el alcance de la informacion externa y coordina la validacion de integridad mediante Hyperledger Fabric.
 
 - `POST /auth/login`
 - `GET /auth/me`
@@ -172,8 +172,6 @@ La matriz de permisos vigente esta documentada en [docs/MATRIZ_RBAC.md](docs/MAT
 
 ## Blockchain Hyperledger Fabric
 
-Guia de demo paso a paso: [docs/demo-hyperledger-fabric.md](docs/demo-hyperledger-fabric.md).
-
 La arquitectura de integridad es:
 
 ```text
@@ -213,7 +211,7 @@ Desde la version 2.3 (secuencia 5), el despacho exige que el lote haya completad
 
 Desde la version 2.5 (secuencia 8), liberacion y despacho son operaciones independientes. Una liberacion aprobada inicializa en Fabric el saldo del inventario terminado; cada despacho puede consumir parcialmente uno o varios lotes, pertenece a un cliente y una factura, y conserva las condiciones de transporte. El chaincode descuenta el saldo inmutable y rechaza `LOTE_SIN_EXISTENCIAS`, `STOCK_INSUFICIENTE` y `DESPACHO_DUPLICADO`. PostgreSQL mantiene saldos operativos de unidades liberadas, reservadas, despachadas y disponibles para soportar concurrencia y recuperacion mediante outbox.
 
-La implementacion de RF05 esta descrita en [docs/RF05_DESPACHOS_PARCIALES.md](docs/RF05_DESPACHOS_PARCIALES.md).
+RF05 se implementa mediante despachos parciales con control de saldo operativo en PostgreSQL y validacion del saldo inmutable en Fabric.
 
 La entrega de evidencias ordinarias a Fabric usa una bandeja tecnica `blockchain_outbox`. La misma transaccion PostgreSQL que guarda el evento operativo deja una referencia de entrega pendiente; un trabajador del backend reconstruye el payload desde las tablas del dominio y reintenta con espera exponencial. La bandeja no almacena payloads, hashes ni bloques, por lo que PostgreSQL no duplica el ledger. Los registros se reclaman con bloqueo concurrente y una clave de deduplicacion evita enviar dos veces el mismo evento.
 
@@ -261,24 +259,6 @@ cd fabric
 ```
 
 El despliegue instala el paquete en `peer0` y `peer1`, aprueba la definicion para `Org1MSP` y la confirma en `trazabilidad-channel`. Una actualizacion normal no debe ejecutar `clean.sh`, borrar volumenes, regenerar certificados ni recrear el canal.
-
-Pruebas del chaincode:
-
-```bash
-cd fabric/chaincode/traceability
-npm test
-```
-
-Prueba integral RF05 contra PostgreSQL y la red Fabric desplegada:
-
-```bash
-cd backend
-npm run test:rf05
-```
-
-La misma verificación está disponible como `npm run test:integration`. Para ejecutar la prueba completa sin tocar la base de datos local, usa `npm run test:integration:isolated`: crea una base temporal, aplica el esquema consolidado, carga las semillas, levanta una API temporal, ejecuta el flujo RF05 y elimina la base al finalizar. El flujo verifica despachos parciales, concurrencia, saldo en Fabric, confirmación del cliente, consulta por lote y reporte Excel. Requiere PostgreSQL, backend, frontend y Fabric activos; utiliza identificadores temporales y no debe ejecutarse contra un ambiente productivo.
-
-La validación oficial del esquema GS1 EPCIS 2.0.1 se ejecuta de forma aislada con `npm run test:epcis`.
 
 Detener red:
 
@@ -332,7 +312,7 @@ npm run migrate
 npm run seed
 ```
 
-La semilla carga 19 fichas de producto basadas en el catalogo 2026 de Bagel Home. Los pesos y presentaciones provienen del catalogo; los tiempos de Bagel, pan trenza, pan sandwich y pan molde toman como referencia el formato operativo de produccion. Los demas tiempos y la receta base de harina son valores provisionales para pruebas y deben reemplazarse cuando la empresa valide las formulaciones oficiales.
+La semilla carga 19 fichas de producto basadas en el catalogo 2026 de Bagel Home. Los pesos y presentaciones provienen del catalogo; los tiempos de Bagel, pan trenza, pan sandwich y pan molde toman como referencia el formato operativo de produccion. Los demas tiempos y la receta base de harina corresponden a la parametrizacion inicial del sistema y pueden actualizarse cuando la empresa valide las formulaciones oficiales.
 
 4. Levantar backend:
 

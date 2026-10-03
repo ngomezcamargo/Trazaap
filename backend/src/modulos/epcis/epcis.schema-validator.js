@@ -34,4 +34,3 @@ export function validarContraSchemaOficialEpcis(documento) {
   throw new ErrorHttp(400, 'Documento no conforme con GS1 EPCIS 2.0', { codigo: 'EPCIS_SCHEMA_INVALIDO', errores });
 }
 
-export function reiniciarValidadorEpcisParaPruebas() { validar = undefined; }

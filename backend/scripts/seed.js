@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { poolPostgres } from '../src/configuracion/postgresql.js';
 import { CATALOGO_PRODUCTOS, resolverPrefijoInternoProducto } from './catalogo-productos.js';
-import { resolverPasswordSeed, USUARIOS_QA } from './seed-usuarios-qa.js';
+import { resolverPasswordSeed, USUARIOS_SEMILLA } from './usuarios-semilla.js';
 
 async function seedRoles() {
   const roles = ['administrador', 'gerente', 'operario'];
@@ -10,8 +10,8 @@ async function seedRoles() {
   }
 }
 
-async function seedUsuariosQa() {
-  for (const usuario of USUARIOS_QA) {
+async function seedUsuarios() {
+  for (const usuario of USUARIOS_SEMILLA) {
     const passwordHash = await bcrypt.hash(resolverPasswordSeed(usuario), 12);
     await poolPostgres.query(
       `INSERT INTO users (email, password_hash, role_id, is_active)
@@ -326,7 +326,7 @@ async function seedProduccionYLiberacion() {
 
 async function run() {
   await seedRoles();
-  await seedUsuariosQa();
+  await seedUsuarios();
   await seedProviders();
   await seedRawMaterials();
   await seedCatalogoProductos();
