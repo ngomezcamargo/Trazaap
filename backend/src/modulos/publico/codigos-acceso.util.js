@@ -34,11 +34,7 @@ export function generarCodigosAcceso(data) {
   return {
     cliente: despacho
       ? generarCodigoClienteDespacho(despacho)
-      : generarCodigoCliente({
-          lote,
-          numeroFactura: liberacion.numero_factura,
-          idLiberacion: liberacion.id_liberacion
-        }),
+      : generarCodigo('CLI', lote, [liberacion.id_liberacion]),
     clientes: (data.despachos || [])
       .filter((item) => !item.es_heredado)
       .map((item) => ({

@@ -28,10 +28,6 @@ import { construirPayloadMovimientoInventario } from './payloads/movimientoInven
 import { construirPayloadOrdenProduccion } from './payloads/ordenProduccion.payload.js';
 import { construirPayloadProductoFabricado } from './payloads/productoFabricado.payload.js';
 import { construirPayloadRecepcion } from './payloads/recepcion.payload.js';
-import { construirPayloadEnvasado } from './payloads/envasado.payload.js';
-import { construirPayloadSaneamiento } from './payloads/saneamiento.payload.js';
-import { construirPayloadDevolucion } from './payloads/devolucion.payload.js';
-import { construirPayloadCalidad } from './payloads/calidad.payload.js';
 import { fechaISO, fechaSimple, numero, ordenarValor, serializarEstable } from './payloads/helpers.js';
 import { encolarEventoBlockchain } from './outbox.repository.js';
 
@@ -45,14 +41,20 @@ const constructoresPayload = {
   inventario_producto_terminado: construirPayloadInventarioProductoTerminado,
   inventario_materia_prima: construirPayloadInventarioMateriaPrima,
   movimiento_inventario: construirPayloadMovimientoInventario,
+  despacho_producto: construirEventoDespacho,
   ingreso_almacenamiento: construirPayloadIngresoAlmacenamiento,
   control_almacenamiento: construirPayloadControlAlmacenamiento,
   salida_almacenamiento: construirPayloadSalidaAlmacenamiento,
-  envasado_embalado: construirPayloadEnvasado,
-  actividad_saneamiento: construirPayloadSaneamiento,
-  devolucion_no_conformidad: construirPayloadDevolucion,
-  control_calidad_lote: construirPayloadCalidad
 };
+
+async function construirEventoDespacho(idDespacho) {
+  const payload = await construirPayloadDespacho(idDespacho);
+  if (!payload) return null;
+  return {
+    ...payload,
+    payload
+  };
+}
 
 export { ordenarValor, serializarEstable };
 

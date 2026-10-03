@@ -128,10 +128,10 @@ export async function crearLiberacionProducto(data, db = poolPostgres) {
       data.fecha_vencimiento,
       data.etiqueta_verificada,
       data.verificacion_envase,
-      true,
-      true,
-      data.verificacion_envase,
-      true,
+      data.lote_visible,
+      data.fecha_vencimiento_visible,
+      data.empaque_conforme,
+      data.producto_en_buen_estado,
       data.estado_liberacion,
       data.motivo_retencion || '',
       data.motivo_rechazo || '',
@@ -262,8 +262,8 @@ export async function sincronizarAlertasVencimiento(diasAlerta, db = poolPostgre
 export async function marcarEvidenciaAlerta(idAlerta, estado, error = null, db = poolPostgres) {
   await db.query(
     `UPDATE alertas_vencimiento_lote
-     SET evidencia_estado=$2, evidencia_error=$3,
-         evidencia_at=CASE WHEN $2='registrada' THEN NOW() ELSE evidencia_at END
+     SET evidencia_estado=$2::VARCHAR, evidencia_error=$3::TEXT,
+         evidencia_at=CASE WHEN $2::VARCHAR='registrada' THEN NOW() ELSE evidencia_at END
      WHERE id_alerta=$1`,
     [idAlerta, estado, error]
   );

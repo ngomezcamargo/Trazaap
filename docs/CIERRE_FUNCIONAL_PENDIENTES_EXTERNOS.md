@@ -14,12 +14,6 @@ Las categorías físico, químico, microbiológico, organoléptico, HACCP/proces
 
 `PENDIENTE DE VALIDACIÓN DEL INGENIERO DE ALIMENTOS`: parámetros, rangos, referencias y reacción final.
 
-## RF15 — Saneamiento
-
-Las actividades se pueden programar y luego ejecutar, conservando procedimiento, responsable, checklist, resultado, observaciones e histórico. Una ejecución cerrada no puede repetirse sobre el mismo registro.
-
-`PENDIENTE DE VALIDACIÓN DEL INGENIERO DE ALIMENTOS`: plantillas sanitarias y listas de chequeo definitivas.
-
 ## RF14 — Reportes
 
 Se conservan reporte individual imprimible/guardable como PDF, consolidación de hasta 50 lotes y Excel. La respuesta consolidada incluye explícitamente `PENDIENTE DE VALIDACION DE CAMPOS ARTICULO 22`; las hojas se generan desde el modelo consolidado, por lo que pueden agregarse columnas sin reemplazar persistencia ni trazabilidad.

@@ -49,7 +49,6 @@ export async function obtenerDetalleProduccion(ordenId, lote = '') {
   const [
     productosRes,
     materiasRes,
-    tiemposRes,
     manufacturaRes,
     almacenamientoRes,
     controlesAlmacenamientoRes,
@@ -105,7 +104,6 @@ export async function obtenerDetalleProduccion(ordenId, lote = '') {
        ORDER BY opm.id`,
       [ordenId]
     ),
-    poolPostgres.query('SELECT * FROM tiempos_produccion WHERE orden_produccion_id = $1 ORDER BY id', [ordenId]),
     poolPostgres.query(
       `SELECT rm.*, rm.lote_producido AS lote_producto, rm.unidades_producidas AS peso_total, op.fecha_produccion
        FROM registro_manufactura rm
@@ -198,7 +196,6 @@ export async function obtenerDetalleProduccion(ordenId, lote = '') {
   return {
     productos: productosRes.rows,
     materias: materiasRes.rows,
-    tiempos: tiemposRes.rows,
     manufactura: manufacturaRes.rows[0] || null,
     almacenamiento: almacenamientoRes.rows[0]
       ? { ...almacenamientoRes.rows[0], controles: controlesAlmacenamientoRes.rows }

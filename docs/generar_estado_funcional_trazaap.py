@@ -114,21 +114,20 @@ functional_rows = [
     ("RF01-A", "Implementado", "Recepcion de materias primas", "Se registran proveedor, materia prima, cantidades, lotes, fechas, temperatura, peso, estado y responsable. Tambien se actualiza inventario y se registra evidencia Fabric."),
     ("RF01-B", "Implementado", "Inspeccion y decision de aceptacion", "La inspeccion queda ligada a la recepcion; incluye producto, transporte, vehiculo/conductor como checks funcionales, observaciones y decision final."),
     ("RF02", "Implementado parcial", "Eventos de fabricacion", "Existe registro de manufactura con tiempos y temperaturas reales, lote producido, unidades y responsable. Falta modelar equipos utilizados si se exige literalmente."),
-    ("RF03-A", "Implementado parcial", "Envasado y embalado", "La informacion de empaque quedo integrada en liberacion de producto. No existe un modulo separado de envasado/embalado."),
-    ("RF03-B", "Implementado parcial", "Identificador unico de lote", "El lote producido se captura, se enlaza a manufactura, liberacion, inventario, trazabilidad y QR. Falta generacion automatica con codigo de fabrica/fechas."),
+    ("RF03-A", "Implementado parcial", "Empaque y etiquetado", "La informacion de empaque quedo integrada en liberacion de producto. No existe una etapa separada para este registro."),
+    ("RF03-B", "Implementado parcial", "Identificador unico de lote", "El lote producido se captura, se enlaza a manufactura, liberacion, inventario, trazabilidad y reportes. Falta generacion automatica con codigo de fabrica/fechas."),
     ("RF04", "Pendiente", "Almacenamiento", "No hay modulo formal para ubicacion, temperatura de almacenamiento, fechas de ingreso/salida o condiciones por lote."),
-    ("RF05", "Implementado parcial", "Distribucion y comercializacion", "La liberacion funciona como despacho operativo: factura, conductor, placa y condiciones del vehiculo. Falta cliente receptor y temperatura de transporte como modulo de despacho independiente."),
+    ("RF05", "Implementado", "Distribucion y comercializacion", "El despacho es un modulo independiente que registra cliente, factura, cantidades parciales, conductor, placa y condiciones de transporte. La liberacion conserva exclusivamente la decision de calidad y habilita el inventario terminado."),
     ("RF06", "Implementado parcial", "Trazabilidad bidireccional", "La consulta por lote final reconstruye origen, produccion, liberacion, inventario y validacion blockchain. Falta busqueda completamente hacia adelante desde cualquier materia prima hasta clientes."),
-    ("RF07", "Implementado parcial", "Puntos criticos HACCP", "Manufactura compara tiempos/temperaturas estandar vs reales y marca desviaciones. Falta modulo HACCP completo con alertas formales por variable critica."),
-    ("RF08", "Implementado parcial", "Calidad e inocuidad", "Recepcion, inspeccion y liberacion documentan decisiones de aceptacion, retencion o rechazo. Faltan controles fisicoquimicos/microbiologicos como formularios independientes."),
+    ("RF07", "Implementado parcial", "Puntos criticos del proceso", "Manufactura compara tiempos/temperaturas estandar vs reales y marca desviaciones. El modulo HACCP independiente no hace parte del alcance actual."),
+    ("RF08", "Implementado parcial", "Calidad e inocuidad", "Recepcion, inspeccion y liberacion documentan decisiones, validaciones y observaciones operativas. Los controles fisicoquimicos y microbiologicos independientes quedan fuera del alcance actual."),
     ("RF09", "Implementado", "Bloques/eventos inmutables", "Fabric registra eventos criticos con payload canonico, hash SHA-256, timestamp de transaccion, estado y busqueda por lote."),
-    ("RF10", "Implementado parcial", "Codigo QR de lote", "Hay QR en reportes y portal publico por lote final. Falta certificar medidas de etiqueta y completar datos de entrega a cliente."),
-    ("RF11", "Implementado parcial", "Portal web publico QR", "Existe /verificar/[lote] sin autenticacion, con resumen publico de trazabilidad y validacion. Falta separar formalmente vista consumidor vs INVIMA."),
+    ("RF10", "Fuera de alcance actual", "Identificador externo de lote", "El sistema opera de forma local y consulta los registros mediante el identificador de lote dentro de la aplicación."),
+    ("RF11", "Fuera de alcance actual", "Portal web publico", "No se implementa un portal externo; la consulta autorizada se realiza dentro de la aplicación y mediante reportes."),
     ("RF12", "Implementado parcial", "Control de acceso por roles", "El sistema maneja administrador, gerente y operario con JWT y guardas. No estan los roles cliente, INVIMA y consumidor autenticado."),
     ("RF13", "Implementado parcial", "Contratos inteligentes", "Existe chaincode de Fabric para registrar, validar y consultar eventos. Faltan reglas automaticas: confirmacion cliente, bloqueo por HACCP y alerta por vencimiento."),
-    ("RF14", "Implementado parcial", "Reportes de trazabilidad INVIMA", "Hay modulo de reportes y PDF con validacion blockchain/QR. Falta exportacion Excel y generacion masiva hasta 50 lotes."),
-    ("RF15", "Pendiente", "Plan de saneamiento", "No hay modulo de limpieza, desinfeccion, plagas o residuos."),
-    ("RF16", "Pendiente", "Devoluciones y lotes no conformes", "No hay flujo de devoluciones, retiro, reproceso o destruccion."),
+    ("RF14", "Implementado parcial", "Reportes de trazabilidad INVIMA", "Hay modulo de reportes y PDF con validacion blockchain por lote. Falta exportacion Excel y generacion masiva hasta 50 lotes."),
+    ("RF16", "Fuera de alcance actual", "Devoluciones y lotes no conformes", "El modulo independiente de devoluciones, retiro, reproceso o destruccion fue retirado para mantener el alcance operativo acotado."),
     ("RF17", "Implementado parcial", "Registro de proveedores", "Existe CRUD de proveedores, certificaciones y relacion con materias primas/recepciones. Falta gestion documental completa de certificados/fichas tecnicas."),
 ]
 
@@ -140,11 +139,11 @@ nonfunctional_rows = [
     ("RNF05", "Pendiente", "Rendimiento", "No hay pruebas formales que demuestren <=3 s en consulta o <=10 s en confirmacion blockchain."),
     ("RNF06", "Implementado parcial", "Usabilidad", "Se mejoraron formularios modales, validaciones y cierre automatico; falta prueba controlada de usabilidad."),
     ("RNF07", "Pendiente", "Portabilidad/offline", "La web es responsive, pero no existe modo offline con sincronizacion."),
-    ("RNF08", "Implementado parcial", "Confidencialidad diferenciada", "El QR publico limita informacion sensible, pero falta perfil INVIMA y politica de campos por actor."),
+    ("RNF08", "Implementado parcial", "Confidencialidad diferenciada", "La consulta por lote permanece dentro de la aplicación y el RBAC limita la información según el rol."),
     ("RNF09", "Implementado parcial", "Confiabilidad del consenso", "Hay CA, orderer y dos peers en Docker; no hay cluster multi-orderer ni prueba de tolerancia a fallos."),
     ("RNF10", "Pendiente", "Escalabilidad", "No hay pruebas de carga ni arquitectura productiva dimensionada."),
     ("RNF11", "Implementado parcial", "Mantenibilidad", "El codigo esta modularizado por dominios y hay schema consolidado; falta documentacion tecnica completa y versionamiento formal de contratos."),
-    ("RNF12", "Implementado parcial", "Interoperabilidad", "La API REST JSON existe con JWT. Falta OAuth 2.0 y compatibilidad GS1 EPCIS 2.0."),
+    ("RNF12", "Implementado parcial", "Interoperabilidad", "La API REST JSON existe con JWT y conserva endpoints EPCIS preparados para una integración futura."),
 ]
 
 module_rows = [
@@ -160,8 +159,7 @@ module_rows = [
     ("Liberacion de producto", "backend/src/modulos/liberacion, frontend/src/app/liberacion, frontend/src/modulos/liberacion/FormularioLiberacion.js", "Control final del producto terminado; si se aprueba crea inventario terminado y queda listo para salida."),
     ("Inventario producto terminado", "backend/src/modulos/inventario, backend/src/modulos/liberacion", "Se genera al aprobar liberacion; relaciona lote, producto, unidades, vencimiento y estado."),
     ("Trazabilidad", "backend/src/modulos/trazabilidad, frontend/src/app/trazabilidad", "Consulta por lote final u origen y agrega recepcion, inspeccion, produccion, manufactura, liberacion y validacion Fabric."),
-    ("Reportes", "frontend/src/app/reportes, frontend/src/app/reportes/trazabilidad/[lote]/page.js", "Genera reporte PDF visual con eventos, estados blockchain y codigos QR de verificacion."),
-    ("Portal publico QR", "backend/src/modulos/publico, frontend/src/app/verificar/[lote]/page.js", "Permite consultar trazabilidad publica sin autenticacion a partir del lote producido."),
+    ("Reportes", "frontend/src/app/reportes, frontend/src/app/reportes/trazabilidad/[lote]/page.js", "Genera reporte PDF visual con eventos y estados blockchain consultados por lote."),
     ("Blockchain Fabric", "backend/src/modulos/blockchain, fabric/chaincode/traceability, fabric/scripts", "Construye payloads funcionales, registra y valida evidencias en Fabric mediante chaincode."),
 ]
 
@@ -208,13 +206,12 @@ def build_doc():
 
     add_heading(doc, "3. Explicacion por capas", 1)
     add_heading(doc, "3.1 Frontend web", 2)
-    doc.add_paragraph("El frontend esta construido en Next.js y organiza la experiencia por vistas del sistema. La carpeta frontend/src/app contiene las rutas principales: panel, proveedores, materias primas, recepciones, produccion, liberacion, inventario, trazabilidad, reportes y verificacion publica por QR. Las carpetas frontend/src/modulos y frontend/src/comunes contienen formularios reutilizables, guardas de sesion y componentes de layout.")
+    doc.add_paragraph("El frontend esta construido en Next.js y organiza la experiencia por vistas del sistema. La carpeta frontend/src/app contiene las rutas principales: panel, proveedores, materias primas, recepciones, produccion, liberacion, inventario, trazabilidad y reportes. Las carpetas frontend/src/modulos y frontend/src/comunes contienen formularios reutilizables, guardas de sesion y componentes de layout.")
     add_code_paths(doc, [
         ("frontend/src/app/produccion/page.js", "vista principal de produccion con ordenes, orden activa, manufactura y productos."),
         ("frontend/src/modulos/produccion/FormularioOrdenProduccion.js", "formulario grande de ordenes, productos, recetas, materias y manufactura."),
         ("frontend/src/app/liberacion/page.js", "vista del nuevo segmento Liberacion."),
         ("frontend/src/app/trazabilidad/page.js", "entrada privada para consultar trazabilidad por lote."),
-        ("frontend/src/app/verificar/[lote]/page.js", "portal publico que se abre desde el QR."),
         ("frontend/src/app/reportes/trazabilidad/[lote]/page.js", "reporte imprimible/PDF con validacion blockchain."),
     ])
 
@@ -240,7 +237,7 @@ def build_doc():
     add_heading(doc, "3.4 Base de datos PostgreSQL", 2)
     doc.add_paragraph("PostgreSQL conserva la informacion operativa completa. La decision es correcta porque el sistema necesita relaciones, consultas, actualizaciones e inventarios que serian costosos e incomodos en blockchain. La blockchain no reemplaza la base de datos; solo conserva evidencia criptografica verificable de eventos criticos.")
     add_bullets(doc, [
-        "El schema consolidado actual vive en backend/sql/001_schema_actual.sql y backend/documentacion/schema_actual_consolidado.sql.",
+        "La unica fuente SQL del esquema actual es backend/sql/001_schema_actual.sql; las cargas iniciales se ejecutan con npm run seed y npm run seed:materias.",
         "Las tablas principales son roles, users, providers, raw_materials, receptions, reception_inspections, inventario_materias_primas, inventario_movimientos, productos_fabricados, producto_variantes, producto_variante_materia_prima, ordenes_produccion, ordenes_produccion_productos, ordenes_produccion_materias, registro_manufactura, liberacion_producto e inventario_producto_terminado.",
         "Las llaves foraneas enlazan proveedor, materia prima, recepcion, orden, producto, manufactura, liberacion y usuario responsable.",
     ])
@@ -252,9 +249,9 @@ def build_doc():
         ("3", "Producto/receta", "El producto define tiempos estandar, temperatura, inmersion y variantes por tamano/presentacion. Cada variante tiene materias primas requeridas por unidad."),
         ("4", "Orden de produccion", "La orden planifica fecha, codigo y productos programados. El sistema calcula insumos requeridos segun receta e inventario."),
         ("5", "Manufactura", "Se registra el hecho real: lote producido, unidades, tiempos y temperaturas reales, responsable operario y consumo de materias primas."),
-        ("6", "Liberacion", "Se valida empaque/envase, factura, conductor, placa, unidades, peso y vencimiento. Si se aprueba, se crea inventario de producto terminado."),
+        ("6", "Liberacion", "Se valida empaque/envase, etiqueta, lote visible, vencimiento, unidades, peso y estado del producto. Si se aprueba, se crea inventario de producto terminado; la factura y el transporte se registran después en despacho."),
         ("7", "Trazabilidad", "Por lote final se reconstruye origen de materias primas, inspeccion, orden, manufactura, liberacion, inventario y validaciones Fabric."),
-        ("8", "Reporte/QR", "Se genera reporte PDF con estados blockchain y QR. El QR abre una vista publica de verificacion del lote."),
+        ("8", "Reporte", "Se genera reporte PDF con estados blockchain a partir del lote consultado."),
     ]
     add_table(doc, ["Paso", "Etapa", "Comportamiento"], flow_rows, widths=[1.0, 3.4, 13.4])
 
@@ -286,7 +283,7 @@ def build_doc():
         ("Orden vs manufactura", "La orden es planeacion; manufactura es lo real. Esta separacion evita pedir datos reales antes de producir y permite comparar estandar contra real."),
         ("Liberacion antes de salida", "La liberacion funciona como control final de calidad y despacho interno. Solo lo aprobado alimenta inventario de producto terminado."),
         ("Payloads normalizados", "Los hashes deben ser reproducibles. Por eso se excluyen IDs tecnicos y metadata variable, y se ordenan campos antes de enviar a Fabric."),
-        ("QR publico", "El QR no reemplaza el reporte: sirve para verificacion rapida del lote desde fuera del sistema privado, sin exponer recetas ni datos sensibles."),
+        ("Consulta por lote", "El lote funciona como identificador estable para consultar trazabilidad y generar reportes dentro del sistema privado."),
         ("JWT y cierre por inactividad", "El sistema maneja informacion operativa interna. La sesion con token y expiracion por actividad reduce riesgo de dejar cuentas abiertas."),
     ]
     add_table(doc, ["Decision", "Justificacion"], why_rows, widths=[4.0, 13.8])
@@ -295,15 +292,15 @@ def build_doc():
     add_bullets(doc, [
         "Crear modulo de almacenamiento si el alcance final exige temperatura, ubicacion y fechas de entrada/salida por lote.",
         "Decidir si liberacion reemplaza despacho o si se implementara un despacho independiente con cliente receptor y temperatura de transporte.",
-        "Agregar modulo de saneamiento para RF15 y modulo de devoluciones/no conformidades para RF16.",
+        "Documentar expresamente que RF16 queda fuera del alcance actual.",
         "Completar reportes con exportacion Excel y opcion de varios lotes.",
-        "Separar informacion publica de consumidor e informacion para INVIMA dentro del portal QR.",
+        "Definir posteriormente los niveles de informacion que se compartiran con consumidores o entes de control mediante reportes autorizados.",
         "Formalizar pruebas de rendimiento, usabilidad y disponibilidad para los requerimientos no funcionales.",
         "Documentar despliegue Fabric productivo si se pasa de Docker local a servidores fisicos o nube.",
     ])
 
     add_heading(doc, "8. Conclusion", 1)
-    doc.add_paragraph("Trazaap ya implementa el nucleo funcional de trazabilidad: recepcion, inspeccion, inventario de materias primas, productos/recetas, ordenes de produccion, manufactura real, liberacion, inventario de producto terminado, trazabilidad por lote, QR, reportes y validacion blockchain con Hyperledger Fabric. Lo pendiente se concentra en modulos complementarios del alcance normativo, pruebas no funcionales formales y algunas extensiones de despacho, almacenamiento, saneamiento y devoluciones.")
+    doc.add_paragraph("Trazaap ya implementa el nucleo funcional de trazabilidad: recepcion, inspeccion, inventario de materias primas, productos/recetas, ordenes de produccion, manufactura real, liberacion, inventario de producto terminado, trazabilidad por lote, reportes y validacion blockchain con Hyperledger Fabric. Lo pendiente se concentra en pruebas no funcionales formales y algunas extensiones de despacho y almacenamiento. Las devoluciones y los controles de calidad independientes no hacen parte del alcance actual.")
 
     for section in doc.sections:
         footer = section.footer.paragraphs[0]

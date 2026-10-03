@@ -83,27 +83,6 @@ export const asociarMateriasSchema = z.object({
     .min(1)
 });
 
-export const registrarTiemposSchema = z.object({
-  registros: z
-    .array(
-      z.object({
-        producto: z.string().min(2),
-        es_bagel: z.coerce.boolean().default(false),
-        unidades_producidas: z.coerce.number().int().nonnegative(),
-        temperatura_crecimiento: z.coerce.number(),
-        tiempo_crecimiento_min: z.coerce.number().int().nonnegative(),
-        temperatura_inmersion_agua: z.coerce.number().optional(),
-        tiempo_inmersion_agua_seg: z.coerce.number().int().nonnegative().optional(),
-        temperatura_horneo: z.coerce.number(),
-        tiempo_horneo_min: z.coerce.number().int().nonnegative(),
-        lote_producto: z.string().min(2),
-        responsable_produccion: z.coerce.number().int().positive(),
-        observaciones: z.string().optional().default('')
-      })
-    )
-    .min(1)
-});
-
 export const registroManufacturaSchema = z.object({
   responsable_usuario_id: z.coerce.number().int().positive(),
   unidades_producidas: z.coerce.number().int().nonnegative(),

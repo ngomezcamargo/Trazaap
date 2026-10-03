@@ -1,4 +1,5 @@
 import { FormularioIngreso } from '@/modulos/autenticacion/FormularioIngreso';
+import Image from 'next/image';
 import { Suspense } from 'react';
 
 export default function IniciarSesionPage() {
@@ -6,7 +7,7 @@ export default function IniciarSesionPage() {
     <div className="pantalla-login">
       <div className="panel-login">
         <div className="login-marca-principal">
-          <img className="logo-login" src="/trazaap-logo.jpeg" alt="Logo Trazaap" />
+          <Image className="logo-login" src="/trazaap-logo.jpeg" alt="Logo Trazaap" width={138} height={138} priority />
         </div>
         <div className="encabezado-login" style={{ marginBottom: 16 }}>
           <h2>Ingreso al sistema</h2>

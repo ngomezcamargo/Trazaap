@@ -128,11 +128,11 @@ export function BuscadorTrazabilidad() {
               <table className="tabla">
                 <thead><tr><th>Despacho</th><th>Cliente</th><th>Factura</th><th>Cantidad del lote</th><th>Fecha</th><th>Transporte</th><th>Estado</th><th>Confirmacion</th><th>Blockchain</th></tr></thead>
                 <tbody>
-                  {(data.despachos || []).map((despacho) => {
+                  {(data.despachos || []).map((despacho, index) => {
                     const detallesLote = (despacho.detalles || []).filter((detalle) => String(detalle.lote) === String(data.lote));
                     const cantidad = detallesLote.reduce((total, detalle) => total + Number(detalle.cantidad_despachada || 0), 0);
                     return (
-                      <tr key={despacho.id_despacho}>
+                      <tr key={`${despacho.id_despacho}-${despacho.codigo_despacho || 'despacho'}-${index}`}>
                         <td>{despacho.codigo_despacho}</td>
                         <td>{despacho.cliente || 'No disponible'}</td>
                         <td>{despacho.numero_factura}</td>
@@ -141,7 +141,7 @@ export function BuscadorTrazabilidad() {
                         <td>{despacho.conductor || '-'} / {despacho.placa_vehiculo || '-'}</td>
                         <td><span className={`estado ${despacho.estado_despacho}`}>{despacho.estado_despacho}</span></td>
                         <td>{despacho.estado_confirmacion || 'Pendiente'}</td>
-                        <td><span className={`estado ${despacho.blockchain ? 'verificado' : 'pendiente'}`}>{despacho.blockchain ? 'Verificado' : 'Pendiente'}</span></td>
+                        <td><span className={`estado ${despacho.validacionBlockchain?.estadoBlockchain?.toLowerCase() || 'pendiente'}`}>{despacho.validacionBlockchain?.estadoBlockchain === 'VERIFICADO' ? 'Verificado' : despacho.validacionBlockchain?.estadoBlockchain === 'ALTERADO' ? 'Alterado' : 'Pendiente'}</span></td>
                       </tr>
                     );
                   })}
@@ -164,10 +164,10 @@ export function BuscadorTrazabilidad() {
                 </tr>
               </thead>
               <tbody>
-                {(data.recepciones || []).map((recepcion) => {
+                {(data.recepciones || []).map((recepcion, index) => {
                   const inspeccion = (data.inspecciones || []).find((item) => item.recepcion_id === recepcion.id);
                   return (
-                    <tr key={recepcion.id}>
+                    <tr key={`${recepcion.id}-${recepcion.numero_lote || 'recepcion'}-${index}`}>
                       <td>{recepcion.numero_lote || recepcion.lote_proveedor}</td>
                       <td>{recepcion.materia_prima || '-'}</td>
                       <td>{recepcion.proveedor ? `${recepcion.proveedor.nombre} (${recepcion.proveedor.nit})` : '-'}</td>
@@ -196,8 +196,8 @@ export function BuscadorTrazabilidad() {
               <tbody>
                 {(data.decisionesBlockchain || [])
                   .filter((item) => item.tipoEvento !== 'correccion_evento')
-                  .map((item) => (
-                    <tr key={item.txId || `${item.tipoEvento}-${item.idEntidad}`}>
+                  .map((item, index) => (
+                    <tr key={`${item.txId || `${item.tipoEvento}-${item.idEntidad}`}-${index}`}>
                       <td>{item.tipoEvento}</td>
                       <td><span className={`estado ${String(item.estado || '').toLowerCase()}`}>{item.estado || '-'}</span></td>
                       <td>{item.timestampBlockchain ? new Date(item.timestampBlockchain).toLocaleString() : '-'}</td>
@@ -218,8 +218,8 @@ export function BuscadorTrazabilidad() {
               <table className="tabla">
                 <thead><tr><th>Evento original</th><th>Motivo</th><th>Actor</th><th>Fecha Fabric</th><th>Transaccion</th></tr></thead>
                 <tbody>
-                  {(data.historialCorrecciones || []).map((item) => (
-                    <tr key={item.txId}>
+                  {(data.historialCorrecciones || []).map((item, index) => (
+                    <tr key={`${item.txId || 'correccion'}-${index}`}>
                       <td>{item.tipoEventoOriginal}:{item.idEntidadOriginal}</td>
                       <td>{item.motivoCorreccion}</td>
                       <td>{item.actor}</td>
@@ -249,8 +249,8 @@ export function BuscadorTrazabilidad() {
                 </tr>
               </thead>
               <tbody>
-                {(data.validacionesBlockchain || []).map((item) => (
-                  <tr key={`${item.tipoEvento}-${item.idEntidad}`}>
+                {(data.validacionesBlockchain || []).map((item, index) => (
+                  <tr key={`${item.tipoEvento}-${item.idEntidad}-${index}`}>
                     <td>{item.tipoEvento}</td>
                     <td>{item.idEntidad}</td>
                     <td>
@@ -286,8 +286,8 @@ export function BuscadorTrazabilidad() {
               </tr>
             </thead>
             <tbody>
-              {eventosFiltrados.map((event) => (
-                <tr key={event.id}>
+              {eventosFiltrados.map((event, index) => (
+                <tr key={`${event.id}-${event.event_type || 'evento'}-${index}`}>
                   <td>{event.event_type}</td>
                   <td>{event.actor}</td>
                   <td>{new Date(event.timestamp).toLocaleString()}</td>

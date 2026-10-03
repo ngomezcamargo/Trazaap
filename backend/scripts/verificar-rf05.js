@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { poolPostgres } from '../src/configuracion/postgresql.js';
 import { procesarOutboxAhora } from '../src/modulos/blockchain/outbox.worker.js';
-import { construirPayloadDespacho } from '../src/modulos/blockchain/payloads/despacho.payload.js';
 import {
   consultarSaldoInventarioBlockchain,
   registrarDespachoBlockchain
 } from '../src/modulos/blockchain/fabric.client.js';
+import { construirPayloadDespacho } from '../src/modulos/blockchain/payloads/despacho.payload.js';
 
 const API_URL = process.env.RF05_API_URL || 'http://localhost:4000/api';
+const FRONTEND_URL = process.env.RF05_FRONTEND_URL || 'http://localhost:3000';
 const ADMIN_EMAIL = process.env.RF05_ADMIN_EMAIL || 'admin@trazaap.local';
 const ADMIN_PASSWORD = process.env.RF05_ADMIN_PASSWORD || 'Admin123*';
 const sufijo = `${Date.now()}`.slice(-9);
@@ -34,66 +35,202 @@ async function solicitar(path, { method = 'GET', token, body, aceptarError = fal
   return { ok: response.ok, status: response.status, data };
 }
 
-async function crearPrerrequisitosLote(indice) {
-  const db = await poolPostgres.connect();
-  const lote = `RF05-${sufijo}-${indice}`;
-  try {
-    await db.query('BEGIN');
-    const orden = (await db.query(
-      `INSERT INTO ordenes_produccion (
-         fecha_produccion, codigo_orden, estado, observaciones, creado_por
-       ) VALUES ($1, $2, 'finalizada', 'Prueba integral automatizada RF05', 1)
-       RETURNING id, codigo_orden`,
-      [fechaISO(), `OP-RF05-${sufijo}-${indice}`]
-    )).rows[0];
-    const producto = (await db.query(
-      `INSERT INTO ordenes_produccion_productos (
-         orden_produccion_id, producto, tamano_presentacion, cantidad_programada,
-         observaciones, producto_fabricado_id, producto_variante_id, estado_manufactura
-       ) VALUES ($1, 'Bagel', 'mediano', 10, 'Prueba integral RF05', 1, 4, 'registrado')
-       RETURNING id`,
-      [orden.id]
-    )).rows[0];
-    const manufactura = (await db.query(
-      `INSERT INTO registro_manufactura (
-         id_orden_produccion, id_producto, lote_producido, unidades_producidas,
-         tiempo_real_fermentacion_minutos, temperatura_real_fermentacion_c,
-         tiempo_real_horneado_minutos, temperatura_real_horneado_c,
-         tiempo_real_inmersion_minutos, temperatura_real_inmersion_c,
-         hora_inicio, hora_fin, observaciones, registrado_por,
-         registrado_por_usuario_id, fecha_vencimiento_calculada
-       ) VALUES (
-         $1, $2, $3, 10, 45, 30, 15, 165, 1, 90,
-         NOW() - INTERVAL '2 hours', NOW() - INTERVAL '1 hour',
-         'Prueba integral RF05', 'operario@trazaap.local', 3, $4
-       ) RETURNING id_manufactura`,
-      [orden.id, producto.id, lote, fechaISO(5)]
-    )).rows[0];
-    await db.query(
-      `INSERT INTO almacenamientos_lote (
-         id_manufactura, id_orden_produccion, id_producto, lote_producido,
-         id_ubicacion, temperatura_min_esperada_c, temperatura_max_esperada_c,
-         temperatura_ingreso_c, estado, observaciones_ingreso, responsable_ingreso,
-         fecha_salida, temperatura_salida_c, estado_producto_salida,
-         decision_salida, observaciones_salida, responsable_salida
-       ) VALUES (
-         $1, $2, $3, $4, 1, 15, 25, 18, 'listo_para_liberacion',
-         'Prueba integral RF05', 3, NOW(), 18, 'conforme', 'liberar',
-         'Producto habilitado para liberacion', 3
-       )`,
-      [manufactura.id_manufactura, orden.id, producto.id, lote]
-    );
-    await db.query('COMMIT');
-    return { lote, idManufactura: manufactura.id_manufactura };
-  } catch (error) {
-    await db.query('ROLLBACK');
-    throw error;
-  } finally {
-    db.release();
-  }
+async function solicitarArchivo(path, { token, body } = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new Error(`POST ${path}: ${response.status}`);
+  return { contentType: response.headers.get('content-type') || '', bytes: (await response.arrayBuffer()).byteLength };
 }
 
-async function procesarHasta(consulta, descripcion, timeoutMs = 45000) {
+async function comprobarVistaFrontend(path) {
+  const response = await fetch(`${FRONTEND_URL}${path}`);
+  if (!response.ok) throw new Error(`La vista frontend ${path} respondió ${response.status}`);
+  return response;
+}
+
+async function crearPrerrequisitosLote(indice, { adminToken, operarioToken }) {
+  const usuarios = (await poolPostgres.query(
+    `SELECT id FROM users WHERE email = 'operario@trazaap.local' LIMIT 1`
+  )).rows[0];
+  if (!usuarios?.id) throw new Error('La base aislada no tiene el operario de prueba');
+
+  const proveedor = (await solicitar('/providers', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      nombre: `Proveedor RF05 ${sufijo}-${indice}`,
+      nit: `RF05${sufijo}${indice}`,
+      nombre_contacto: 'Contacto RF05',
+      telefono: '3000000000',
+      email: `proveedor.rf05.${sufijo}.${indice}@trazaap.local`,
+      direccion: 'Direccion de prueba RF05',
+      certificaciones: 'Certificacion de prueba',
+      estado: 'activo'
+    }
+  })).data;
+
+  const materiaPrima = (await solicitar('/materias-primas', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      nombre: `Harina RF05 ${sufijo}-${indice}`,
+      descripcion: 'Materia prima creada por la prueba integral',
+      unidad_medida_base: 'kilogramos',
+      tipo_insumo: 'solido',
+      condiciones_almacenamiento: 'Ambiente seco',
+      proveedor_id: proveedor.id,
+      is_active: true
+    }
+  })).data;
+
+  const producto = (await solicitar('/produccion/productos', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      nombre: `Producto RF05 ${sufijo}-${indice}`,
+      prefijo_lote: `R${indice}`,
+      categoria: 'Panificacion',
+      descripcion: 'Producto creado por la prueba integral',
+      vida_util_dias: 5,
+      condiciones_almacenamiento: 'Ambiente seco',
+      temperatura_almacenamiento_min_c: 15,
+      temperatura_almacenamiento_max_c: 25,
+      requiere_refrigeracion: false,
+      requiere_inmersion: false,
+      tiempo_fermentacion_minutos: 45,
+      temperatura_fermentacion_c: 30,
+      tiempo_horneado_minutos: 15,
+      temperatura_horneado_c: 165,
+      estado: 'activo',
+      variantes: [{
+        tamano_presentacion: 'mediano',
+        peso_estimado_unidad: 500,
+        unidad_medida: 'unidad',
+        estado: 'activo',
+        receta: [{
+          materia_prima_id: materiaPrima.id,
+          cantidad_requerida: 0.5,
+          observaciones: 'Receta de prueba RF05'
+        }]
+      }]
+    }
+  })).data;
+  const variante = producto.variantes?.[0];
+  if (!variante?.id) throw new Error('La prueba no pudo recuperar la variante del producto creado');
+
+  const recepcion = (await solicitar('/receptions', {
+    method: 'POST',
+    token: operarioToken,
+    body: {
+      proveedor_id: proveedor.id,
+      materia_prima_id: materiaPrima.id,
+      cantidad: 100,
+      unidad_medida: 'kilogramos',
+      presentacion: 'bulto',
+      numero_lote: `MP-RF05-${sufijo}-${indice}`,
+      fecha_vencimiento: fechaISO(120),
+      temperatura: 20,
+      observaciones: 'Recepcion creada por la prueba integral',
+      recibido_por: usuarios.id,
+      estado_recepcion: 'aceptado',
+      inspeccion_producto: {
+        olor: true,
+        color: true,
+        textura: true,
+        estado_empaque: true,
+        certificado_calidad: true,
+        observaciones_producto: 'Producto conforme',
+        decision_producto: 'aceptado'
+      },
+      inspeccion_transporte: {
+        condiciones_vehiculo: true,
+        higiene_conductor: true,
+        observaciones_transporte: 'Transporte conforme'
+      }
+    }
+  })).data;
+
+  const orden = (await solicitar('/produccion/ordenes', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      fecha_produccion: fechaISO(),
+      codigo_orden: `OP-RF05-${sufijo}-${indice}`,
+      estado: 'pendiente',
+      observaciones: 'Orden creada por la prueba integral RF05',
+      productos: [{
+        producto_id: producto.id,
+        variante_id: variante.id,
+        cantidad_programada: 10,
+        observaciones: 'Producto programado RF05'
+      }]
+    }
+  })).data;
+  const productoOrden = orden.productos?.[0];
+  if (!productoOrden?.id) throw new Error('La prueba no pudo recuperar el producto de la orden');
+
+  const manufactura = (await solicitar(`/produccion/ordenes/${orden.id}/productos/${productoOrden.id}/manufactura`, {
+    method: 'POST',
+    token: operarioToken,
+    body: {
+      responsable_usuario_id: usuarios.id,
+      unidades_producidas: 10,
+      tiempo_real_fermentacion_minutos: 45,
+      temperatura_real_fermentacion_c: 30,
+      tiempo_real_horneado_minutos: 15,
+      temperatura_real_horneado_c: 165,
+      hora_inicio: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      hora_fin: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      equipos_utilizados: ['Horno de prueba RF05'],
+      observaciones: 'Manufactura creada por la prueba integral'
+    }
+  })).data;
+  const manufacturaRegistro = manufactura.registro;
+  const lote = manufacturaRegistro.lote_producido;
+
+  const ubicacion = (await solicitar('/almacenamiento/ubicaciones', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      nombre: `Ubicacion RF05 ${sufijo}-${indice}`,
+      descripcion: 'Ubicacion temporal de prueba',
+      tipo: 'ambiente',
+      activo: true
+    }
+  })).data;
+  const almacenamiento = (await solicitar('/almacenamiento/ingresos', {
+    method: 'POST',
+    token: operarioToken,
+    body: { id_manufactura: manufacturaRegistro.id_manufactura, id_ubicacion: ubicacion.id_ubicacion, temperatura_ingreso_c: 20, observaciones: 'Ingreso RF05' }
+  })).data;
+  await solicitar(`/almacenamiento/${almacenamiento.id_almacenamiento}/controles`, {
+    method: 'POST',
+    token: operarioToken,
+    body: { temperatura_c: 20, condicion_general: 'conforme', observaciones: 'Control RF05 conforme' }
+  });
+  await solicitar(`/almacenamiento/${almacenamiento.id_almacenamiento}/salida`, {
+    method: 'POST',
+    token: operarioToken,
+    body: { temperatura_salida_c: 20, estado_producto_salida: 'conforme', decision_salida: 'liberar', observaciones: 'Salida RF05 conforme' }
+  });
+
+  return {
+    lote,
+    idManufactura: manufacturaRegistro.id_manufactura,
+    responsableId: usuarios.id,
+    recepcionId: recepcion.recepcion?.id || recepcion.id,
+    inspeccionId: recepcion.inspeccion?.id || null,
+    proveedorId: proveedor.id,
+    materiaPrimaId: materiaPrima.id,
+    productoId: producto.id,
+    ordenId: orden.id
+  };
+}
+
+async function procesarHasta(consulta, descripcion, timeoutMs = 120000) {
   const limite = Date.now() + timeoutMs;
   while (Date.now() < limite) {
     await procesarOutboxAhora();
@@ -110,13 +247,17 @@ async function crearLiberacion(token, lote) {
     token,
     body: {
       id_manufactura: lote.idManufactura,
-      responsable_liberacion_usuario_id: 3,
+      responsable_liberacion_usuario_id: lote.responsableId,
       tipo_empaque: 'Bolsa sellada',
       unidades_empacadas: 10,
       peso_neto: 1,
       fecha_vencimiento: fechaISO(5),
       etiqueta_verificada: true,
       verificacion_envase: true,
+      lote_visible: true,
+      fecha_vencimiento_visible: true,
+      empaque_conforme: true,
+      producto_en_buen_estado: true,
       estado_liberacion: 'aprobado',
       motivo_retencion: '',
       motivo_rechazo: '',
@@ -127,11 +268,13 @@ async function crearLiberacion(token, lote) {
   assert.equal(Number(inventario.unidades_disponibles), 10);
   await procesarHasta(async () => {
     const { rows } = await poolPostgres.query(
-      `SELECT estado FROM blockchain_outbox
+       `SELECT estado, ultimo_error FROM blockchain_outbox
        WHERE operacion = 'inicializar_inventario_terminado' AND id_entidad = $1`,
       [String(inventario.id_inventario)]
     );
-    if (rows[0]?.estado === 'fallido') throw new Error(`Fabric rechazo la inicializacion de ${lote.lote}`);
+    if (rows[0]?.estado === 'fallido') {
+      throw new Error(`Fabric rechazo la inicializacion de ${lote.lote}: ${rows[0].ultimo_error || 'sin detalle'}`);
+    }
     return rows[0]?.estado === 'enviado';
   }, `inicializacion Fabric de ${lote.lote}`);
   return inventario;
@@ -208,8 +351,13 @@ async function main() {
     body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD }
   });
   const token = login.data.token;
-
-  const [loteA, loteB] = await Promise.all([crearPrerrequisitosLote(1), crearPrerrequisitosLote(2)]);
+  const operarioLogin = await solicitar('/auth/login', {
+    method: 'POST',
+    body: { email: 'operario@trazaap.local', password: process.env.RF05_OPERARIO_PASSWORD || 'Operario123*' }
+  });
+  const operarioToken = operarioLogin.data.token;
+  const loteA = await crearPrerrequisitosLote(1, { adminToken: token, operarioToken });
+  const loteB = await crearPrerrequisitosLote(2, { adminToken: token, operarioToken });
   const inventarioA = await crearLiberacion(token, loteA);
   const inventarioB = await crearLiberacion(token, loteB);
   const [clienteA, clienteB] = await Promise.all([crearCliente(token, 1), crearCliente(token, 2)]);
@@ -308,6 +456,27 @@ async function main() {
   );
   assert.equal(accesoInvalido.status, 403);
 
+  const consultaPublica = await solicitar(`/public/traceability/lote/${encodeURIComponent(loteA.lote)}`);
+  assert.equal(consultaPublica.data.lote, loteA.lote);
+  assert.ok(Array.isArray(consultaPublica.data.eventos));
+  const consultaInterna = await solicitar(`/traceability/lote/${encodeURIComponent(loteA.lote)}`, { token });
+  const validaciones = consultaInterna.data.validacionesBlockchain || [];
+  assert.ok(validaciones.length >= 8);
+  const estadosBlockchain = validaciones.map((item) => `${item.tipoEvento}:${item.idEntidad}=${item.estadoBlockchain}`);
+  assert.ok(
+    validaciones.every((item) => ['VERIFICADO', 'VERIFICADO_CORREGIDO'].includes(item.estadoBlockchain)),
+    `Estados blockchain inesperados: ${estadosBlockchain.join(', ')}`
+  );
+
+  const reporteMultilote = await solicitar('/reportes/multilote', {
+    method: 'POST', token, body: { lotes: [loteA.lote, loteB.lote] }
+  });
+  assert.equal(reporteMultilote.data.encontrados, 2);
+  const excel = await solicitarArchivo('/reportes/multilote/excel', { token, body: { lotes: [loteA.lote] } });
+  assert.match(excel.contentType, /spreadsheetml/);
+  assert.ok(excel.bytes > 100);
+ await comprobarVistaFrontend(`/reportes/trazabilidad/${encodeURIComponent(loteA.lote)}`);
+
   console.log(JSON.stringify({
     resultado: 'RF05_VERIFICADO',
     lotes: [loteA.lote, loteB.lote],
@@ -320,7 +489,10 @@ async function main() {
       concurrencia: 'una solicitud aceptada y una rechazada',
       sinExistenciasPostgres: rechazadoPostgres.data.codigo,
       sinExistenciasFabric: 'LOTE_SIN_EXISTENCIAS',
-      confirmacionCliente: 'confirmada'
+      confirmacionCliente: 'confirmada',
+      consultaPublica: 'verificada',
+      reporteExcel: 'generado',
+      vistaInternaPorLoteYReporte: 'disponibles'
     }
   }, null, 2));
 }

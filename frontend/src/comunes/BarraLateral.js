@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { limpiarSesion, usaOAuth } from '@/utilidades/sesion';
+import { limpiarSesion } from '@/utilidades/sesion';
 import { normalizarRol, ROLES } from '@/utilidades/roles';
 import { obtenerUsuario } from '@/utilidades/sesion';
 
@@ -12,13 +13,7 @@ const linksAdministrador = [
   { href: '/materias-primas', label: 'Materias primas' },
   { href: '/recepciones', label: 'Recepciones' },
   { href: '/produccion', label: 'Produccion' },
-  { href: '/envasado', label: 'Envasado' },
-  { href: '/saneamiento', label: 'Saneamiento' },
-  { href: '/saneamiento/ejecucion', label: 'Ejecutar saneamiento' },
-  { href: '/devoluciones', label: 'Devoluciones' },
   { href: '/documentos', label: 'Documentos' },
-  { href: '/calidad', label: 'Calidad' },
-  { href: '/calidad/definiciones', label: 'Definiciones calidad' },
   { href: '/almacenamiento', label: 'Almacenamiento' },
   { href: '/liberacion', label: 'Liberacion' },
   { href: '/despachos', label: 'Despachos' },
@@ -35,12 +30,7 @@ const linksGerente = [
   { href: '/materias-primas', label: 'Materias primas' },
   { href: '/recepciones', label: 'Recepciones' },
   { href: '/produccion', label: 'Produccion' },
-  { href: '/envasado', label: 'Envasado' },
-  { href: '/saneamiento', label: 'Saneamiento' },
-  { href: '/saneamiento/ejecucion', label: 'Ejecutar saneamiento' },
-  { href: '/devoluciones', label: 'Devoluciones' },
   { href: '/documentos', label: 'Documentos' },
-  { href: '/calidad', label: 'Calidad' },
   { href: '/almacenamiento', label: 'Almacenamiento' },
   { href: '/liberacion', label: 'Liberacion' },
   { href: '/despachos', label: 'Despachos' },
@@ -53,13 +43,10 @@ const linksGerente = [
 
 const linksOperario = [
   { href: '/panel', label: 'Dashboard' },
+  { href: '/materias-primas', label: 'Materias primas' },
   { href: '/recepciones', label: 'Recepciones' },
   { href: '/recepciones/nueva', label: 'Nueva recepcion' },
   { href: '/produccion', label: 'Produccion' },
-  { href: '/envasado', label: 'Envasado' },
-  { href: '/saneamiento', label: 'Saneamiento' },
-  { href: '/saneamiento/ejecucion', label: 'Ejecutar saneamiento' },
-  { href: '/calidad', label: 'Calidad' },
   { href: '/almacenamiento', label: 'Almacenamiento' },
   { href: '/liberacion', label: 'Liberacion' },
   { href: '/despachos', label: 'Despachos' },
@@ -77,8 +64,7 @@ export function BarraLateral() {
       ? linksGerente
       : linksOperario;
 
-  const cerrarSesion = async () => {
-    if (usaOAuth()) await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/oauth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+  const cerrarSesion = () => {
     limpiarSesion();
     router.replace('/iniciar-sesion');
   };
@@ -86,7 +72,7 @@ export function BarraLateral() {
   return (
     <aside className="barra-lateral">
       <div className="marca">
-        <img className="logo-marca" src="/trazaap-logo.jpeg" alt="Logo Trazaap" />
+        <Image className="logo-marca" src="/trazaap-logo.jpeg" alt="Logo Trazaap" width={56} height={56} priority />
         <div>
           <h1>Trazaap</h1>
           <p>Trazabilidad alimentaria segura</p>

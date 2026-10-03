@@ -8,21 +8,27 @@ const __dirname = path.dirname(__filename);
 
 async function run() {
   const sqlDir = path.join(__dirname, '..', 'sql');
-  const entries = await fs.readdir(sqlDir);
-  const files = entries.filter((name) => name.endsWith('.sql')).sort();
+  const file = '001_schema_actual.sql';
+  const sqlPath = path.join(sqlDir, file);
+  const sql = await fs.readFile(sqlPath, 'utf8');
 
-  for (const file of files) {
-    const sqlPath = path.join(sqlDir, file);
-    const sql = await fs.readFile(sqlPath, 'utf8');
+  let transactionStarted = false;
+  try {
+    await poolPostgres.query('BEGIN');
+    transactionStarted = true;
     await poolPostgres.query(sql);
-    console.log(`Migration ${file} applied`);
+    await poolPostgres.query('COMMIT');
+    transactionStarted = false;
+    console.log(`Schema actual ${file} aplicado`);
+  } catch (error) {
+    if (transactionStarted) await poolPostgres.query('ROLLBACK');
+    throw error;
+  } finally {
+    await poolPostgres.end();
   }
-
-  await poolPostgres.end();
 }
 
 run().catch(async (error) => {
   console.error('Migration failed:', error.message);
-  await poolPostgres.end();
   process.exit(1);
 });

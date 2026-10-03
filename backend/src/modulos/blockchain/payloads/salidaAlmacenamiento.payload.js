@@ -29,7 +29,6 @@ export async function construirPayloadSalidaAlmacenamiento(idAlmacenamiento) {
       temperatura_max_esperada_c: numero(row.temperatura_max_esperada_c),
       estado_producto_salida: texto(row.estado_producto_salida),
       decision_salida: texto(row.decision_salida),
-      estado_final: texto(row.estado),
       observaciones_salida: texto(row.observaciones_salida),
       responsable_salida: texto(row.responsable_salida_email)
     }

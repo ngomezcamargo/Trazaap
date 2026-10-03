@@ -1,5 +1,6 @@
 import { poolPostgres } from '../../configuracion/postgresql.js';
 import { ErrorHttp } from '../../middlewares/errorHttp.js';
+import { encolarEventoBlockchain } from '../blockchain/outbox.repository.js';
 
 async function obtenerColumnasTabla(client, tableName) {
   const { rows } = await client.query(
@@ -14,7 +15,7 @@ async function obtenerColumnasTabla(client, tableName) {
   return new Set(rows.map((row) => row.column_name));
 }
 
-export async function crearRecepcion(data) {
+export async function crearRecepcion(data, actor = 'sistema') {
   const client = await poolPostgres.connect();
   try {
     await client.query('BEGIN');
@@ -150,6 +151,17 @@ export async function crearRecepcion(data) {
 
     const inspeccionRes = await client.query(inspeccionQuery, inspeccionValues);
 
+    await encolarEventoBlockchain({
+      tipoEvento: 'recepcion_materia_prima',
+      idEntidad: recepcion.id,
+      actor
+    }, client);
+    await encolarEventoBlockchain({
+      tipoEvento: 'inspeccion_recepcion',
+      idEntidad: inspeccionRes.rows[0].id,
+      actor
+    }, client);
+
     if (data.estado_recepcion === 'aceptado') {
       const inventarioExistente = await client.query(
         'SELECT unidad_medida FROM inventario_materias_primas WHERE materia_prima_id = $1',
@@ -173,13 +185,13 @@ export async function crearRecepcion(data) {
           fecha_actualizacion = NOW()
       `;
 
-      await client.query(inventarioQuery, [data.materia_prima_id, data.cantidad, data.unidad_medida]);
+      const inventarioRes = await client.query(`${inventarioQuery} RETURNING id`, [data.materia_prima_id, data.cantidad, data.unidad_medida]);
 
-      await client.query(
+      const movimientoRes = await client.query(
         `INSERT INTO inventario_movimientos (
           materia_prima_id, tipo_movimiento, cantidad, unidad_medida,
           referencia_tipo, referencia_id, observaciones, creado_por
-        ) VALUES ($1, 'entrada', $2, $3, 'recepcion', $4, $5, $6)`,
+        ) VALUES ($1, 'entrada', $2, $3, 'recepcion', $4, $5, $6) RETURNING id`,
         [
           data.materia_prima_id,
           data.cantidad,
@@ -189,6 +201,17 @@ export async function crearRecepcion(data) {
           String(data.recibido_por)
         ]
       );
+      await encolarEventoBlockchain({
+        tipoEvento: 'inventario_materia_prima',
+        idEntidad: inventarioRes.rows[0].id,
+        operacion: 'versionar',
+        actor
+      }, client);
+      await encolarEventoBlockchain({
+        tipoEvento: 'movimiento_inventario',
+        idEntidad: movimientoRes.rows[0].id,
+        actor
+      }, client);
     }
 
     await client.query('COMMIT');
@@ -223,10 +246,12 @@ export async function buscarMovimientoInventarioPorReferencia(referenciaTipo, re
 
 export async function listarRecepciones() {
   const query = `
-    SELECT r.*, p.nombre AS proveedor_nombre, rm.nombre AS materia_prima_nombre
+    SELECT r.*, p.nombre AS proveedor_nombre, rm.nombre AS materia_prima_nombre,
+           i.id AS inspeccion_id
     FROM receptions r
     JOIN providers p ON p.id = r.proveedor_id
     JOIN raw_materials rm ON rm.id = r.materia_prima_id
+    LEFT JOIN reception_inspections i ON i.reception_id = r.id
     ORDER BY r.id ASC
   `;
 

@@ -6,12 +6,9 @@ export async function consultarEventosEpcisPorLote(lote, db = poolPostgres) {
   const { rows } = await db.query(`
     SELECT 'recepcion' tipo, r.id id, r.fecha_recepcion event_time FROM receptions r WHERE r.numero_lote=$1 OR r.lote_proveedor=$1
     UNION ALL SELECT 'manufactura', rm.id_manufactura, rm.hora_fin FROM registro_manufactura rm WHERE rm.lote_producido=$1
-    UNION ALL SELECT 'envasado', oe.id_envasado, oe.fecha_operacion FROM operaciones_envasado oe WHERE oe.lote=$1
     UNION ALL SELECT 'almacenamiento', al.id_almacenamiento, al.fecha_ingreso FROM almacenamientos_lote al WHERE al.lote_producido=$1
-    UNION ALL SELECT 'calidad', c.id_control, c.fecha_control FROM controles_calidad_lote c WHERE c.lote=$1
     UNION ALL SELECT 'liberacion', lp.id_liberacion, lp.fecha_liberacion FROM liberacion_producto lp WHERE lp.lote_producido=$1
     UNION ALL SELECT 'despacho', d.id_despacho, d.fecha_despacho FROM despachos d JOIN despacho_detalle dd ON dd.id_despacho=d.id_despacho JOIN inventario_producto_terminado i ON i.id_inventario=dd.id_inventario_producto_terminado WHERE i.lote=$1
-    UNION ALL SELECT 'devolucion', dc.id_caso, dc.fecha_registro FROM devoluciones_no_conformidades dc WHERE dc.lote=$1
     ORDER BY event_time`, [lote]);
   let entradas = [];
   if (rows.some((row) => row.tipo === 'manufactura')) {

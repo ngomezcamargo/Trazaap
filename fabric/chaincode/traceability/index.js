@@ -67,7 +67,12 @@ class TraceabilityContract extends Contract {
     }
 
     const event = JSON.parse(data.toString());
-    const valido = event.hashRegistro === hashActual;
+    // Los despachos se registran mediante una transaccion especializada:
+    // hashSolicitud representa el payload funcional recibido por Fabric.
+    const hashBlockchain = tipoEvento === 'despacho_producto' && event.hashSolicitud
+      ? event.hashSolicitud
+      : event.hashRegistro;
+    const valido = hashBlockchain === hashActual;
 
     if (!valido) {
       const correcciones = await this._obtenerCorreccionesEvento(ctx, tipoEvento, idEntidad);
@@ -96,7 +101,7 @@ class TraceabilityContract extends Contract {
       mensaje: valido
         ? 'El registro coincide con la evidencia blockchain'
         : 'El registro actual no coincide con la evidencia blockchain',
-      hashBlockchain: event.hashRegistro,
+      hashBlockchain,
       hashActual,
       txId: event.txId || null,
       timestampBlockchain: event.timestampBlockchain || null

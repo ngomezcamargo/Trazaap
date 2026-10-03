@@ -99,12 +99,10 @@ export function construirControlesCriticos(manufactura, liberacion) {
   controles.push(
     controlBinario('etiqueta_verificada', 'Etiqueta verificada', liberacion.etiqueta_verificada),
     controlBinario('verificacion_envase', 'Envase verificado', liberacion.verificacion_envase),
-    controlBinario('lote_visible', 'Lote visible', true),
-    controlBinario('fecha_vencimiento_visible', 'Fecha de vencimiento visible', true),
-    controlBinario('empaque_conforme', 'Empaque conforme', liberacion.verificacion_envase),
-    controlBinario('producto_en_buen_estado', 'Producto en buen estado', true),
-    controlBinario('limpieza_vehiculo', 'Limpieza del vehiculo', liberacion.limpieza_vehiculo === 'cumple'),
-    controlBinario('documentacion_conductor', 'Documentacion y dotacion del conductor', liberacion.documentacion_dotacion === 'cumple')
+    controlBinario('lote_visible', 'Lote visible', liberacion.lote_visible),
+    controlBinario('fecha_vencimiento_visible', 'Fecha de vencimiento visible', liberacion.fecha_vencimiento_visible),
+    controlBinario('empaque_conforme', 'Empaque conforme', liberacion.empaque_conforme),
+    controlBinario('producto_en_buen_estado', 'Producto en buen estado', liberacion.producto_en_buen_estado),
   );
 
   return controles.filter(Boolean);

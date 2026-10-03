@@ -5,7 +5,7 @@ const variante = (tamanoPresentacion, pesoEstimadoUnidad) => ({
 });
 
 // Identificador interno compatible con el catalogo historico. No forma parte
-// del lote RF03-B, generado como FAB-AAAAMMDD-AAAAMMDD-NNNN en el backend.
+// del lote RF03-B, generado como PREFIJO-AAAAMMDD-AAAAMMDD-NNNN en el backend.
 export function resolverPrefijoInternoProducto(ficha) {
   if (ficha.prefijo_lote) return ficha.prefijo_lote;
   const palabras = String(ficha.nombre || '').trim().toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);

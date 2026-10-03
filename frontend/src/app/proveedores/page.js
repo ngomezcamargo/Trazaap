@@ -112,8 +112,8 @@ export default function ProveedoresPage() {
                 </tr>
               </thead>
               <tbody>
-                {proveedoresFiltrados.map((provider) => (
-                  <tr key={provider.id}>
+                {proveedoresFiltrados.map((provider, index) => (
+                  <tr key={`${provider.id}-${provider.nit || 'proveedor'}-${index}`}>
                     <td>{provider.id}</td>
                     <td>{provider.nombre}</td>
                     <td>{provider.nit}</td>

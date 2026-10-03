@@ -12,16 +12,8 @@ const TABS = {
   NUEVA: 'nueva',
   ACTIVA: 'activa',
   MANUFACTURA: 'manufactura',
-  PRODUCTOS: 'productos',
-  TIEMPOS: 'tiempos'
+  PRODUCTOS: 'productos'
 };
-
-function alertaRango(label, valor, min, max) {
-  if (valor === '' || valor == null) return null;
-  const n = Number(valor);
-  if (Number.isNaN(n)) return null;
-  return n < min || n > max ? `${label} fuera de rango esperado (${min}-${max})` : null;
-}
 
 const recetaVacia = () => ({ materia_prima_id: '', cantidad_requerida: '', observaciones: '' });
 
@@ -113,7 +105,7 @@ function etiquetaTab(key) {
   if (key === TABS.ACTIVA) return 'Orden activa';
   if (key === TABS.MANUFACTURA) return 'Registro de manufactura';
   if (key === TABS.PRODUCTOS) return 'Productos';
-  return 'Tiempos de produccion';
+  return 'Produccion';
 }
 
 function compararManufactura(producto, form) {
@@ -202,7 +194,6 @@ export function FormularioOrdenProduccion() {
   const [formOrden, setFormOrden] = useState(ordenVacia(usuario?.id));
   const [productos, setProductos] = useState([productoOrdenVacio()]);
   const [materia, setMateria] = useState(materiaAsociadaVacia());
-  const [tiempo, setTiempo] = useState({ producto: '', es_bagel: false, unidades_producidas: '', temperatura_crecimiento: '', tiempo_crecimiento_min: '', temperatura_inmersion_agua: '', tiempo_inmersion_agua_seg: '', temperatura_horneo: '', tiempo_horneo_min: '', lote_producto: '', responsable_produccion: String(usuario?.id || ''), observaciones: '' });
 
   const recargar = async () => {
     const [opsRes, opsManufacturaRes, recsRes, matsRes, prodsRes] = await Promise.allSettled([
@@ -276,12 +267,6 @@ export function FormularioOrdenProduccion() {
       return pasaEstado && pasaTexto;
     });
   }, [ordenes, busqueda, filtroEstado]);
-
-  const advertenciasTiempo = [
-    alertaRango('Temperatura de crecimiento', tiempo.temperatura_crecimiento, 25, 35),
-    tiempo.es_bagel ? alertaRango('Temperatura de inmersion', tiempo.temperatura_inmersion_agua, 85, 95) : null,
-    alertaRango('Temperatura de horneo', tiempo.temperatura_horneo, 150, 175)
-  ].filter(Boolean);
 
   const comparacionManufactura = compararManufactura(contextoManufactura?.producto, formManufactura);
   const hayInventarioInsuficiente = resumenInsumos.some((r) => r.estado === 'insuficiente');
@@ -427,7 +412,7 @@ export function FormularioOrdenProduccion() {
             <div className="campo"><label>Estado</label><select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}><option value="todos">todos</option><option value="pendiente">pendiente</option><option value="en_proceso">en_proceso</option><option value="lista_para_liberacion">lista_para_liberacion</option><option value="finalizada">finalizada</option><option value="cancelada">cancelada</option></select></div>
           </div>
           {esAdministrador && <div className="acciones"><button className="boton" type="button" onClick={() => setTab(TABS.NUEVA)}>Nueva orden</button></div>}
-          <table className="tabla"><thead><tr><th># orden</th><th>Fecha</th><th>Estado</th><th>Total programada</th><th>Total producida</th><th>Accion</th></tr></thead><tbody>{ordenesFiltradas.map((o) => <tr key={o.id}><td>{o.codigo_orden}</td><td>{String(o.fecha_produccion).slice(0, 10)}</td><td><span className={`estado ${o.estado}`}>{o.estado}</span></td><td>{o.cantidad_total_programada}</td><td>{o.cantidad_total_producida}</td><td><button className="boton secundario" type="button" onClick={() => { setOrdenActivaId(String(o.id)); setTab(TABS.ACTIVA); }}>Ver detalle</button></td></tr>)}</tbody></table>
+          <table className="tabla"><thead><tr><th># orden</th><th>Fecha</th><th>Estado</th><th>Total programada</th><th>Total producida</th><th>Accion</th></tr></thead><tbody>{ordenesFiltradas.map((o, index) => <tr key={`${o.id}-${o.codigo_orden || 'orden'}-${index}`}><td>{o.codigo_orden}</td><td>{String(o.fecha_produccion).slice(0, 10)}</td><td><span className={`estado ${o.estado}`}>{o.estado}</span></td><td>{o.cantidad_total_programada}</td><td>{o.cantidad_total_producida}</td><td><button className="boton secundario" type="button" onClick={() => { setOrdenActivaId(String(o.id)); setTab(TABS.ACTIVA); }}>Ver detalle</button></td></tr>)}</tbody></table>
         </>
       )}
 
@@ -509,9 +494,9 @@ export function FormularioOrdenProduccion() {
               <p><strong>Estado:</strong> <span className={`estado ${detalle.orden.estado}`}>{detalle.orden.estado}</span></p>
               {esAdministrador && <div className="acciones"><button className="boton secundario" type="button" onClick={async () => { await produccionServicio.actualizarEstadoOrden(detalle.orden.id, { estado: 'en_proceso' }); await recargar(); setDetalle(await produccionServicio.obtenerOrden(detalle.orden.id)); }}>Marcar en proceso</button><button className="boton" type="button" onClick={async () => { await produccionServicio.actualizarEstadoOrden(detalle.orden.id, { estado: 'finalizada' }); await recargar(); setDetalle(await produccionServicio.obtenerOrden(detalle.orden.id)); }}>Marcar finalizada</button></div>}
               <h4>Productos programados</h4>
-              <table className="tabla"><thead><tr><th>Producto</th><th>Tamano</th><th>Programada</th><th>Lote producido</th><th>Unidades reales</th><th>Registrado por</th><th>Referencia estandar</th></tr></thead><tbody>{detalle.productos.map((p) => <tr key={p.id}><td>{p.producto}</td><td>{p.tamano_presentacion}</td><td>{p.cantidad_programada}</td><td>{p.lote_producido || '-'}</td><td>{p.unidades_producidas ?? '-'}</td><td>{p.registrado_por || '-'}</td><td>{p.observaciones || '-'}</td></tr>)}</tbody></table>
+              <table className="tabla"><thead><tr><th>Producto</th><th>Tamano</th><th>Programada</th><th>Lote producido</th><th>Unidades reales</th><th>Registrado por</th><th>Referencia estandar</th></tr></thead><tbody>{detalle.productos.map((p, index) => <tr key={`${p.id}-${p.producto || 'producto'}-${index}`}><td>{p.producto}</td><td>{p.tamano_presentacion}</td><td>{p.cantidad_programada}</td><td>{p.lote_producido || '-'}</td><td>{p.unidades_producidas ?? '-'}</td><td>{p.registrado_por || '-'}</td><td>{p.observaciones || '-'}</td></tr>)}</tbody></table>
               <h4>Materias primas asociadas</h4>
-              <table className="tabla"><thead><tr><th>Materia</th><th>Lote recepcion</th><th>Unidad</th><th>Planificada</th><th>Real</th>{esAdministrador && <th>Accion</th>}</tr></thead><tbody>{detalle.materias.map((m) => <tr key={m.id}><td>{m.nombre_ingrediente}</td><td>{m.numero_lote || m.lote_proveedor}</td><td>{m.unidad_medida}</td><td>{m.cantidad_planificada}</td><td>{m.cantidad_real}</td>{esAdministrador && <td><button className="boton secundario" type="button" onClick={async () => { const nuevo = window.prompt('Nueva cantidad real utilizada', String(m.cantidad_real)); if (!nuevo) return; await produccionServicio.actualizarCantidadRealMateria(detalle.orden.id, m.id, { cantidad_real: Number(nuevo) }); setDetalle(await produccionServicio.obtenerOrden(detalle.orden.id)); }}>Editar real</button></td>}</tr>)}</tbody></table>
+              <table className="tabla"><thead><tr><th>Materia</th><th>Lote recepcion</th><th>Unidad</th><th>Planificada</th><th>Real</th>{esAdministrador && <th>Accion</th>}</tr></thead><tbody>{detalle.materias.map((m, index) => <tr key={`${m.id}-${m.nombre_ingrediente || 'materia'}-${index}`}><td>{m.nombre_ingrediente}</td><td>{m.numero_lote || m.lote_proveedor}</td><td>{m.unidad_medida}</td><td>{m.cantidad_planificada}</td><td>{m.cantidad_real}</td>{esAdministrador && <td><button className="boton secundario" type="button" onClick={async () => { const nuevo = window.prompt('Nueva cantidad real utilizada', String(m.cantidad_real)); if (!nuevo) return; await produccionServicio.actualizarCantidadRealMateria(detalle.orden.id, m.id, { cantidad_real: Number(nuevo) }); setDetalle(await produccionServicio.obtenerOrden(detalle.orden.id)); }}>Editar real</button></td>}</tr>)}</tbody></table>
             </>
           )}
         </>
@@ -559,8 +544,8 @@ export function FormularioOrdenProduccion() {
               <table className="tabla" style={{ marginTop: 12 }}>
                 <thead><tr><th>Producto</th><th>Tamano</th><th>Cantidad programada</th><th>Estado manufactura</th><th>Registrado por</th><th>Accion</th></tr></thead>
                 <tbody>
-                  {detalle.productos.map((p) => (
-                    <tr key={p.id}>
+                {detalle.productos.map((p, index) => (
+                    <tr key={`${p.id}-${p.producto || 'producto'}-${index}`}>
                       <td>{p.producto}</td>
                       <td>{p.tamano_presentacion}</td>
                       <td>{p.cantidad_programada}</td>
@@ -611,7 +596,7 @@ export function FormularioOrdenProduccion() {
                   <h4>Materias primas asociadas</h4>
                   <table className="tabla">
                     <thead><tr><th>Materia</th><th>Lote</th><th>Cantidad</th></tr></thead>
-                    <tbody>{contextoManufactura.materias.map((m) => <tr key={m.id}><td>{m.nombre_ingrediente}</td><td>{m.numero_lote || m.lote_proveedor}</td><td>{m.cantidad_planificada} {m.unidad_medida}</td></tr>)}</tbody>
+                    <tbody>{contextoManufactura.materias.map((m, index) => <tr key={`${m.id}-${m.nombre_ingrediente || 'materia'}-${index}`}><td>{m.nombre_ingrediente}</td><td>{m.numero_lote || m.lote_proveedor}</td><td>{m.cantidad_planificada} {m.unidad_medida}</td></tr>)}</tbody>
                   </table>
                 </div>
               </div>
@@ -741,34 +726,6 @@ export function FormularioOrdenProduccion() {
           </form></div></div>}
           {detalleProducto && <div className="tarjeta" style={{ marginTop: 10 }}><h4>Detalle de producto: {detalleProducto.nombre}</h4><p><strong>Categoria:</strong> {detalleProducto.categoria || '-'}</p><p><strong>Vida util:</strong> {detalleProducto.vida_util_dias} dias</p><p><strong>Almacenamiento:</strong> {detalleProducto.condiciones_almacenamiento || 'Sin descripcion'}; rango {detalleProducto.temperatura_almacenamiento_min_c ?? 15} a {detalleProducto.temperatura_almacenamiento_max_c ?? 25} C; {detalleProducto.requiere_refrigeracion ? 'requiere refrigeracion' : 'sin refrigeracion obligatoria'}.</p><p><strong>Tiempos estandar:</strong> Fermentacion {detalleProducto.tiempo_fermentacion_minutos}m ({detalleProducto.temperatura_fermentacion_c}C), Horneado {detalleProducto.tiempo_horneado_minutos}m ({detalleProducto.temperatura_horneado_c}C), {detalleProducto.requiere_inmersion ? `Inmersion ${detalleProducto.tiempo_inmersion_minutos}m (${detalleProducto.temperatura_inmersion_c}C)` : 'Sin inmersion'}</p>{detalleProducto.variantes?.map((v) => <div key={v.id} style={{ marginTop: 10 }}><h4>{v.tamano_presentacion}</h4><table className="tabla"><thead><tr><th>Materia prima</th><th>Cantidad por unidad</th><th>Unidad</th><th>Obs</th></tr></thead><tbody>{v.receta.map((r, i) => <tr key={i}><td>{r.materia_prima}</td><td>{r.cantidad_requerida}</td><td>{r.unidad_medida_base || r.unidad_medida}</td><td>{r.observaciones || '-'}</td></tr>)}</tbody></table></div>)}</div>}
         </>
-      )}
-
-      {tab === TABS.TIEMPOS && (
-        <form onSubmit={async (e) => {
-          e.preventDefault();
-          try {
-            await produccionServicio.registrarTiempos(Number(ordenActivaId), { registros: [tiempo] });
-            setMessage('Tiempo registrado');
-            if (ordenActivaId) setDetalle(await produccionServicio.obtenerOrden(Number(ordenActivaId)));
-          } catch (err) { setError(err.message); }
-        }}>
-          <div className="campo"><label>Orden</label><select value={ordenActivaId} onChange={(e) => setOrdenActivaId(e.target.value)} required><option value="">Selecciona</option>{ordenes.map((o) => <option key={o.id} value={o.id}>{o.codigo_orden}</option>)}</select></div>
-          <div className="grid grid-2">
-            <div className="campo"><label>Producto</label><input value={tiempo.producto} onChange={(e) => setTiempo({ ...tiempo, producto: e.target.value })} required /></div>
-            <div className="campo"><label>Lote</label><input value={tiempo.lote_producto} onChange={(e) => setTiempo({ ...tiempo, lote_producto: e.target.value })} required /></div>
-            <div className="campo"><label>Unidades producidas</label><input type="number" min="0" value={tiempo.unidades_producidas} onChange={(e) => setTiempo({ ...tiempo, unidades_producidas: e.target.value })} required /></div>
-            <div className="campo"><label>Tiempo crecimiento (min)</label><input type="number" min="0" value={tiempo.tiempo_crecimiento_min} onChange={(e) => setTiempo({ ...tiempo, tiempo_crecimiento_min: e.target.value })} required /></div>
-            <div className="campo"><label>Temperatura crecimiento</label><input type="number" value={tiempo.temperatura_crecimiento} onChange={(e) => setTiempo({ ...tiempo, temperatura_crecimiento: e.target.value })} required /></div>
-            <div className="campo"><label>Aplica inmersion (bagel)</label><input type="checkbox" checked={tiempo.es_bagel} onChange={(e) => setTiempo({ ...tiempo, es_bagel: e.target.checked })} /></div>
-            <div className="campo"><label>Tiempo inmersion (seg)</label><input type="number" min="0" value={tiempo.tiempo_inmersion_agua_seg} onChange={(e) => setTiempo({ ...tiempo, tiempo_inmersion_agua_seg: e.target.value })} /></div>
-            <div className="campo"><label>Temperatura inmersion</label><input type="number" value={tiempo.temperatura_inmersion_agua} onChange={(e) => setTiempo({ ...tiempo, temperatura_inmersion_agua: e.target.value })} /></div>
-            <div className="campo"><label>Tiempo horneo (min)</label><input type="number" min="0" value={tiempo.tiempo_horneo_min} onChange={(e) => setTiempo({ ...tiempo, tiempo_horneo_min: e.target.value })} required /></div>
-            <div className="campo"><label>Temperatura horneo</label><input type="number" value={tiempo.temperatura_horneo} onChange={(e) => setTiempo({ ...tiempo, temperatura_horneo: e.target.value })} required /></div>
-            <div className="campo"><label>Observaciones</label><input value={tiempo.observaciones} onChange={(e) => setTiempo({ ...tiempo, observaciones: e.target.value })} /></div>
-          </div>
-          {advertenciasTiempo.length > 0 && <div className="alerta error">{advertenciasTiempo.join(' | ')}</div>}
-          <div className="acciones"><button className="boton" type="submit">Registrar tiempos</button></div>
-        </form>
       )}
 
       {tab === TABS.ACTIVA && esAdministrador && ordenActivaId && (

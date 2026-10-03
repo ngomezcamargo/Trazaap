@@ -46,7 +46,7 @@ export default function UsuariosPage() {
       <section className="tarjeta">
         <div className="seccion-encabezado"><div><h3>Usuarios internos</h3><p className="texto-secundario">Administrador, gerente y operario</p></div><button className="boton" onClick={abrirNuevo}>Crear usuario</button></div>
         <div className="tabla-contenedor"><table className="tabla"><thead><tr><th>Correo</th><th>Rol</th><th>Estado</th><th>Actualizado</th><th>Accion</th></tr></thead><tbody>
-          {usuarios.map((usuario) => <tr key={usuario.id}><td>{usuario.email}</td><td>{usuario.role}</td><td><span className={`estado ${usuario.is_active ? 'aprobado' : 'no_encontrado'}`}>{usuario.is_active ? 'activo' : 'inactivo'}</span></td><td>{new Date(usuario.updated_at).toLocaleString()}</td><td><button className="boton secundario" onClick={() => abrirEdicion(usuario)}>Editar</button></td></tr>)}
+          {usuarios.map((usuario, index) => <tr key={`${usuario.id}-${usuario.email || 'usuario'}-${index}`}><td>{usuario.email}</td><td>{usuario.role}</td><td><span className={`estado ${usuario.is_active ? 'aprobado' : 'no_encontrado'}`}>{usuario.is_active ? 'activo' : 'inactivo'}</span></td><td>{new Date(usuario.updated_at).toLocaleString()}</td><td><button className="boton secundario" onClick={() => abrirEdicion(usuario)}>Editar</button></td></tr>)}
           {!usuarios.length && <tr><td colSpan="5">No hay usuarios para mostrar.</td></tr>}
         </tbody></table></div>
       </section>

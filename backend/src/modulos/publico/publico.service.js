@@ -238,6 +238,11 @@ function construirEventos(data, nivel = 'consumidor') {
       .filter((detalle) => String(detalle.lote) === String(data.lote))
       .reduce((total, detalle) => total + Number(detalle.cantidad_despachada || 0), 0);
     const evidencia = despacho.blockchain || null;
+    const validacionDespacho = despacho.validacionBlockchain || buscarValidacion(
+      validaciones,
+      'despacho_producto',
+      despacho.id_despacho
+    );
     eventos.push(evento({
       tipo: 'despacho_producto',
       titulo: 'Despacho del producto',
@@ -245,15 +250,7 @@ function construirEventos(data, nivel = 'consumidor') {
       estado: despacho.estado_despacho,
       descripcion: 'Salida parcial o total del lote, validada contra las existencias disponibles.',
       incluirHashes,
-      validacion: evidencia
-        ? {
-            estadoBlockchain: 'VERIFICADO',
-            valido: true,
-            mensaje: 'Despacho autorizado y registrado de forma inmutable',
-            hashActual: evidencia.hashRegistro,
-            hashBlockchain: evidencia.hashRegistro
-          }
-        : buscarValidacion(validaciones, 'despacho_producto', despacho.id_despacho),
+      validacion: validacionDespacho,
       datos: [
         { etiqueta: 'Despacho', valor: nivel !== 'consumidor' ? despacho.codigo_despacho : null },
         { etiqueta: 'Cantidad despachada', valor: cantidad },
@@ -357,7 +354,8 @@ function construirBasePublica(data) {
 
 export function autorizarCredencialesCliente(data, { factura, codigo }) {
   const codigos = generarCodigosAcceso(data);
-  const facturaEsperada = normalizarCodigo(data.liberacion?.numero_factura);
+  const despacho = (data.despachos || []).find((item) => !item.es_heredado && item.numero_factura);
+  const facturaEsperada = normalizarCodigo(despacho?.numero_factura);
   const facturaRecibida = normalizarCodigo(factura);
   const codigoRecibido = normalizarCodigo(codigo);
   return {

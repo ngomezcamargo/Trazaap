@@ -6,7 +6,7 @@ RBAC significa control de acceso basado en roles. En Trazaap se definieron tres 
 - `gerente`
 - `operario`
 
-Los actores `INVIMA`, `cliente/receptor` y `consumidor final` no son usuarios internos del sistema. Su acceso se plantea mediante vistas publicas o controladas por lote, factura, QR o codigo de verificacion, sin permisos de escritura.
+Los actores `INVIMA`, `cliente/receptor` y `consumidor final` no son usuarios internos del sistema. La información que requieran se entrega mediante reportes o consultas internas autorizadas por lote, sin permisos de escritura.
 
 ## Regla general
 
@@ -40,7 +40,7 @@ Los actores `INVIMA`, `cliente/receptor` y `consumidor final` no son usuarios in
 
 Las rutas bajo `/api/public` no exigen JWT. Deben exponer solo informacion de consulta y no datos administrativos sensibles.
 
-Actualmente la consulta publica de trazabilidad se usa para QR y portal externo del lote. El cliente solo confirma la recepcion de un despacho si presenta la factura o el codigo privado correspondiente; no recibe una cuenta ni acceso al panel interno.
+La consulta de trazabilidad se realiza dentro del aplicativo por lote. Los actores externos no reciben una cuenta del panel interno ni permisos de escritura.
 
 ## Sesion
 

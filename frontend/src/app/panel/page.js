@@ -90,8 +90,8 @@ export default function PanelPage() {
                 <table className="tabla">
                   <thead><tr><th>Producto</th><th>Lote</th><th>Vencimiento</th><th>Unidades disponibles</th><th>Estado</th></tr></thead>
                   <tbody>
-                    {alertasVencimiento.map((alerta) => (
-                      <tr key={alerta.id_inventario}>
+                    {alertasVencimiento.map((alerta, index) => (
+                      <tr key={`${alerta.id_inventario}-${alerta.lote || 'alerta'}-${index}`}>
                         <td>{alerta.producto}</td>
                         <td>{alerta.lote}</td>
                         <td>{String(alerta.fecha_vencimiento).slice(0, 10)}</td>
@@ -110,8 +110,8 @@ export default function PanelPage() {
                 <table className="tabla">
                   <thead><tr><th>Fecha</th><th>Proveedor</th><th>Lote</th><th>Estado</th></tr></thead>
                   <tbody>
-                    {recepciones.slice(-5).map((r) => (
-                      <tr key={r.id}>
+                    {recepciones.slice(-5).map((r, index) => (
+                      <tr key={`${r.id}-${r.numero_lote || 'recepcion'}-${index}`}>
                         <td>{new Date(r.fecha_recepcion).toLocaleString()}</td>
                         <td>{r.proveedor_nombre}</td>
                         <td>{r.numero_lote || r.lote_proveedor}</td>
@@ -123,7 +123,7 @@ export default function PanelPage() {
               </div>
 
               <div className="tarjeta">
-                <h3>Alertas de calidad</h3>
+                <h3>Estado operativo</h3>
                 <ul className="lista-resumen">
                   <li>Lotes retenidos/rechazados: <strong>{retenidos}</strong></li>
                   <li>Lotes pendientes por liberar: <strong>{Math.max(ordenes.length - liberaciones.length, 0)}</strong></li>
@@ -154,7 +154,7 @@ export default function PanelPage() {
             </div>
             <div className="grid grid-3">
               <Link className="tarjeta tarea" href="/recepciones/nueva"><h3>Registrar recepcion</h3><p>Incluye inspeccion de producto y vehiculo.</p></Link>
-              <Link className="tarjeta tarea" href="/produccion"><h3>Registrar produccion</h3><p>Ordenes y tiempos de proceso.</p></Link>
+              <Link className="tarjeta tarea" href="/produccion"><h3>Registrar produccion</h3><p>Ordenes y registro de manufactura.</p></Link>
               <Link className="tarjeta tarea" href="/liberacion"><h3>Registrar liberacion</h3><p>Salida de producto terminado.</p></Link>
               <Link className="tarjeta tarea" href="/trazabilidad"><h3>Consultar trazabilidad basica</h3><p>Busqueda de lotes para validacion operativa.</p></Link>
             </div>

@@ -2,8 +2,8 @@ import { poolPostgres } from '../../configuracion/postgresql.js';
 import { entorno } from '../../configuracion/entorno.js';
 import { calcularFechaVencimiento, formatearLote } from './lotes.util.js';
 
-async function obtenerColumnasTabla(tableName) {
-  const { rows } = await poolPostgres.query(
+async function obtenerColumnasTabla(tableName, db = poolPostgres) {
+  const { rows } = await db.query(
     `SELECT column_name
      FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = $1`,
@@ -43,8 +43,8 @@ export async function listarProductosFabricados(filtro = '') {
   return rows;
 }
 
-export async function crearProductoFabricado(data) {
-  const columnas = await obtenerColumnasTabla('productos_fabricados');
+export async function crearProductoFabricado(data, db = poolPostgres) {
+  const columnas = await obtenerColumnasTabla('productos_fabricados', db);
   const campos = [
     'nombre',
     'prefijo_lote',
@@ -90,7 +90,7 @@ export async function crearProductoFabricado(data) {
   }
 
   const placeholders = campos.map((_, index) => `$${index + 1}`).join(',');
-  const { rows } = await poolPostgres.query(
+  const { rows } = await db.query(
     `INSERT INTO productos_fabricados (${campos.join(',')})
     VALUES (${placeholders})
     RETURNING *`,
@@ -99,8 +99,8 @@ export async function crearProductoFabricado(data) {
   return rows[0];
 }
 
-export async function actualizarProductoFabricado(id, data) {
-  const columnas = await obtenerColumnasTabla('productos_fabricados');
+export async function actualizarProductoFabricado(id, data, db = poolPostgres) {
+  const columnas = await obtenerColumnasTabla('productos_fabricados', db);
   const campos = [
     'nombre = $1',
     'prefijo_lote = $2',
@@ -150,7 +150,7 @@ export async function actualizarProductoFabricado(id, data) {
   }
 
   valores.push(id);
-  const { rows } = await poolPostgres.query(
+  const { rows } = await db.query(
     `UPDATE productos_fabricados
      SET ${campos.join(', ')}
      WHERE id = $${valores.length}
@@ -162,7 +162,8 @@ export async function actualizarProductoFabricado(id, data) {
 
 export async function generarLoteProducto(ordenId, productoOrdenId, db = poolPostgres) {
   const contexto = await db.query(
-    `SELECT to_char(op.fecha_produccion, 'YYYY-MM-DD') AS fecha_produccion, pf.vida_util_dias
+    `SELECT to_char(op.fecha_produccion, 'YYYY-MM-DD') AS fecha_produccion,
+            pf.vida_util_dias, pf.prefijo_lote
      FROM ordenes_produccion_productos opp
      JOIN ordenes_produccion op ON op.id = opp.orden_produccion_id
      JOIN productos_fabricados pf ON pf.id = opp.producto_fabricado_id
@@ -176,25 +177,25 @@ export async function generarLoteProducto(ordenId, productoOrdenId, db = poolPos
   const fechaVencimiento = calcularFechaVencimiento(producto.fecha_produccion, producto.vida_util_dias);
 
   const consecutivo = await db.query(
-    `INSERT INTO consecutivos_lote_fabrica (codigo_fabrica, fecha_fabricacion, fecha_vencimiento, ultimo_consecutivo)
+    `INSERT INTO consecutivos_lote_producto (prefijo_producto, fecha_fabricacion, fecha_vencimiento, ultimo_consecutivo)
      VALUES ($1, $2, $3, 1)
-     ON CONFLICT (codigo_fabrica, fecha_fabricacion, fecha_vencimiento)
-     DO UPDATE SET ultimo_consecutivo = consecutivos_lote_fabrica.ultimo_consecutivo + 1
-       WHERE consecutivos_lote_fabrica.ultimo_consecutivo < 9999
+     ON CONFLICT (prefijo_producto, fecha_fabricacion, fecha_vencimiento)
+     DO UPDATE SET ultimo_consecutivo = consecutivos_lote_producto.ultimo_consecutivo + 1
+       WHERE consecutivos_lote_producto.ultimo_consecutivo < 9999
      RETURNING ultimo_consecutivo`,
-    [entorno.codigoFabrica, producto.fecha_produccion, fechaVencimiento]
+    [producto.prefijo_lote, producto.fecha_produccion, fechaVencimiento]
   );
   const numero = consecutivo.rows[0]?.ultimo_consecutivo;
   if (!numero) throw new Error('Se agoto el consecutivo diario de lotes para la fabrica configurada.');
   return {
-    lote_producido: formatearLote(entorno.codigoFabrica, producto.fecha_produccion, fechaVencimiento, numero),
+    lote_producido: formatearLote(producto.prefijo_lote, producto.fecha_produccion, fechaVencimiento, numero),
     fecha_vencimiento_calculada: fechaVencimiento
   };
 }
 
-export async function reemplazarVariantesProducto(productoId, variantes) {
-  const columnas = await obtenerColumnasTabla('producto_variantes');
-  await poolPostgres.query('DELETE FROM producto_variantes WHERE producto_id = $1', [productoId]);
+export async function reemplazarVariantesProducto(productoId, variantes, db = poolPostgres) {
+  const columnas = await obtenerColumnasTabla('producto_variantes', db);
+  await db.query('DELETE FROM producto_variantes WHERE producto_id = $1', [productoId]);
 
   for (const variante of variantes) {
     const campos = ['producto_id', 'tamano_presentacion', 'peso_estimado_unidad', 'unidad_medida', 'estado'];
@@ -212,7 +213,7 @@ export async function reemplazarVariantesProducto(productoId, variantes) {
     }
 
     const placeholders = campos.map((_, index) => `$${index + 1}`).join(',');
-    const { rows } = await poolPostgres.query(
+    const { rows } = await db.query(
       `INSERT INTO producto_variantes (${campos.join(',')})
       VALUES (${placeholders})
       RETURNING *`,
@@ -220,7 +221,7 @@ export async function reemplazarVariantesProducto(productoId, variantes) {
     );
 
     for (const item of variante.receta) {
-      await poolPostgres.query(
+      await db.query(
         `INSERT INTO producto_variante_materia_prima (variante_id, materia_prima_id, cantidad_requerida, observaciones)
          VALUES ($1,$2,$3,$4)`,
         [rows[0].id, item.materia_prima_id, item.cantidad_requerida, item.observaciones || '']
@@ -270,8 +271,8 @@ export async function listarRecetaVariante(varianteId) {
   return rows;
 }
 
-export async function crearOrdenProduccionCabecera(data) {
-  const { rows } = await poolPostgres.query(
+export async function crearOrdenProduccionCabecera(data, db = poolPostgres) {
+  const { rows } = await db.query(
     `INSERT INTO ordenes_produccion (fecha_produccion, codigo_orden, estado, observaciones, creado_por)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
@@ -286,8 +287,8 @@ export async function crearOrdenProduccionCabecera(data) {
   return rows[0];
 }
 
-export async function crearOrdenProducto(ordenId, producto) {
-  const columnasRes = await poolPostgres.query(
+export async function crearOrdenProducto(ordenId, producto, db = poolPostgres) {
+  const columnasRes = await db.query(
     `SELECT column_name
      FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = 'ordenes_produccion_productos'`
@@ -322,7 +323,7 @@ export async function crearOrdenProducto(ordenId, producto) {
   }
 
   const placeholders = campos.map((_, i) => `$${i + 1}`).join(',');
-  const { rows } = await poolPostgres.query(
+  const { rows } = await db.query(
     `INSERT INTO ordenes_produccion_productos (${campos.join(',')})
     VALUES (${placeholders})
     RETURNING *`,
@@ -333,14 +334,13 @@ export async function crearOrdenProducto(ordenId, producto) {
 
 export async function listarOrdenesProduccion() {
   const { rows } = await poolPostgres.query(
-    `SELECT o.*, u.email AS responsable_email,
+    `SELECT o.*,
       COALESCE(SUM(p.cantidad_programada), 0) AS cantidad_total_programada,
       COALESCE(SUM(rm.unidades_producidas), 0) AS cantidad_total_producida
      FROM ordenes_produccion o
-     LEFT JOIN users u ON u.id = o.responsable_produccion
      LEFT JOIN ordenes_produccion_productos p ON p.orden_produccion_id = o.id
      LEFT JOIN registro_manufactura rm ON rm.id_producto = p.id
-     GROUP BY o.id, u.email
+     GROUP BY o.id
      ORDER BY o.id DESC`
   );
   return rows;
@@ -348,16 +348,15 @@ export async function listarOrdenesProduccion() {
 
 export async function listarOrdenesManufactura() {
   const { rows } = await poolPostgres.query(
-    `SELECT o.*, u.email AS responsable_email,
+    `SELECT o.*,
       COALESCE(SUM(p.cantidad_programada), 0) AS cantidad_total_programada,
       COALESCE(SUM(rm.unidades_producidas), 0) AS cantidad_total_producida,
       COUNT(p.id) FILTER (WHERE p.estado_manufactura IN ('pendiente', 'en_proceso')) AS productos_pendientes
      FROM ordenes_produccion o
-     LEFT JOIN users u ON u.id = o.responsable_produccion
      LEFT JOIN ordenes_produccion_productos p ON p.orden_produccion_id = o.id
      LEFT JOIN registro_manufactura rm ON rm.id_producto = p.id
      WHERE o.estado IN ('pendiente', 'en_proceso')
-     GROUP BY o.id, u.email
+     GROUP BY o.id
      ORDER BY o.fecha_produccion ASC, o.id ASC`
   );
   return rows;
@@ -538,14 +537,6 @@ export async function buscarMateriasPorOrdenId(ordenId) {
   return rows;
 }
 
-export async function buscarTiemposPorOrdenId(ordenId) {
-  const { rows } = await poolPostgres.query(
-    'SELECT * FROM tiempos_produccion WHERE orden_produccion_id = $1 ORDER BY id DESC',
-    [ordenId]
-  );
-  return rows;
-}
-
 export async function actualizarEstadoOrden(ordenId, estado, db = poolPostgres) {
   const { rows } = await db.query(
     `UPDATE ordenes_produccion
@@ -578,8 +569,8 @@ export async function buscarMateriaOrdenPorId(ordenId, materiaId) {
   return rows[0] || null;
 }
 
-export async function crearMateriaPrimaOrdenPlanificada(ordenId, data) {
-  const { rows } = await poolPostgres.query(
+export async function crearMateriaPrimaOrdenPlanificada(ordenId, data, db = poolPostgres) {
+  const { rows } = await db.query(
     `INSERT INTO ordenes_produccion_materias (
       orden_produccion_id, orden_producto_id, recepcion_id, nombre_ingrediente,
       cantidad_planificada, cantidad_real, unidad_medida, observaciones
@@ -715,35 +706,6 @@ export async function asociarMateriaPrimaOrden(ordenId, materia) {
   return rows[0];
 }
 
-export async function registrarTiempoProduccion(ordenId, item) {
-  const { rows } = await poolPostgres.query(
-    `INSERT INTO tiempos_produccion (
-      orden_produccion_id, producto, es_bagel,
-      unidades_producidas, temperatura_crecimiento, tiempo_crecimiento_min,
-      temperatura_inmersion_agua, tiempo_inmersion_agua_seg,
-      temperatura_horneo, tiempo_horneo_min, lote_producto,
-      responsable_produccion, observaciones
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-    RETURNING *`,
-    [
-      ordenId,
-      item.producto,
-      item.es_bagel,
-      item.unidades_producidas,
-      item.temperatura_crecimiento,
-      item.tiempo_crecimiento_min,
-      item.temperatura_inmersion_agua ?? null,
-      item.tiempo_inmersion_agua_seg ?? null,
-      item.temperatura_horneo,
-      item.tiempo_horneo_min,
-      item.lote_producto,
-      item.responsable_produccion,
-      item.observaciones || ''
-    ]
-  );
-  return rows[0];
-}
-
 export async function buscarRecepcionPorId(recepcionId) {
   const { rows } = await poolPostgres.query('SELECT * FROM receptions WHERE id = $1', [recepcionId]);
   return rows[0] || null;
@@ -757,11 +719,6 @@ export async function listarMateriasOrden(ordenId) {
      WHERE opm.orden_produccion_id = $1`,
     [ordenId]
   );
-  return rows;
-}
-
-export async function listarTiemposOrden(ordenId) {
-  const { rows } = await poolPostgres.query('SELECT * FROM tiempos_produccion WHERE orden_produccion_id = $1', [ordenId]);
   return rows;
 }
 

@@ -13,8 +13,7 @@ import {
   obtenerDetalleProductoFabricadoService,
   listarOrdenesProduccionService,
   listarRecepcionesAceptadasService,
-  registrarManufacturaService,
-  registrarTiemposService
+  registrarManufacturaService
 } from './produccion.service.js';
 
 export async function crearOrdenProduccionController(req, res) {
@@ -77,11 +76,6 @@ export async function obtenerContextoManufacturaController(req, res) {
 
 export async function asociarMateriasController(req, res) {
   const data = await asociarMateriasService(Number(req.params.id), req.body, req.usuario.email);
-  res.status(201).json(data);
-}
-
-export async function registrarTiemposController(req, res) {
-  const data = await registrarTiemposService(Number(req.params.id), req.body, req.usuario.email);
   res.status(201).json(data);
 }
 

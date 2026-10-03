@@ -8,7 +8,7 @@ export default function ProduccionPage() {
   return (
     <GuardiaSesion>
       <GuardiaRol permitido={[ROLES.GERENTE, ROLES.OPERARIO]}>
-        <ContenedorApp titulo="Produccion" subtitulo="Ordenes, orden activa, productos y tiempos en subsecciones.">
+        <ContenedorApp titulo="Produccion" subtitulo="Ordenes, manufactura, productos y materias primas.">
           <FormularioOrdenProduccion />
         </ContenedorApp>
       </GuardiaRol>

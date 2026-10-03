@@ -123,7 +123,7 @@ test('la confirmacion de Fabric convierte la reserva en unidades despachadas', a
 });
 
 test('un rechazo definitivo de Fabric devuelve la reserva y bloquea el despacho', async () => {
-  const devoluciones = [];
+  const reservasLiberadas = [];
   const deps = {
     ejecutarTransaccionDespacho: async (callback) => callback({}),
     buscarDespachoSimplePorId: async () => ({ id_despacho: 20, estado_despacho: 'pendiente_validacion_blockchain' }),
@@ -133,7 +133,7 @@ test('un rechazo definitivo de Fabric devuelve la reserva y bloquea el despacho'
       lote: 'LT-001'
     }],
     liberarReservaInventario: async (id, cantidad) => {
-      devoluciones.push({ id, cantidad });
+      reservasLiberadas.push({ id, cantidad });
       return { ...inventario, estado: 'disponible' };
     },
     actualizarEstadoAlmacenamientoDesdeInventario: async () => {},
@@ -145,7 +145,7 @@ test('un rechazo definitivo de Fabric devuelve la reserva y bloquea el despacho'
     Object.assign(new Error('Saldo agotado'), { codigo: 'LOTE_SIN_EXISTENCIAS' }),
     deps
   );
-  assert.deepEqual(devoluciones, [{ id: 15, cantidad: 3 }]);
+  assert.deepEqual(reservasLiberadas, [{ id: 15, cantidad: 3 }]);
   assert.equal(resultado.estado_despacho, 'bloqueado');
 });
 

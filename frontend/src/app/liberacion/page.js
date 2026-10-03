@@ -102,8 +102,8 @@ export default function LiberacionPage() {
               </tr>
             </thead>
             <tbody>
-              {pendientes.map((item) => (
-                <tr key={item.id_manufactura}>
+              {pendientes.map((item, index) => (
+                <tr key={`${item.id_manufactura}-${item.lote_producido || 'manufactura'}-${index}`}>
                   <td>{item.codigo_orden}</td>
                   <td>{item.producto} ({item.tamano_presentacion})</td>
                   <td>{item.lote_producido}</td>
@@ -126,8 +126,8 @@ export default function LiberacionPage() {
           <table className="tabla">
             <thead><tr><th>Orden</th><th>Producto</th><th>Lote</th><th>Unidades liberadas</th><th>Empaque</th><th>Vencimiento</th><th>Responsable</th><th>Estado</th></tr></thead>
             <tbody>
-              {liberaciones.map((item) => (
-                <tr key={item.id_liberacion}>
+              {liberaciones.map((item, index) => (
+                <tr key={`${item.id_liberacion}-${item.lote_producido || 'liberacion'}-${index}`}>
                   <td>{item.codigo_orden}</td>
                   <td>{item.producto}</td>
                   <td>{item.lote_producido}</td>

@@ -4,10 +4,9 @@ import { fechaISO, numero, ordenarValor, texto } from './helpers.js';
 export async function construirPayloadOrdenProduccion(idOrden) {
   const [ordenRes, productosRes, materiasRes] = await Promise.all([
     poolPostgres.query(
-      `SELECT op.*, creador.email AS creado_por_email, responsable.email AS responsable_email
+      `SELECT op.*, creador.email AS creado_por_email
        FROM ordenes_produccion op
        LEFT JOIN users creador ON creador.id = op.creado_por
-       LEFT JOIN users responsable ON responsable.id = op.responsable_produccion
        WHERE op.id = $1`,
       [idOrden]
     ),
@@ -49,7 +48,6 @@ export async function construirPayloadOrdenProduccion(idOrden) {
     orden: {
       fecha_produccion: fechaISO(orden.fecha_produccion),
       codigo_orden: texto(orden.codigo_orden),
-      responsable_produccion: texto(orden.responsable_email),
       estado: texto(orden.estado),
       observaciones: texto(orden.observaciones),
       creado_por: texto(orden.creado_por_email || orden.creado_por),

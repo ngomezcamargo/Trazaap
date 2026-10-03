@@ -19,6 +19,7 @@ Trazaap queda refactorizado como una base academica limpia para Sprint 2, enfoca
 - Registrar liberacion de producto
 - Gestionar clientes comerciales sin convertirlos en usuarios internos
 - Registrar despachos parciales de uno o varios lotes y confirmar su entrega
+- Separar liberacion de calidad y despacho logistico: cada despacho conserva cliente, factura, cantidades, conductor y transporte.
 - Consultar trazabilidad extendida por lote (recepcion, inspeccion, produccion, liberacion, despacho, blockchain)
 
 ## Stack actual
@@ -106,7 +107,7 @@ src/
 
 Base URL backend: `http://localhost:4000/api`
 
-La matriz de permisos vigente esta documentada en [docs/MATRIZ_RBAC.md](docs/MATRIZ_RBAC.md). Las rutas privadas requieren JWT y autorizacion por rol; las rutas publicas viven bajo `/public`. El alcance de informacion para consumidor final, cliente e INVIMA esta documentado en [docs/ACCESO_EXTERNO.md](docs/ACCESO_EXTERNO.md). El flujo de evidencia y validacion Fabric esta documentado en [docs/VALIDACION_BLOCKCHAIN.md](docs/VALIDACION_BLOCKCHAIN.md).
+La matriz de permisos vigente esta documentada en [docs/MATRIZ_RBAC.md](docs/MATRIZ_RBAC.md). Las rutas privadas requieren JWT y autorizacion por rol; las rutas publicas viven bajo `/public`. El alcance de informacion para consumidor final, cliente e INVIMA esta documentado en [docs/ACCESO_EXTERNO.md](docs/ACCESO_EXTERNO.md). El flujo de evidencia y validacion Fabric esta documentado en [docs/VALIDACION_BLOCKCHAIN.md](docs/VALIDACION_BLOCKCHAIN.md). La limpieza y organizacion del repositorio se registra en [docs/LIMPIEZA_TECNICA.md](docs/LIMPIEZA_TECNICA.md).
 
 - `POST /auth/login`
 - `GET /auth/me`
@@ -143,7 +144,6 @@ La matriz de permisos vigente esta documentada en [docs/MATRIZ_RBAC.md](docs/MAT
 - `POST /produccion/ordenes/:id/productos/:productoId/manufactura`
 - `POST /produccion/ordenes/:id/materias`
 - `PUT /produccion/ordenes/:id/materias/:materiaId`
-- `POST /produccion/ordenes/:id/tiempos`
 - `GET /almacenamiento/pendientes`
 - `GET /almacenamiento`
 - `GET /almacenamiento/:id`
@@ -207,17 +207,31 @@ El backend construye un payload estable y normalizado desde los registros operat
 
 En la consulta de trazabilidad, el backend reconstruye el payload actual y Fabric responde si el registro esta `VERIFICADO`, `ALTERADO`, `PENDIENTE` o `NO_ENCONTRADO`.
 
-Desde la version 2.2 (secuencia 4), `registrarEvento` rechaza cualquier clave existente. Las correcciones se guardan como eventos nuevos que referencian el original y la validacion reconoce como vigente la ultima correccion inmutable autorizada. La aprobacion del despacho falla de forma cerrada si Fabric no esta disponible o si el chaincode detecta vencimiento, inventario insuficiente, controles de produccion fuera de rango o validaciones no conformes. El cliente receptor confirma la entrega desde el portal QR mediante factura o codigo, sin una cuenta interna.
+Desde la version 2.2 (secuencia 4), `registrarEvento` rechaza cualquier clave existente. Las correcciones se guardan como eventos nuevos que referencian el original y la validacion reconoce como vigente la ultima correccion inmutable autorizada. La aprobacion del despacho falla de forma cerrada si Fabric no esta disponible o si el chaincode detecta vencimiento, inventario insuficiente, controles de produccion fuera de rango o validaciones no conformes. El cliente receptor confirma la entrega mediante factura o codigo privado, sin una cuenta interna.
 
 Desde la version 2.3 (secuencia 5), el despacho exige que el lote haya completado el almacenamiento y tenga estado `listo_para_liberacion`. El modulo registra de forma separada el ingreso, los controles de conservacion y la salida. Las temperaturas esperadas pertenecen a la ficha del producto; una desviacion no borra el dato ni bloquea su registro, pero exige observacion y retiene el lote hasta una resolucion gerencial documentada.
 
-Desde la version 2.4 (secuencia 6), liberacion y despacho son operaciones independientes. Una liberacion aprobada inicializa en Fabric el saldo del inventario terminado; cada despacho puede consumir parcialmente uno o varios lotes, pertenece a un cliente y una factura, y conserva las condiciones de transporte. El chaincode descuenta el saldo inmutable y rechaza `LOTE_SIN_EXISTENCIAS`, `STOCK_INSUFICIENTE` y `DESPACHO_DUPLICADO`. PostgreSQL mantiene saldos operativos de unidades liberadas, reservadas, despachadas y disponibles para soportar concurrencia y recuperacion mediante outbox.
+Desde la version 2.5 (secuencia 8), liberacion y despacho son operaciones independientes. Una liberacion aprobada inicializa en Fabric el saldo del inventario terminado; cada despacho puede consumir parcialmente uno o varios lotes, pertenece a un cliente y una factura, y conserva las condiciones de transporte. El chaincode descuenta el saldo inmutable y rechaza `LOTE_SIN_EXISTENCIAS`, `STOCK_INSUFICIENTE` y `DESPACHO_DUPLICADO`. PostgreSQL mantiene saldos operativos de unidades liberadas, reservadas, despachadas y disponibles para soportar concurrencia y recuperacion mediante outbox.
 
 La implementacion de RF05 esta descrita en [docs/RF05_DESPACHOS_PARCIALES.md](docs/RF05_DESPACHOS_PARCIALES.md).
 
 La entrega de evidencias ordinarias a Fabric usa una bandeja tecnica `blockchain_outbox`. La misma transaccion PostgreSQL que guarda el evento operativo deja una referencia de entrega pendiente; un trabajador del backend reconstruye el payload desde las tablas del dominio y reintenta con espera exponencial. La bandeja no almacena payloads, hashes ni bloques, por lo que PostgreSQL no duplica el ledger. Los registros se reclaman con bloqueo concurrente y una clave de deduplicacion evita enviar dos veces el mismo evento.
 
 El backend revisa cada hora los lotes con unidades disponibles que alcanzaron su vencimiento. `registrarAlertaVencimiento` conserva una sola alerta inmutable por lote y el dashboard gerencial muestra la alerta operativa.
+
+### Documentos de proveedores y materias primas (MinIO)
+
+RF17 conserva los archivos en MinIO y únicamente sus metadatos operativos en PostgreSQL. Los documentos son soportes transversales de la compañía: pueden registrar cualquier tipo de certificado, acta, inspección sanitaria, resultado de laboratorio o evidencia de inocuidad emitida por INVIMA, una secretaría de salud, un laboratorio u otra entidad. El backend valida extensión, MIME y firma binaria antes de cargarlo. Los documentos anulados permanecen conservados en MinIO para auditoría, pero dejan de estar disponibles para descarga operativa.
+
+Para levantar el servicio local:
+
+```bash
+# Define MINIO_ACCESS_KEY y MINIO_SECRET_KEY con valores propios en un
+# archivo .env local (ignorado por Git) antes de iniciar documents.
+docker compose --profile documents up -d minio
+```
+
+En el entorno del backend configura `MINIO_ENABLED=true`, `MINIO_ENDPOINT=localhost`, `MINIO_PORT=9000`, `MINIO_ACCESS_KEY` y `MINIO_SECRET_KEY` con los mismos valores del Compose. El bucket `MINIO_DOCUMENTS_BUCKET` se crea automáticamente en la primera carga. El esquema consolidado incluye el responsable, la entidad emisora, la referencia documental, la vigencia y la fecha de anulación.
 
 ### Red Fabric local
 
@@ -262,6 +276,10 @@ cd backend
 npm run test:rf05
 ```
 
+La misma verificación está disponible como `npm run test:integration`. Para ejecutar la prueba completa sin tocar la base de datos local, usa `npm run test:integration:isolated`: crea una base temporal, aplica el esquema consolidado, carga las semillas, levanta una API temporal, ejecuta el flujo RF05 y elimina la base al finalizar. El flujo verifica despachos parciales, concurrencia, saldo en Fabric, confirmación del cliente, consulta por lote y reporte Excel. Requiere PostgreSQL, backend, frontend y Fabric activos; utiliza identificadores temporales y no debe ejecutarse contra un ambiente productivo.
+
+La validación oficial del esquema GS1 EPCIS 2.0.1 se ejecuta de forma aislada con `npm run test:epcis`.
+
 Detener red:
 
 ```bash
@@ -299,14 +317,14 @@ No se deben versionar archivos `.env`, certificados, claves privadas ni artefact
 
 ```bash
 cd backend
-npm install
+npm ci
 cd ..\frontend
-npm install
+npm ci
 ```
 
 2. Crear base de datos `trazaap` en PostgreSQL.
 
-3. Ejecutar migracion unica del esquema actual y datos semilla:
+3. Preparar el esquema consolidado y cargar los datos semilla:
 
 ```bash
 cd backend
@@ -425,5 +443,4 @@ Tablas base de Sprint 2:
 - `almacenamientos_lote`
 - `controles_almacenamiento`
 - `blockchain_outbox` (solo estado tecnico de entrega; sin payload ni hash)
-- `tiempos_produccion`
-- `liberaciones_producto`
+- `liberacion_producto`

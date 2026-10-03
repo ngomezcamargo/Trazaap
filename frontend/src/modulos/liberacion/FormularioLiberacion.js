@@ -12,8 +12,12 @@ const formInicial = {
   unidades_empacadas: '',
   peso_neto: '',
   fecha_vencimiento: '',
-  etiqueta_verificada: false,
-  verificacion_envase: false,
+  etiqueta_verificada: null,
+  verificacion_envase: null,
+  lote_visible: null,
+  fecha_vencimiento_visible: null,
+  empaque_conforme: null,
+  producto_en_buen_estado: null,
   estado_liberacion: 'aprobado',
   motivo_retencion: '',
   motivo_rechazo: '',
@@ -22,7 +26,11 @@ const formInicial = {
 
 const validaciones = [
   ['etiqueta_verificada', 'Etiqueta'],
-  ['verificacion_envase', 'Verificacion envase']
+  ['verificacion_envase', 'Verificacion envase'],
+  ['lote_visible', 'Lote visible'],
+  ['fecha_vencimiento_visible', 'Fecha de vencimiento visible'],
+  ['empaque_conforme', 'Empaque conforme'],
+  ['producto_en_buen_estado', 'Producto en buen estado']
 ];
 
 export function FormularioLiberacion({ pendiente, onGuardado, onGuardandoCambio }) {
@@ -39,7 +47,8 @@ export function FormularioLiberacion({ pendiente, onGuardado, onGuardandoCambio 
   const [motivosBloqueo, setMotivosBloqueo] = useState([]);
   const [guardando, setGuardando] = useState(false);
 
-  const checksCompletos = validaciones.every(([key]) => form[key]);
+  const checksCompletos = validaciones.every(([key]) => typeof form[key] === 'boolean');
+  const checksConformes = validaciones.every(([key]) => form[key] === true);
 
   useEffect(() => {
     autenticacionServicio.listarOperarios().then(setOperarios).catch((err) => setError(err.message));
@@ -54,6 +63,10 @@ export function FormularioLiberacion({ pendiente, onGuardado, onGuardandoCambio 
 
     if (!checksCompletos) {
       setError('Debe completar todas las validaciones de liberacion.');
+      return;
+    }
+    if (form.estado_liberacion === 'aprobado' && !checksConformes) {
+      setError('Un lote con validaciones no conformes debe quedar retenido o rechazado.');
       return;
     }
 
@@ -126,10 +139,10 @@ export function FormularioLiberacion({ pendiente, onGuardado, onGuardandoCambio 
           <label key={key} className="checkline">
             <input
               type="checkbox"
-              checked={form[key]}
-              onChange={(e) => setForm({ ...form, [key]: e.target.checked })}
-            />
-            <span>{label}</span>
+               checked={form[key] === true}
+               onChange={(e) => setForm({ ...form, [key]: e.target.checked })}
+             />
+             <span>{label} ({form[key] === null ? 'pendiente' : form[key] ? 'cumple' : 'no cumple'})</span>
           </label>
         ))}
       </div>

@@ -25,7 +25,7 @@ El modelo permite:
 | `inventario_producto_terminado` | Saldos liberados, reservados, despachados y disponibles. |
 | `blockchain_outbox` | Referencia tecnica para entregar eventos a Fabric sin guardar payloads ni hashes del ledger. |
 
-La migracion incremental es `backend/sql/002_rf05_despachos_parciales.sql`. El mismo estado se encuentra consolidado en `backend/sql/001_schema_actual.sql` para instalaciones nuevas.
+El modelo vigente de despachos parciales se encuentra consolidado en `backend/sql/001_schema_actual.sql`.
 
 ## Flujo operativo
 
@@ -37,7 +37,7 @@ La migracion incremental es `backend/sql/002_rf05_despachos_parciales.sql`. El m
 6. El worker de outbox invoca el chaincode.
 7. Si Fabric aprueba, la reserva pasa a despachada. Si rechaza, se devuelve al disponible y el despacho queda bloqueado.
 8. El cliente consulta su entrega con factura o codigo privado y puede confirmar la recepcion.
-9. Trazabilidad, QR y reporte muestran cada despacho parcial como un evento independiente.
+9. Trazabilidad y reporte muestran cada despacho parcial como un evento independiente, consultado mediante el lote.
 
 ## Regla de saldo en chaincode
 
@@ -83,7 +83,7 @@ Despacho:
 - Integracion Fabric: `backend/src/modulos/blockchain` y outbox.
 - Chaincode: `fabric/chaincode/traceability/index.js`.
 - Frontend: `frontend/src/app/clientes` y `frontend/src/app/despachos`.
-- Portal externo: `frontend/src/app/verificar/[lote]`.
+- Consulta interna y reporte por lote: `frontend/src/app/trazabilidad` y `frontend/src/app/reportes/trazabilidad/[lote]`.
 - Reporte: `frontend/src/app/reportes/trazabilidad/[lote]`.
 
 ## Verificacion reproducible
@@ -114,7 +114,7 @@ cd fabric
 ./scripts/status.sh
 ```
 
-La version asociada a este flujo es `traceability` 2.4, secuencia 6, instalada en `peer0` y `peer1`.
+La version asociada a este flujo es `traceability` 2.5, secuencia 8, instalada en `peer0` y `peer1`.
 
 ## Compatibilidad con datos existentes
 

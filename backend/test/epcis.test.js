@@ -6,9 +6,8 @@ const epcSalida = 'urn:epc:class:lgtin:0614141.112345.20260818';
 const epcEntrada = 'urn:epc:class:lgtin:0614141.998877.20260801';
 const base = { eventTime: '2026-08-18T10:00:00.000Z', epcClassUri: epcSalida, readPointUri: 'urn:epc:id:sgln:0614141.12345.0' };
 
-test('EPCIS mapea recepcion, despacho y devolucion como ObjectEvent con vocabulario CBV', () => {
-  assert.deepEqual(['receiving','shipping','receiving'], ['recepcion','despacho','devolucion'].map((tipo) => mapearEventoEpcis({ ...base, tipo }).bizStep));
-  assert.equal(mapearEventoEpcis({ ...base, tipo: 'devolucion' }).disposition, 'returned');
+test('EPCIS mapea recepcion y despacho como ObjectEvent con vocabulario CBV', () => {
+  assert.deepEqual(['receiving', 'shipping'], ['recepcion', 'despacho'].map((tipo) => mapearEventoEpcis({ ...base, tipo }).bizStep));
 });
 
 test('EPCIS representa manufactura como TransformationEvent con entradas y salida configuradas', () => {

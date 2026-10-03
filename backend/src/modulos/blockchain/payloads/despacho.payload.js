@@ -75,7 +75,13 @@ export async function construirPayloadDespacho(idDespacho) {
     temperaturaMaxEsperadaC: numero(row.temperatura_max_esperada_c),
     almacenamiento: {
       idAlmacenamiento: String(row.id_almacenamiento || ''),
-      estado: texto(row.estado_almacenamiento),
+      // El estado cambia a despacho_parcial después de confirmar la salida;
+      // para este evento se conserva la condición estable de habilitación.
+       estado: ['liberado', 'despacho_parcial', 'despachado'].includes(
+         String(row.estado_almacenamiento || '').toLowerCase()
+       )
+        ? 'liberado'
+        : texto(row.estado_almacenamiento),
       temperaturaSalidaC: numero(row.temperatura_salida_almacenamiento_c)
     },
     validaciones: {
@@ -87,7 +93,6 @@ export async function construirPayloadDespacho(idDespacho) {
       productoBuenEstado: booleano(row.producto_en_buen_estado)
     },
     controlesCriticos: construirControlesCriticos(row, row)
-      .filter((control) => !['limpieza_vehiculo', 'documentacion_conductor'].includes(control.variable))
   }));
 
   return ordenarValor({

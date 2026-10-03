@@ -28,23 +28,6 @@ export const entorno = {
   diasAlertaVencimiento: Number.isInteger(Number(process.env.DIAS_ALERTA_VENCIMIENTO))
     && Number(process.env.DIAS_ALERTA_VENCIMIENTO) >= 0
     ? Number(process.env.DIAS_ALERTA_VENCIMIENTO) : 30,
-  auth: {
-    legacyJwtEnabled: process.env.AUTH_LEGACY_JWT_ENABLED !== 'false',
-    oauthEnabled: process.env.OAUTH_ENABLED === 'true',
-    issuer: process.env.OAUTH_ISSUER || '',
-    audience: process.env.OAUTH_AUDIENCE || '',
-    jwksUri: process.env.OAUTH_JWKS_URI || '',
-    authorizationUrl: process.env.OAUTH_AUTHORIZATION_URL || '',
-    tokenUrl: process.env.OAUTH_TOKEN_URL || '',
-    revocationUrl: process.env.OAUTH_REVOCATION_URL || '',
-    clientId: process.env.OAUTH_CLIENT_ID || '',
-    clientSecret: process.env.OAUTH_CLIENT_SECRET || '',
-    redirectUri: process.env.OAUTH_REDIRECT_URI || '',
-    scopes: process.env.OAUTH_SCOPES || 'openid profile trazaap.read',
-    secureCookies: process.env.OAUTH_SECURE_COOKIES !== 'false',
-    maxAccessTokenSeconds: Number(process.env.OAUTH_MAX_ACCESS_TOKEN_SECONDS) || 900,
-    algorithms: (process.env.OAUTH_ALLOWED_ALGORITHMS || 'RS256').split(',').map((value) => value.trim()).filter(Boolean)
-  },
   postgres: {
     host: process.env.POSTGRES_HOST,
     port: Number(process.env.POSTGRES_PORT),

@@ -76,7 +76,7 @@ Cada validacion retorna:
 
 ## RF13 - reglas ejecutadas por chaincode
 
-El chaincode 2.4, secuencia 6, no permite sobrescribir eventos. Las correcciones son nuevos registros vinculados al original y conservan `txId`, timestamp, MSP e identidad Fabric del invocador.
+El chaincode 2.5, secuencia 8, no permite sobrescribir eventos. Las correcciones son nuevos registros vinculados al original y conservan `txId`, timestamp, MSP e identidad Fabric del invocador.
 
 La liberacion aprobada inicializa un saldo por lote en el world state de Fabric. Al despachar, el backend envia el detalle de lotes y cantidades; el chaincode vuelve a comprobar almacenamiento, vencimiento, controles, transporte y saldo. Fabric calcula `disponibles = liberadas - despachadas` y rechaza `LOTE_SIN_EXISTENCIAS`, `STOCK_INSUFICIENTE` y `DESPACHO_DUPLICADO`. Una respuesta bloqueada revierte o libera la reserva operativa y una indisponibilidad de Fabric deja la entrega pendiente en la outbox para reintento controlado.
 
@@ -89,11 +89,10 @@ El reporte de trazabilidad incluye:
 - eventos criticos del lote
 - validacion blockchain por evento
 - hashes actual/Fabric para usuarios autorizados
-- QR publico
 - codigo cliente
 - codigo auditoria
 - leyenda de estados de validacion
 
 ## Portal publico
 
-El consumidor final no ve hashes ni datos sensibles. La vista de auditoria/INVIMA si puede ver hashes cuando ingresa el codigo de auditoria.
+La version local no incluye portal publico ni QR. La trazabilidad se consulta desde el panel interno usando el lote producido; el reporte muestra los hashes y estados blockchain para los usuarios autorizados.

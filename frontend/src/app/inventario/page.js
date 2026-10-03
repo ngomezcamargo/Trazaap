@@ -82,8 +82,8 @@ export default function InventarioPage() {
               <table className="tabla">
                 <thead><tr><th>Producto</th><th>Lote</th><th>Orden</th><th>Liberadas</th><th>Reservadas</th><th>Despachadas</th><th>Disponibles</th><th>Estado</th><th>Vencimiento</th></tr></thead>
                 <tbody>
-                  {terminados.map((item) => (
-                    <tr key={item.id_inventario}>
+                  {terminados.map((item, index) => (
+                    <tr key={`${item.id_inventario}-${item.lote || item.producto || 'terminado'}-${index}`}>
                       <td><strong>{item.producto}</strong><small className="tabla-subtexto">{item.tamano_presentacion || '-'}</small></td>
                       <td>{item.lote}</td>
                       <td>{item.codigo_orden || '-'}</td>
@@ -123,10 +123,10 @@ export default function InventarioPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtradas.map((item) => {
+                  {filtradas.map((item, index) => {
                     const estado = estadoInventario(item.cantidad_disponible);
                     return (
-                      <tr key={item.id_inventario}>
+                      <tr key={`${item.id_inventario}-${item.materia_prima || 'insumo'}-${index}`}>
                         <td><strong>{item.materia_prima}</strong></td>
                         <td className="cantidad-inventario">{Number(item.cantidad_disponible || 0).toLocaleString()}</td>
                         <td>{item.unidad_medida}</td>
@@ -160,8 +160,8 @@ export default function InventarioPage() {
                 </tr>
                 </thead>
                 <tbody>
-                  {movimientos.map((item) => (
-                    <tr key={item.id}>
+                  {movimientos.map((item, index) => (
+                    <tr key={`${item.id}-${item.referencia_tipo || 'movimiento'}-${index}`}>
                       <td>{formatearFecha(item.creado_en)}</td>
                     <td><strong>{item.materia_prima}</strong></td>
                     <td><span className={`movimiento-badge ${item.tipo_movimiento}`}>{item.tipo_movimiento}</span></td>

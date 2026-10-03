@@ -304,8 +304,8 @@ async function seedReceptionSample() {
 
 async function seedProduccionYLiberacion() {
   await poolPostgres.query(
-    `INSERT INTO ordenes_produccion (fecha_produccion, codigo_orden, responsable_produccion, estado, observaciones, creado_por)
-     SELECT CURRENT_DATE, 'OP-SEMILLA-001', u.id, 'pendiente', 'Orden de ejemplo sprint 2', u.id
+    `INSERT INTO ordenes_produccion (fecha_produccion, codigo_orden, estado, observaciones, creado_por)
+     SELECT CURRENT_DATE, 'OP-SEMILLA-001', 'pendiente', 'Orden de ejemplo sprint 2', u.id
      FROM users u
      WHERE u.email = 'admin@trazaap.local'
      AND NOT EXISTS (SELECT 1 FROM ordenes_produccion WHERE codigo_orden = 'OP-SEMILLA-001')`

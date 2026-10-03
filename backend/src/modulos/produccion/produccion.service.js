@@ -1,9 +1,5 @@
 import { ErrorHttp } from '../../middlewares/errorHttp.js';
-import {
-  registrarEventoCritico,
-  registrarEventoProduccion,
-  registrarVersionEventoCritico
-} from '../blockchain/blockchain.service.js';
+import { encolarEventoBlockchain } from '../blockchain/outbox.repository.js';
 import {
   actualizarCantidadRealMateria,
   actualizarEstadoOrden,
@@ -19,7 +15,6 @@ import {
   buscarProductoFabricadoPorId,
   buscarProductosOrden,
   buscarRecepcionPorId,
-  buscarTiemposPorOrdenId,
   buscarUsuarioOperarioPorId,
   buscarVarianteProductoPorId,
   crearMateriaPrimaOrdenPlanificada,
@@ -38,30 +33,10 @@ import {
   listarProductosFabricados,
   listarRecepcionesAceptadas,
   listarRecetaVariante,
-  listarTiemposOrden,
   listarVariantesProducto,
   registrarEventoTrazabilidad,
-  registrarTiempoProduccion,
   reemplazarVariantesProducto
 } from './produccion.repository.js';
-
-function validarRangos(item) {
-  const fueraCrecimiento = item.temperatura_crecimiento < 25 || item.temperatura_crecimiento > 35;
-  const fueraHorneo = item.temperatura_horneo < 150 || item.temperatura_horneo > 175;
-  const fueraInmersion =
-    item.es_bagel &&
-    (item.temperatura_inmersion_agua == null ||
-      item.temperatura_inmersion_agua < 85 ||
-      item.temperatura_inmersion_agua > 95);
-
-  if ((fueraCrecimiento || fueraHorneo || fueraInmersion) && !item.observaciones?.trim()) {
-    throw new ErrorHttp(400, 'Debes registrar observaciones cuando haya valores fuera de rango');
-  }
-
-  if (item.es_bagel && (item.tiempo_inmersion_agua_seg == null || item.tiempo_inmersion_agua_seg < 0)) {
-    throw new ErrorHttp(400, 'Para bagels debes registrar tiempo de inmersion en agua');
-  }
-}
 
 async function prepararRequerimientosOrden(productos) {
   const recepciones = await listarRecepcionesAceptadas();
@@ -116,47 +91,48 @@ async function prepararRequerimientosOrden(productos) {
 export async function crearOrdenProduccionService(data, actor) {
   const { requerimientos, productosNormalizados } = await prepararRequerimientosOrden(data.productos);
   data.productos = productosNormalizados;
-  let orden;
+  let resultado;
   try {
-    orden = await crearOrdenProduccionCabecera(data);
+    resultado = await ejecutarTransaccionProduccion(async (db) => {
+      const orden = await crearOrdenProduccionCabecera(data, db);
+      const productos = [];
+      for (const producto of data.productos) {
+        const row = await crearOrdenProducto(orden.id, producto, db);
+        productos.push(row);
+
+        const requerimientosProducto = requerimientos.filter((req) => req.producto === producto);
+        for (const req of requerimientosProducto) {
+          await crearMateriaPrimaOrdenPlanificada(orden.id, {
+            orden_producto_id: row.id,
+            recepcion_id: req.recepcionCompatible.id,
+            nombre_ingrediente: req.item.materia_prima,
+            cantidad_planificada: req.cantidadTotal,
+            cantidad_real: req.cantidadTotal,
+            unidad_medida: req.unidad,
+            observaciones: req.item.observaciones || ''
+          }, db);
+        }
+      }
+
+      await encolarEventoBlockchain({
+        tipoEvento: 'orden_produccion', idEntidad: orden.id, operacion: 'versionar', actor
+      }, db);
+      await registrarEventoTrazabilidad({
+        recepcion_id: null,
+        lote: data.codigo_orden,
+        tipo_evento: 'PRODUCTION_ORDER_CREATED',
+        actor,
+        payload: { orden_produccion_id: orden.id, estado: orden.estado, productos: productos.length }
+      }, db);
+      return { orden, productos };
+    });
   } catch (error) {
     if (error.code === '23505' && error.constraint === 'ordenes_produccion_codigo_orden_key') {
       throw new ErrorHttp(409, `Ya existe una orden de produccion con el codigo ${data.codigo_orden}.`);
     }
     throw error;
   }
-  const productos = [];
-
-  for (const producto of data.productos) {
-    const row = await crearOrdenProducto(orden.id, producto);
-    productos.push(row);
-
-    const requerimientosProducto = requerimientos.filter((req) => req.producto === producto);
-
-    for (const req of requerimientosProducto) {
-      await crearMateriaPrimaOrdenPlanificada(orden.id, {
-        orden_producto_id: row.id,
-        recepcion_id: req.recepcionCompatible.id,
-        nombre_ingrediente: req.item.materia_prima,
-        cantidad_planificada: req.cantidadTotal,
-        cantidad_real: req.cantidadTotal,
-        unidad_medida: req.unidad,
-        observaciones: req.item.observaciones || ''
-      });
-    }
-  }
-
-  await registrarVersionEventoCritico('orden_produccion', orden.id, actor, 'Creacion de la orden de produccion');
-
-  await registrarEventoTrazabilidad({
-    recepcion_id: null,
-    lote: data.codigo_orden,
-    tipo_evento: 'PRODUCTION_ORDER_CREATED',
-    actor,
-    payload: { orden_produccion_id: orden.id, estado: orden.estado, productos: productos.length }
-  });
-
-  return { ...orden, productos };
+  return { ...resultado.orden, productos: resultado.productos };
 }
 
 export async function listarProductosFabricadosService(filtro) {
@@ -166,27 +142,35 @@ export async function listarProductosFabricadosService(filtro) {
 export async function crearProductoFabricadoService(data, actor = 'sistema') {
   let producto;
   try {
-    producto = await crearProductoFabricado(data);
+    producto = await ejecutarTransaccionProduccion(async (db) => {
+      const creado = await crearProductoFabricado(data, db);
+      await reemplazarVariantesProducto(creado.id, data.variantes, db);
+      await encolarEventoBlockchain({
+        tipoEvento: 'producto_fabricado_configurado', idEntidad: creado.id, operacion: 'versionar', actor
+      }, db);
+      return creado;
+    });
   } catch (error) {
     if (error.code === '23505' && error.constraint === 'productos_fabricados_prefijo_lote_key') {
       throw new ErrorHttp(409, `Ya existe un producto con el prefijo de lote ${data.prefijo_lote}.`);
     }
     throw error;
   }
-  await reemplazarVariantesProducto(producto.id, data.variantes);
-  await registrarVersionEventoCritico(
-    'producto_fabricado_configurado',
-    producto.id,
-    actor,
-    'Creacion de la ficha tecnica y receta del producto'
-  );
   return obtenerDetalleProductoFabricadoService(producto.id);
 }
 
 export async function actualizarProductoFabricadoService(id, data, actor = 'sistema') {
   let producto;
   try {
-    producto = await actualizarProductoFabricado(id, data);
+    producto = await ejecutarTransaccionProduccion(async (db) => {
+      const actualizado = await actualizarProductoFabricado(id, data, db);
+      if (!actualizado) return null;
+      await reemplazarVariantesProducto(actualizado.id, data.variantes, db);
+      await encolarEventoBlockchain({
+        tipoEvento: 'producto_fabricado_configurado', idEntidad: actualizado.id, operacion: 'versionar', actor
+      }, db);
+      return actualizado;
+    });
   } catch (error) {
     if (error.code === '23505' && error.constraint === 'productos_fabricados_prefijo_lote_key') {
       throw new ErrorHttp(409, `Ya existe un producto con el prefijo de lote ${data.prefijo_lote}.`);
@@ -194,13 +178,6 @@ export async function actualizarProductoFabricadoService(id, data, actor = 'sist
     throw error;
   }
   if (!producto) throw new ErrorHttp(404, 'Producto no encontrado');
-  await reemplazarVariantesProducto(producto.id, data.variantes);
-  await registrarVersionEventoCritico(
-    'producto_fabricado_configurado',
-    producto.id,
-    actor,
-    'Actualizacion autorizada de la ficha tecnica o receta del producto'
-  );
   return obtenerDetalleProductoFabricadoService(producto.id);
 }
 
@@ -266,13 +243,12 @@ export async function obtenerDetalleOrdenService(ordenId) {
   const orden = await buscarOrdenPorId(ordenId);
   if (!orden) throw new ErrorHttp(404, 'Orden de produccion no encontrada');
 
-  const [productos, materias, tiempos] = await Promise.all([
+  const [productos, materias] = await Promise.all([
     buscarProductosOrden(ordenId),
-    buscarMateriasPorOrdenId(ordenId),
-    buscarTiemposPorOrdenId(ordenId)
+    buscarMateriasPorOrdenId(ordenId)
   ]);
 
-  return { orden, productos, materias, tiempos };
+  return { orden, productos, materias };
 }
 
 export async function obtenerContextoManufacturaService(ordenId, productoOrdenId) {
@@ -290,23 +266,20 @@ export async function actualizarEstadoOrdenService(ordenId, estado, actor) {
   const orden = await buscarOrdenPorId(ordenId);
   if (!orden) throw new ErrorHttp(404, 'Orden de produccion no encontrada');
 
-  const actualizada = await actualizarEstadoOrden(ordenId, estado);
-  await registrarEventoTrazabilidad({
-    recepcion_id: null,
-    lote: orden.codigo_orden,
-    tipo_evento: 'PRODUCTION_ORDER_STATUS_CHANGED',
-    actor,
-    payload: { orden_produccion_id: ordenId, estado_anterior: orden.estado, estado_nuevo: estado }
+  return ejecutarTransaccionProduccion(async (db) => {
+    const actualizada = await actualizarEstadoOrden(ordenId, estado, db);
+    await registrarEventoTrazabilidad({
+      recepcion_id: null,
+      lote: orden.codigo_orden,
+      tipo_evento: 'PRODUCTION_ORDER_STATUS_CHANGED',
+      actor,
+      payload: { orden_produccion_id: ordenId, estado_anterior: orden.estado, estado_nuevo: estado }
+    }, db);
+    await encolarEventoBlockchain({
+      tipoEvento: 'orden_produccion', idEntidad: ordenId, operacion: 'versionar', actor
+    }, db);
+    return actualizada;
   });
-
-  await registrarVersionEventoCritico(
-    'orden_produccion',
-    ordenId,
-    actor,
-    `Cambio autorizado de estado de orden: ${orden.estado} a ${estado}`
-  );
-
-  return actualizada;
 }
 
 function desviacion(valorReal, valorEsperado) {
@@ -505,6 +478,20 @@ export async function registrarManufacturaService(ordenId, productoOrdenId, data
         }
       }, db);
 
+      for (const consumo of consumosInventario) {
+        await encolarEventoBlockchain({
+          tipoEvento: 'inventario_materia_prima', idEntidad: consumo.inventario_id,
+          operacion: 'versionar', actor
+        }, db);
+        if (consumo.movimiento_id) {
+          await encolarEventoBlockchain({
+            tipoEvento: 'movimiento_inventario', idEntidad: consumo.movimiento_id, actor
+          }, db);
+        }
+      }
+      await encolarEventoBlockchain({ tipoEvento: 'registro_manufactura', idEntidad: registro.id_manufactura, actor }, db);
+      await encolarEventoBlockchain({ tipoEvento: 'orden_produccion', idEntidad: ordenId, operacion: 'versionar', actor }, db);
+
       return { registro, comparacion, consumosInventario, tieneDesviaciones, pendientes };
     });
   } catch (error) {
@@ -512,26 +499,6 @@ export async function registrarManufacturaService(ordenId, productoOrdenId, data
   }
 
   const { registro, comparacion, consumosInventario, tieneDesviaciones, pendientes } = resultadoOperativo;
-
-  for (const consumo of consumosInventario) {
-    await registrarVersionEventoCritico(
-      'inventario_materia_prima',
-      consumo.inventario_id,
-      actor,
-      `Consumo de materia prima por manufactura ${registro.lote_producido}`
-    );
-    if (consumo.movimiento_id) {
-      await registrarEventoCritico('movimiento_inventario', consumo.movimiento_id, actor);
-    }
-  }
-
-  await registrarEventoCritico('registro_manufactura', registro.id_manufactura, actor);
-  await registrarVersionEventoCritico(
-    'orden_produccion',
-    ordenId,
-    actor,
-    `Registro de manufactura del lote ${registro.lote_producido}`
-  );
 
   return {
     registro,
@@ -573,13 +540,8 @@ export async function actualizarCantidadRealMateriaService(ordenId, materiaId, c
         observaciones: `Ajuste por aumento de cantidad real en orden ${orden.codigo_orden}`
       });
       if (!inventario) throw new ErrorHttp(400, `Inventario insuficiente para aumentar el consumo de ${actualizada.nombre_ingrediente}.`);
-      await registrarVersionEventoCritico(
-        'inventario_materia_prima',
-        inventario.id,
-        actor,
-        `Aumento del consumo real en orden ${orden.codigo_orden}`
-      );
-      if (inventario.movimiento_id) await registrarEventoCritico('movimiento_inventario', inventario.movimiento_id, actor);
+      await encolarEventoBlockchain({ tipoEvento: 'inventario_materia_prima', idEntidad: inventario.id, operacion: 'versionar', actor });
+      if (inventario.movimiento_id) await encolarEventoBlockchain({ tipoEvento: 'movimiento_inventario', idEntidad: inventario.movimiento_id, actor });
     } else {
       const inventario = await devolverInventarioMateria({
         materia_prima_id: recepcion.materia_prima_id,
@@ -590,13 +552,8 @@ export async function actualizarCantidadRealMateriaService(ordenId, materiaId, c
         actor,
         observaciones: `Ajuste por reduccion de cantidad real en orden ${orden.codigo_orden}`
       });
-      await registrarVersionEventoCritico(
-        'inventario_materia_prima',
-        inventario.id,
-        actor,
-        `Devolucion por reduccion del consumo real en orden ${orden.codigo_orden}`
-      );
-      if (inventario.movimiento_id) await registrarEventoCritico('movimiento_inventario', inventario.movimiento_id, actor);
+      await encolarEventoBlockchain({ tipoEvento: 'inventario_materia_prima', idEntidad: inventario.id, operacion: 'versionar', actor });
+      if (inventario.movimiento_id) await encolarEventoBlockchain({ tipoEvento: 'movimiento_inventario', idEntidad: inventario.movimiento_id, actor });
     }
   }
 
@@ -608,12 +565,7 @@ export async function actualizarCantidadRealMateriaService(ordenId, materiaId, c
     payload: { orden_produccion_id: ordenId, materia_id: materiaId, cantidad_real: cantidadReal }
   });
 
-  await registrarVersionEventoCritico(
-    'orden_produccion',
-    ordenId,
-    actor,
-    `Actualizacion de cantidad real de materia prima en orden ${orden.codigo_orden}`
-  );
+  await encolarEventoBlockchain({ tipoEvento: 'orden_produccion', idEntidad: ordenId, operacion: 'versionar', actor });
 
   return actualizada;
 }
@@ -646,51 +598,7 @@ export async function asociarMateriasService(ordenId, data, actor) {
     });
   }
 
-  await registrarVersionEventoCritico(
-    'orden_produccion',
-    ordenId,
-    actor,
-    `Asociacion autorizada de materias primas a la orden ${orden.codigo_orden}`
-  );
+  await encolarEventoBlockchain({ tipoEvento: 'orden_produccion', idEntidad: ordenId, operacion: 'versionar', actor });
 
   return creados;
-}
-
-export async function registrarTiemposService(ordenId, data, actor) {
-  const orden = await buscarOrdenPorId(ordenId);
-  if (!orden) throw new ErrorHttp(404, 'Orden de produccion no encontrada');
-
-  const rows = [];
-  for (const item of data.registros) {
-    validarRangos(item);
-    rows.push(await registrarTiempoProduccion(ordenId, item));
-  }
-
-  await registrarEventoTrazabilidad({
-    recepcion_id: null,
-    lote: orden.codigo_orden,
-    tipo_evento: 'PRODUCTION_TIMES_RECORDED',
-    actor,
-    payload: { orden_produccion_id: ordenId, registros: rows.length }
-  });
-
-  const materias = await listarMateriasOrden(ordenId);
-  const productos = await buscarProductosOrden(ordenId);
-  const tiempos = await listarTiemposOrden(ordenId);
-  const loteProducto = rows[0]?.lote_producto || tiempos.find((item) => item.lote_producto)?.lote_producto;
-
-  await registrarEventoProduccion({
-    tipoEvento: 'produccion',
-    lote: loteProducto || `OP-${orden.id}`,
-    usuario: actor,
-    responsable: orden.responsable_produccion,
-    productosProducidos: productos,
-    materiasPrimasUsadas: materias,
-    lotesIngredientes: materias.map((item) => item.lote_proveedor),
-    cantidadesRealesUsadas: materias.map((item) => ({ ingrediente: item.nombre_ingrediente, cantidad: item.cantidad_real })),
-    unidadesProducidas: tiempos.map((item) => ({ producto: item.producto, unidades: item.unidades_producidas })),
-    tiemposTemperaturasCriticas: tiempos
-  });
-
-  return rows;
 }

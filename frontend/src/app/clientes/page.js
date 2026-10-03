@@ -125,8 +125,8 @@ export default function ClientesPage() {
               <table className="tabla">
                 <thead><tr><th>Razon social</th><th>NIT / documento</th><th>Contacto</th><th>Telefono</th><th>Correo</th><th>Estado</th>{puedeEditar && <th>Accion</th>}</tr></thead>
                 <tbody>
-                  {visibles.map((cliente) => (
-                    <tr key={cliente.id_cliente}>
+                  {visibles.map((cliente, index) => (
+                    <tr key={`${cliente.id_cliente}-${cliente.nit_documento || 'cliente'}-${index}`}>
                       <td><strong>{cliente.nombre_razon_social}</strong><small className="tabla-subtexto">{cliente.direccion}</small></td>
                       <td>{cliente.nit_documento}</td>
                       <td>{cliente.nombre_contacto}</td>

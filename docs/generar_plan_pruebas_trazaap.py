@@ -103,7 +103,7 @@ functional_cases = [
     case("PF-051", "RF03-A / RF08", "Liberación retenida", "Exige motivo y no habilita el producto como disponible.", "La retención separa temporalmente un producto que requiere decisión posterior.", STATUS_EVIDENCE),
     case("PF-052", "RF03-A / RF08", "Liberación rechazada", "Exige motivo, conserva el evento y bloquea la salida.", "Un producto no conforme no puede mezclarse con inventario liberado.", STATUS_EVIDENCE),
     case("PF-053", "RF03-A", "Evitar doble liberación", "Una manufactura o lote ya liberado no puede liberarse nuevamente.", "Previene duplicar inventario terminado y decisiones contradictorias.", STATUS_EVIDENCE),
-    case("PF-054", "RF03-A / RF05", "Responsable, factura y transporte", "Se guardan operario, número de factura, conductor, placa, limpieza y documentación.", "Estos datos identifican quién autorizó y bajo qué condiciones salió el producto.", STATUS_EVIDENCE),
+    case("PF-054", "RF05", "Datos logísticos en despacho", "Factura, cliente, conductor, placa, limpieza y documentación se solicitan una sola vez al registrar un despacho.", "La logística pertenece a cada salida y permite despachos parciales a distintos clientes.", STATUS_EVIDENCE),
     case("PF-055", "RF03-A", "Cantidades y vencimiento de liberación", "Unidades positivas, no superiores a las producidas, peso válido y vencimiento posterior.", "Evita liberar cantidades inexistentes o productos vencidos.", STATUS_EXECUTE),
     case("PF-056", "RF03-A / RNF06", "Confirmación y cierre de liberación", "Durante el guardado se muestra progreso; al éxito se cierra el modal y queda una confirmación visible.", "Reduce dobles envíos y elimina la incertidumbre del usuario.", STATUS_EVIDENCE),
     case("PF-057", "RF05", "Salida y descuento de producto terminado", "La salida reduce exactamente el lote liberado y conserva factura, conductor y movimiento.", "El inventario final debe coincidir con las unidades que permanecen en planta.", STATUS_EVIDENCE),
@@ -111,16 +111,11 @@ functional_cases = [
     case("PF-059", "RF06", "Trazabilidad hacia atrás", "Desde el producto se identifican materias primas, lotes recibidos y proveedores.", "Permite localizar el origen ante una no conformidad o retiro.", STATUS_EVIDENCE),
     case("PF-060", "RF05-RF06", "Trazabilidad hacia adelante hasta cliente", "Desde una materia prima se obtienen lotes producidos, salidas y clientes receptores.", "Es necesaria para informar a todos los afectados por un insumo comprometido.", STATUS_IMPLEMENT),
     case("PF-061", "RF06 / RF09", "Estados de validación en trazabilidad", "Cada evento muestra verificado, alterado, no encontrado o pendiente según Fabric.", "Diferencia la existencia del dato operativo de su evidencia criptográfica.", STATUS_EVIDENCE),
-    case("PF-062", "RF10", "QR único y acceso público", "El QR abre el lote correcto sin autenticación y conserva legibilidad al imprimir.", "Vincula el producto físico con su historial digital.", STATUS_EVIDENCE),
-    case("PF-063", "RF11 / RNF07", "Privacidad del portal público", "El consumidor ve procedencia y proceso sin datos internos sensibles; el auditor recibe información autorizada adicional.", "Cumple transparencia sin exponer información comercial o personal.", STATUS_EVIDENCE),
-    case("PF-064", "RF14", "Reporte PDF de trazabilidad", "El PDF contiene eventos, responsables, validación Fabric y QR sin cortes ni solapamientos.", "Es la evidencia compartible para auditoría y consulta fuera de la aplicación.", STATUS_EVIDENCE),
+    case("PF-062", "RF06 / RNF07", "Consulta interna por lote", "La trazabilidad muestra únicamente la información autorizada para el usuario autenticado y permite generar un reporte.", "Mantiene la consulta centralizada sin exponer datos operativos a un portal externo.", STATUS_EVIDENCE),
+    case("PF-063", "RF14", "Reporte PDF de trazabilidad", "El PDF contiene eventos, responsables, validación Fabric y datos del lote sin cortes ni solapamientos.", "Es la evidencia compartible para auditoría y consulta autorizada.", STATUS_EVIDENCE),
     case("PF-065", "RF14", "Reporte Excel y consulta de hasta 50 lotes", "Se genera un archivo estructurado dentro del tiempo requerido y con estados blockchain.", "El requisito exige análisis masivo y exportación reutilizable, no solo impresión individual.", STATUS_IMPLEMENT),
     case("PF-066", "RF04", "Condiciones de almacenamiento", "Registrar ubicación, temperatura, ingreso, salida y refrigeración por lote.", "La trazabilidad incluye la etapa entre producción y distribución.", STATUS_IMPLEMENT),
-    case("PF-067", "RF07", "Puntos críticos HACCP", "Registrar variable, rango, medición, desviación, alerta y decisión vinculada al lote.", "Los puntos críticos demuestran control preventivo del proceso.", STATUS_IMPLEMENT),
-    case("PF-068", "RF08", "Controles de calidad e inocuidad", "Registrar resultados físicos, químicos, microbiológicos y organolépticos con decisión final.", "La liberación debe estar sustentada por controles de calidad trazables.", STATUS_IMPLEMENT),
-    case("PF-069", "RF15", "Plan de saneamiento", "Registrar limpieza, desinfección, plagas, residuos, cronograma, responsable y resultado.", "La Resolución 2674 exige evidencia recuperable de las prácticas de saneamiento.", STATUS_IMPLEMENT),
-    case("PF-070", "RF16", "Devoluciones y lotes no conformes", "Relacionar lote, cliente, motivo, decisión, responsable y destino del producto.", "Completa la trazabilidad posterior a la entrega y el manejo de incidentes.", STATUS_IMPLEMENT),
-    case("PF-071", "RF17", "Documentos de proveedor en almacenamiento de objetos", "Adjuntar certificado o ficha, recuperar el archivo y verificar su referencia o huella.", "Las evidencias documentales no deben quedar dispersas ni sobrecargar PostgreSQL/Fabric.", STATUS_IMPLEMENT),
+    case("PF-071", "RF17", "Documentos sanitarios transversales en almacenamiento de objetos", "Adjuntar cualquier certificado, acta, resultado o evidencia de inocuidad; recuperar el archivo y conservar su referencia institucional.", "Las evidencias documentales no deben quedar dispersas ni sobrecargar PostgreSQL/Fabric.", STATUS_EVIDENCE),
 ]
 
 
@@ -157,7 +152,7 @@ nonfunctional_cases = [
     case("PNF-009", "RNF08", "Fallo de nodos y consenso", "La red mantiene o rechaza operaciones de forma predecible al caer un peer u orderer y recupera el estado.", "La tolerancia a fallos solo se demuestra provocando fallas reales en la topología.", STATUS_EXECUTE),
     case("PNF-010", "RNF09", "Escalabilidad a diez veces el volumen", "Con diez veces lotes y eventos se mantienen los límites de respuesta sin rediseño funcional.", "Comprueba que el crecimiento no degrada la utilidad del sistema.", STATUS_EXECUTE),
     case("PNF-011", "RNF10", "Mantenibilidad y regresión", "Builds, migraciones y pruebas pasan después de cambios; código, contratos y arquitectura están documentados.", "Reduce el riesgo de que una corrección rompa módulos ya terminados.", STATUS_EXECUTE),
-    case("PNF-012", "RNF11", "Interoperabilidad", "La API entrega JSON documentado y se valida la brecha frente a OAuth 2.0 y GS1 EPCIS 2.0.", "Permite integrar inventario, logística, calidad y otros actores sin acoplamiento propietario.", STATUS_IMPLEMENT),
+    case("PNF-012", "RNF11", "Interoperabilidad", "La API entrega JSON documentado y mantiene endpoints EPCIS separados, protegidos por el JWT interno.", "Permite preparar integraciones futuras sin introducir autenticación externa en la operación local.", STATUS_IMPLEMENT),
     case("PNF-013", "Transversal", "Compatibilidad y accesibilidad", "Flujos críticos funcionan en Chrome, Edge, Firefox y móvil, con teclado, etiquetas y contraste legibles.", "La aplicación debe ser operable desde los dispositivos reales de planta y consulta pública.", STATUS_EXECUTE),
 ]
 
@@ -398,7 +393,7 @@ def add_summary_table(doc):
 def add_definition_table(doc):
     rows = [
         ("Objetivo", "Demostrar que Trazaap satisface sus requisitos funcionales y no funcionales sin perder integridad entre PostgreSQL, la API, el frontend y Hyperledger Fabric."),
-        ("Alcance", "Autenticación, RBAC, proveedores, materias primas, recepción, inspección, productos, órdenes, manufactura, liberación, inventarios, trazabilidad, QR, reportes, blockchain y atributos de calidad."),
+        ("Alcance", "Autenticación, RBAC, proveedores, materias primas, recepción, inspección, productos, órdenes, manufactura, liberación, inventarios, trazabilidad por lote, reportes, blockchain y documentos sanitarios transversales."),
         ("Entorno", "Aplicación local con frontend Next.js, backend Node.js/Express, PostgreSQL y red Hyperledger Fabric desplegada en Docker."),
         ("Datos", "Usuarios de cada rol, proveedores, materias primas, recetas, recepciones, órdenes, lotes producidos, liberaciones y casos deliberadamente inválidos."),
         ("Criterio de entrada", "Servicios activos, migraciones aplicadas, usuarios y catálogos disponibles, red Fabric operativa y versión del código identificada."),
@@ -629,7 +624,7 @@ def build_document():
     doc.core_properties.title = "Plan integral de pruebas Trazaap"
     doc.core_properties.subject = "Matriz funcional, blockchain y no funcional"
     doc.core_properties.author = "Equipo de proyecto Trazaap"
-    doc.core_properties.keywords = "Trazaap, pruebas, trazabilidad, Hyperledger Fabric, calidad"
+    doc.core_properties.keywords = "Trazaap, pruebas, trazabilidad, Hyperledger Fabric, inocuidad"
     doc.save(OUT)
     print(OUT)
     print(f"Casos: {len(ALL_CASES)}")

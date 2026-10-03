@@ -3,12 +3,9 @@ import { ErrorHttp } from '../../middlewares/errorHttp.js';
 
 const PASOS = {
   recepcion: { type: 'ObjectEvent', action: 'ADD', bizStep: 'receiving' },
-  envasado: { type: 'ObjectEvent', action: 'OBSERVE', bizStep: 'packing' },
   almacenamiento: { type: 'ObjectEvent', action: 'OBSERVE', bizStep: 'storing' },
-  calidad: { type: 'ObjectEvent', action: 'OBSERVE', bizStep: 'inspecting' },
   liberacion: { type: 'ObjectEvent', action: 'OBSERVE', bizStep: 'inspecting' },
-  despacho: { type: 'ObjectEvent', action: 'OBSERVE', bizStep: 'shipping' },
-  devolucion: { type: 'ObjectEvent', action: 'OBSERVE', bizStep: 'receiving', disposition: 'returned' }
+  despacho: { type: 'ObjectEvent', action: 'OBSERVE', bizStep: 'shipping' }
 };
 
 function requerido(valor, campo) {

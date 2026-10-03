@@ -55,8 +55,11 @@ export function normalizarCodigoFabrica(value) {
   return codigo;
 }
 
-export function formatearLote(codigoFabrica, fechaFabricacion, fechaVencimiento, consecutivo) {
-  const codigo = normalizarCodigoFabrica(codigoFabrica);
+export function formatearLote(prefijoProducto, fechaFabricacion, fechaVencimiento, consecutivo) {
+  const prefijo = normalizarPrefijoLote(prefijoProducto);
+  if (!esPrefijoLoteValido(prefijo)) {
+    throw new Error('El prefijo del producto debe tener entre 2 y 5 caracteres alfanumericos.');
+  }
   const fabricacion = normalizarFechaProduccion(fechaFabricacion);
   const vencimiento = normalizarFechaProduccion(fechaVencimiento);
   if (vencimiento < fabricacion) throw new Error('La fecha de vencimiento no puede ser anterior a la fabricacion.');
@@ -65,7 +68,7 @@ export function formatearLote(codigoFabrica, fechaFabricacion, fechaVencimiento,
     throw new Error('El consecutivo del lote debe estar entre 1 y 9999.');
   }
 
-  return `${codigo}-${fabricacion.replaceAll('-', '')}-${vencimiento.replaceAll('-', '')}-${String(numero).padStart(4, '0')}`;
+  return `${prefijo}-${fabricacion.replaceAll('-', '')}-${vencimiento.replaceAll('-', '')}-${String(numero).padStart(4, '0')}`;
 }
 
 export function calcularFechaVencimiento(fechaProduccion, vidaUtilDias) {

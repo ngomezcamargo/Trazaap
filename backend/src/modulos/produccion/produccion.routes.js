@@ -18,8 +18,7 @@ import {
   obtenerContextoManufacturaController,
   obtenerDetalleProductoFabricadoController,
   obtenerDetalleOrdenController,
-  registrarManufacturaController,
-  registrarTiemposController
+  registrarManufacturaController
 } from './produccion.controller.js';
 import {
   calcularInsumosSchema,
@@ -28,8 +27,7 @@ import {
   actualizarEstadoOrdenSchema,
   asociarMateriasSchema,
   crearOrdenProduccionSchema,
-  registroManufacturaSchema,
-  registrarTiemposSchema
+  registroManufacturaSchema
 } from './produccion.schemas.js';
 
 const router = Router();
@@ -49,7 +47,6 @@ router.post('/calcular-insumos', rolesMiddleware('administrador'), validarSolici
 router.put('/ordenes/:id/estado', rolesMiddleware('administrador'), validarSolicitud(actualizarEstadoOrdenSchema), manejarAsync(actualizarEstadoOrdenController));
 router.post('/ordenes/:id/materias', rolesMiddleware('administrador'), validarSolicitud(asociarMateriasSchema), manejarAsync(asociarMateriasController));
 router.put('/ordenes/:id/materias/:materiaId', rolesMiddleware('administrador'), validarSolicitud(actualizarCantidadRealMateriaSchema), manejarAsync(actualizarCantidadRealMateriaController));
-router.post('/ordenes/:id/tiempos', rolesMiddleware('operario'), validarSolicitud(registrarTiemposSchema), manejarAsync(registrarTiemposController));
 router.post('/ordenes/:id/productos/:productoId/manufactura', rolesMiddleware('operario'), validarSolicitud(registroManufacturaSchema), manejarAsync(registrarManufacturaController));
 
 export default router;

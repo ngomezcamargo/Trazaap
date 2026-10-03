@@ -1,6 +1,6 @@
 # Base de datos actual consolidada
 
-Este documento resume el estado actual del esquema de PostgreSQL despues de aplicar las migraciones `001` a `011`.
+Este documento describe la unica estructura vigente de PostgreSQL que utiliza Trazaap.
 
 La migracion unica oficial esta en:
 
@@ -8,13 +8,8 @@ La migracion unica oficial esta en:
 backend/sql/001_schema_actual.sql
 ```
 
-Las migraciones historicas quedaron archivadas en:
-
-```text
-backend/sql_historico/
-```
-
-El archivo de documentacion `backend/documentacion/schema_actual_consolidado.sql` conserva una copia del mismo esquema como referencia.
+No se requiere ejecutar ningun otro archivo SQL. Las cargas iniciales de datos se realizan
+con los comandos `npm run seed` y `npm run seed:materias`.
 
 ## Roles vigentes
 
@@ -24,11 +19,7 @@ El sistema usa tres roles oficiales:
 - `gerente`
 - `operario`
 
-La migracion `011_normalizar_roles.sql` migra datos antiguos:
-
-- `admin` pasa a `administrador`
-- `gerencia` pasa a `gerente`
-- `operario` se conserva
+Los nombres validos de rol son `administrador`, `gerente` y `operario`.
 
 ## Tablas actuales
 
@@ -48,23 +39,16 @@ La migracion `011_normalizar_roles.sql` migra datos antiguos:
 - `ordenes_produccion_productos`: productos programados dentro de una orden.
 - `ordenes_produccion_materias`: materias primas planificadas y reales usadas en una orden.
 - `registro_manufactura`: ejecucion real por producto de la orden, con lote producido, unidades y tiempos/temperaturas reales.
-- `tiempos_produccion`: registros historicos de tiempos, temperaturas y lotes.
 - `liberacion_producto`: control final de empaque, etiquetado, lote visible, vencimiento y calidad antes de despacho.
 - `inventario_producto_terminado`: lotes aprobados en liberacion y disponibles para despacho.
+- `documentos_inocuidad`: metadatos de documentos sanitarios transversales almacenados en MinIO, con entidad emisora, referencia y vigencia.
+- `epcis_identificadores_lote` y `auditoria_interoperabilidad`: interoperabilidad GS1 EPCIS preparada y auditable.
+- `consecutivos_lote_producto`: consecutivos de lotes por producto y fechas de fabricacion/vencimiento.
+- `alertas_vencimiento_lote`: alertas unicas de proximo vencimiento y vencimiento.
 
-## Migraciones absorbidas
-
-- `001_init.sql`: estructura inicial.
-- `002_operacion_recepcion_y_catalogos.sql`: ampliacion de proveedores, materias primas, recepciones e inspecciones.
-- `003_inventario_materias_primas.sql`: inventario de materias primas.
-- `004_unidad_medida_recepcion.sql`: unidad de medida en recepciones.
-- `005_unidad_base_materias_primas.sql`: unidad base, tipo de insumo y restricciones de materias primas.
-- `006_normalizar_unidades_inventario.sql`: normalizacion de unidades en inventario.
-- `007_observaciones_producto_orden.sql`: observaciones por producto en orden.
-- `008_productos_fabricados_y_recetas.sql`: productos fabricados y recetas.
-- `009_tiempos_y_mojes_en_producto.sql`: parametros de proceso de productos fabricados.
-- `010_limpieza_mojes_y_columnas_obsoletas.sql`: eliminacion de mojes y columnas obsoletas.
-- `011_normalizar_roles.sql`: roles oficiales `administrador`, `gerente`, `operario`.
+Los controles de inocuidad que permanecen en el alcance se registran dentro de las etapas
+operativas de recepcion, manufactura, liberacion y despacho. No existe un modulo
+independiente de definiciones de calidad ni de devoluciones/no conformidades.
 
 ## Modelo de inventario por produccion
 
@@ -94,6 +78,10 @@ La tabla `liberacion_producto` registra las validaciones obligatorias de etiquet
 
 Cuando la liberacion queda `aprobado`, el sistema crea automaticamente el registro en `inventario_producto_terminado` con estado `disponible`. Los productos retenidos o rechazados no quedan disponibles para despacho.
 
+## Despachos parciales
+
+La tabla despachos contiene la salida comercial y logistica: cliente, factura, fecha, responsable, conductor, placa, temperaturas, condiciones del vehiculo y canal. La tabla despacho_detalle enlaza cada despacho con el inventario terminado y conserva la cantidad despachada por lote. Por eso un lote puede tener varios despachos y no se repiten esos datos en liberacion_producto.
+
 ## Blockchain
 
 PostgreSQL no almacena hashes, bloques ni evidencia blockchain. Los datos operativos permanecen en las tablas funcionales y la evidencia criptografica se registra en Hyperledger Fabric mediante chaincode.
@@ -102,17 +90,12 @@ Para recepciones e inspecciones, el backend normaliza el registro operativo, cal
 
 ## Uso recomendado
 
-Para una base vacia o una instalacion limpia, usa el flujo normal:
+Para una base vacia o una instalacion limpia, usa unicamente este flujo:
 
 ```bash
 cd backend
 npm run migrate
 ```
 
-Para documentacion o revision academica, tambien queda una copia en:
-
-```text
-backend/documentacion/schema_actual_consolidado.sql
-```
-
-Si ya tenias una base creada con las migraciones antiguas, no necesitas aplicar este archivo sobre esa misma base salvo que quieras recrearla desde cero. En ese caso, primero crea una base vacia y luego ejecuta `npm run migrate`.
+El comando es idempotente para las tablas y restricciones vigentes. En una base existente,
+conserva los datos operativos y aplica los ajustes compatibles del esquema consolidado.

@@ -16,8 +16,10 @@ const router = Router();
 
 router.use(autenticarJwt);
 
-router.get('/', rolesMiddleware('gerente'), manejarAsync(listarProveedoresController));
-router.get('/:id', rolesMiddleware('gerente'), manejarAsync(consultarProveedorController));
+// El operario necesita consultar proveedores para poder registrar recepciones.
+// Las operaciones de alta, edición y eliminación siguen reservadas al administrador.
+router.get('/', rolesMiddleware('gerente', 'operario'), manejarAsync(listarProveedoresController));
+router.get('/:id', rolesMiddleware('gerente', 'operario'), manejarAsync(consultarProveedorController));
 router.post('/', rolesMiddleware('administrador'), validarSolicitud(proveedorSchema), manejarAsync(crearProveedorController));
 router.put('/:id', rolesMiddleware('administrador'), validarSolicitud(proveedorSchema), manejarAsync(actualizarProveedorController));
 router.delete('/:id', rolesMiddleware('administrador'), manejarAsync(eliminarProveedorController));

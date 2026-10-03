@@ -22,7 +22,7 @@ const INTERVALO_MS = 5000;
 const TAMANO_LOTE = 10;
 const MAX_INTENTOS = 10;
 let temporizador = null;
-let ejecutando = false;
+let procesamientoActual = null;
 
 async function procesarItem(item) {
   if (item.operacion === 'inicializar_inventario_terminado') {
@@ -77,10 +77,10 @@ async function resolverFalloOperativo(item, error) {
 }
 
 export async function procesarOutboxAhora() {
-  if (ejecutando) return 0;
-  ejecutando = true;
-  let procesados = 0;
-  try {
+  if (procesamientoActual) return procesamientoActual;
+
+  procesamientoActual = (async () => {
+    let procesados = 0;
     for (let i = 0; i < TAMANO_LOTE; i += 1) {
       const item = await tomarSiguienteEventoOutbox(MAX_INTENTOS);
       if (!item) break;
@@ -101,10 +101,14 @@ export async function procesarOutboxAhora() {
       }
       procesados += 1;
     }
+    return procesados;
+  })();
+
+  try {
+    return await procesamientoActual;
   } finally {
-    ejecutando = false;
+    procesamientoActual = null;
   }
-  return procesados;
 }
 
 export function iniciarProcesadorOutbox() {

@@ -15,6 +15,5 @@ export const produccionServicio = {
   actualizarEstadoOrden: (ordenId, payload) => api.put(`/produccion/ordenes/${ordenId}/estado`, payload),
   asociarMaterias: (ordenId, payload) => api.post(`/produccion/ordenes/${ordenId}/materias`, payload),
   actualizarCantidadRealMateria: (ordenId, materiaId, payload) => api.put(`/produccion/ordenes/${ordenId}/materias/${materiaId}`, payload),
-  registrarTiempos: (ordenId, payload) => api.post(`/produccion/ordenes/${ordenId}/tiempos`, payload),
   registrarManufactura: (ordenId, productoId, payload) => api.post(`/produccion/ordenes/${ordenId}/productos/${productoId}/manufactura`, payload)
 };

@@ -174,8 +174,8 @@ export default function DespachosPage() {
               <table className="tabla">
                 <thead><tr><th>Lote</th><th>Producto</th><th>Liberadas</th><th>Reservadas</th><th>Despachadas</th><th>Disponibles</th><th>Estado</th><th>Vencimiento</th></tr></thead>
                 <tbody>
-                  {inventarios.map((item) => (
-                    <tr key={item.id_inventario}>
+                  {inventarios.map((item, index) => (
+                    <tr key={`${item.id_inventario}-${item.lote || item.producto || 'inventario'}-${index}`}>
                       <td><strong>{item.lote}</strong><small className="tabla-subtexto">{item.codigo_orden}</small></td>
                       <td>{item.producto}<small className="tabla-subtexto">{item.tamano_presentacion}</small></td>
                       <td>{item.unidades_liberadas}</td><td>{item.unidades_reservadas}</td><td>{item.unidades_despachadas}</td><td><strong>{item.unidades_disponibles}</strong></td>
@@ -195,12 +195,12 @@ export default function DespachosPage() {
               <table className="tabla">
                 <thead><tr><th>Despacho</th><th>Cliente</th><th>Factura</th><th>Lotes y cantidades</th><th>Fecha</th><th>Transporte</th><th>Codigo privado</th><th>Estado</th></tr></thead>
                 <tbody>
-                  {despachos.map((item) => (
-                    <tr key={item.id_despacho}>
+                  {despachos.map((item, index) => (
+                    <tr key={`${item.id_despacho}-${item.codigo_despacho || 'despacho'}-${index}`}>
                       <td><strong>{item.codigo_despacho}</strong>{item.es_heredado && <small className="tabla-subtexto">Registro heredado</small>}</td>
                       <td>{item.cliente || 'No disponible'}</td>
                       <td>{item.numero_factura}</td>
-                      <td>{(item.detalles || []).map((detalle) => <div key={detalle.id_detalle}>{detalle.lote}: {detalle.cantidad_despachada}</div>)}</td>
+                      <td>{(item.detalles || []).map((detalle, detalleIndex) => <div key={`${detalle.id_detalle}-${detalle.lote || 'lote'}-${detalleIndex}`}>{detalle.lote}: {detalle.cantidad_despachada}</div>)}</td>
                       <td>{new Date(item.fecha_despacho).toLocaleString()}</td>
                       <td>{item.conductor || '-'}<small className="tabla-subtexto">{item.placa_vehiculo || '-'}</small></td>
                       <td className="codigo-privado">{item.codigo_cliente || '-'}</td>
@@ -225,7 +225,7 @@ export default function DespachosPage() {
                   {error && <div className="alerta error alerta-modal" role="alert">{error}</div>}
                   <h4>Destino comercial</h4>
                   <div className="grid grid-3">
-                    <div className="campo"><label>Cliente</label><select required value={form.id_cliente} onChange={(e) => setForm({ ...form, id_cliente: e.target.value })}><option value="">Selecciona cliente</option>{clientes.map((cliente) => <option key={cliente.id_cliente} value={cliente.id_cliente}>{cliente.nombre_razon_social} - {cliente.nit_documento}</option>)}</select></div>
+                    <div className="campo"><label>Cliente</label><select required value={form.id_cliente} onChange={(e) => setForm({ ...form, id_cliente: e.target.value })}><option value="">Selecciona cliente</option>{clientes.map((cliente, index) => <option key={`${cliente.id_cliente}-${cliente.nit_documento || 'cliente'}-${index}`} value={cliente.id_cliente}>{cliente.nombre_razon_social} - {cliente.nit_documento}</option>)}</select></div>
                     <div className="campo"><label>Numero de factura</label><input required value={form.numero_factura} onChange={(e) => setForm({ ...form, numero_factura: e.target.value })} /></div>
                     <div className="campo"><label>Fecha y hora de despacho</label><input type="datetime-local" required value={form.fecha_despacho} onChange={(e) => setForm({ ...form, fecha_despacho: e.target.value })} /></div>
                     <div className="campo"><label>Responsable</label><input value={usuario?.email || '-'} readOnly /></div>
@@ -236,9 +236,9 @@ export default function DespachosPage() {
                   <div className="tabla-contenedor selector-lotes">
                     <table className="tabla">
                       <thead><tr><th>Incluir</th><th>Lote</th><th>Producto</th><th>Disponible</th><th>Cantidad</th></tr></thead>
-                      <tbody>{inventarios.filter((item) => Number(item.unidades_disponibles) > 0).map((item) => {
+                      <tbody>{inventarios.filter((item) => Number(item.unidades_disponibles) > 0).map((item, index) => {
                         const activo = Object.hasOwn(cantidades, item.id_inventario);
-                        return <tr key={item.id_inventario}>
+                        return <tr key={`${item.id_inventario}-${item.lote || item.producto || 'selector'}-${index}`}>
                           <td><input type="checkbox" checked={activo} onChange={(e) => seleccionar(item.id_inventario, e.target.checked)} /></td>
                           <td>{item.lote}</td><td>{item.producto} ({item.tamano_presentacion})</td><td>{item.unidades_disponibles}</td>
                           <td><input className="entrada-cantidad" type="number" min="1" max={item.unidades_disponibles} disabled={!activo} required={activo} value={cantidades[item.id_inventario] || ''} onChange={(e) => setCantidades({ ...cantidades, [item.id_inventario]: e.target.value })} /></td>

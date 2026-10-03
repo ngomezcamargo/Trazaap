@@ -1,6 +1,15 @@
 -- Trazaap - esquema actual consolidado
--- Migracion unica oficial para crear la base de datos actual desde cero.
--- Reemplaza las migraciones historicas 001 a 011, archivadas en backend/sql_historico.
+-- Esquema unico oficial y completo para una instalacion nueva desde cero.
+
+-- Depuracion de estructuras retiradas del modelo vigente.
+-- Estas tablas pertenecian a versiones anteriores y no tienen dependencias actuales.
+DROP TABLE IF EXISTS producto_materia_prima;
+DROP TABLE IF EXISTS tiempos_produccion;
+DROP TABLE IF EXISTS consecutivos_lote;
+DROP TABLE IF EXISTS consecutivos_lote_fabrica;
+DROP TABLE IF EXISTS lotes_producto_terminado;
+DROP TABLE IF EXISTS eventos_blockchain;
+DROP TABLE IF EXISTS traceability_events;
 
 CREATE TABLE IF NOT EXISTS roles (
   id BIGSERIAL PRIMARY KEY,
@@ -200,8 +209,7 @@ CREATE TABLE IF NOT EXISTS trazabilidad_eventos (
   creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-DROP TABLE IF EXISTS eventos_blockchain;
-DROP TABLE IF EXISTS traceability_events;
+-- PostgreSQL conserva los datos operativos; la evidencia criptografica vive en Fabric.
 
 CREATE TABLE IF NOT EXISTS productos_fabricados (
   id BIGSERIAL PRIMARY KEY,
@@ -319,13 +327,6 @@ BEGIN
   END IF;
 END $$;
 
-CREATE TABLE IF NOT EXISTS consecutivos_lote (
-  prefijo_producto VARCHAR(5) NOT NULL,
-  fecha_produccion DATE NOT NULL,
-  ultimo_consecutivo INTEGER NOT NULL DEFAULT 0 CHECK (ultimo_consecutivo >= 0),
-  PRIMARY KEY (prefijo_producto, fecha_produccion)
-);
-
 DO $$
 DECLARE
   constraint_name TEXT;
@@ -414,7 +415,6 @@ CREATE TABLE IF NOT EXISTS ordenes_produccion (
   id BIGSERIAL PRIMARY KEY,
   fecha_produccion DATE NOT NULL,
   codigo_orden VARCHAR(80) UNIQUE,
-  responsable_produccion BIGINT REFERENCES users(id),
   estado VARCHAR(30) NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'en_proceso', 'lista_para_liberacion', 'finalizada', 'cancelada')),
   observaciones TEXT,
   creado_por BIGINT NOT NULL REFERENCES users(id),
@@ -434,7 +434,7 @@ BEGIN
   END IF;
 END $$;
 
-ALTER TABLE ordenes_produccion ALTER COLUMN responsable_produccion DROP NOT NULL;
+ALTER TABLE ordenes_produccion DROP COLUMN IF EXISTS responsable_produccion;
 ALTER TABLE ordenes_produccion ALTER COLUMN estado TYPE VARCHAR(30);
 
 ALTER TABLE ordenes_produccion
@@ -510,26 +510,6 @@ CREATE TABLE IF NOT EXISTS ordenes_produccion_materias (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS tiempos_produccion (
-  id BIGSERIAL PRIMARY KEY,
-  orden_produccion_id BIGINT NOT NULL REFERENCES ordenes_produccion(id) ON DELETE CASCADE,
-  producto VARCHAR(120) NOT NULL,
-  es_bagel BOOLEAN NOT NULL DEFAULT false,
-  unidades_producidas INTEGER NOT NULL CHECK (unidades_producidas >= 0),
-  temperatura_crecimiento NUMERIC(6,2) NOT NULL,
-  tiempo_crecimiento_min INTEGER NOT NULL CHECK (tiempo_crecimiento_min >= 0),
-  temperatura_inmersion_agua NUMERIC(6,2),
-  tiempo_inmersion_agua_seg INTEGER CHECK (tiempo_inmersion_agua_seg IS NULL OR tiempo_inmersion_agua_seg >= 0),
-  temperatura_horneo NUMERIC(6,2) NOT NULL,
-  tiempo_horneo_min INTEGER NOT NULL CHECK (tiempo_horneo_min >= 0),
-  lote_producto VARCHAR(100) NOT NULL,
-  responsable_produccion BIGINT NOT NULL REFERENCES users(id),
-  observaciones TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-ALTER TABLE tiempos_produccion DROP COLUMN IF EXISTS numero_carro_escabiladero;
-
 CREATE TABLE IF NOT EXISTS registro_manufactura (
   id_manufactura BIGSERIAL PRIMARY KEY,
   id_orden_produccion BIGINT NOT NULL REFERENCES ordenes_produccion(id) ON DELETE CASCADE,
@@ -548,6 +528,7 @@ CREATE TABLE IF NOT EXISTS registro_manufactura (
   observaciones TEXT,
   registrado_por_usuario_id BIGINT REFERENCES users(id),
   registrado_por VARCHAR(120) NOT NULL,
+  equipos_utilizados TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (id_orden_produccion, id_producto)
 );
@@ -567,20 +548,8 @@ WHERE rm.id_orden_produccion = op.id
   AND rm.id_producto = opp.id
   AND rm.fecha_vencimiento_calculada IS NULL;
 
-INSERT INTO consecutivos_lote (prefijo_producto, fecha_produccion, ultimo_consecutivo)
-SELECT p.prefijo_lote,
-       to_date(split_part(rm.lote_producido, '-', 2), 'YYYYMMDD'),
-       MAX(COALESCE(NULLIF(split_part(rm.lote_producido, '-', 3), '')::INTEGER, 0))
-FROM registro_manufactura rm
-JOIN ordenes_produccion_productos opp ON opp.id = rm.id_producto
-JOIN productos_fabricados p ON p.id = opp.producto_fabricado_id
-WHERE rm.lote_producido ~ '^[A-Z0-9]{2,5}-[0-9]{8}-[0-9]+$'
-GROUP BY p.prefijo_lote, to_date(split_part(rm.lote_producido, '-', 2), 'YYYYMMDD')
-ON CONFLICT (prefijo_producto, fecha_produccion) DO UPDATE
-SET ultimo_consecutivo = GREATEST(consecutivos_lote.ultimo_consecutivo, EXCLUDED.ultimo_consecutivo);
-
-
-DROP TABLE IF EXISTS lotes_producto_terminado CASCADE;
+-- La antigua tabla lotes_producto_terminado ya no forma parte del modelo.
+-- Se conserva cualquier dato existente y no se crea en instalaciones nuevas.
 
 CREATE TABLE IF NOT EXISTS ubicaciones_almacenamiento (
   id_ubicacion BIGSERIAL PRIMARY KEY,
@@ -683,11 +652,6 @@ CREATE TABLE IF NOT EXISTS liberacion_producto (
   fecha_liberacion TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   responsable_liberacion BIGINT NOT NULL REFERENCES users(id),
   tipo_empaque VARCHAR(80) NOT NULL,
-  numero_factura VARCHAR(80),
-  conductor VARCHAR(120),
-  placa_vehiculo VARCHAR(20),
-  limpieza_vehiculo VARCHAR(20) CHECK (limpieza_vehiculo IS NULL OR limpieza_vehiculo IN ('cumple', 'no_cumple')),
-  documentacion_dotacion VARCHAR(20) CHECK (documentacion_dotacion IS NULL OR documentacion_dotacion IN ('cumple', 'no_cumple')),
   unidades_producidas INTEGER NOT NULL CHECK (unidades_producidas >= 0),
   unidades_empacadas INTEGER NOT NULL CHECK (unidades_empacadas > 0),
   peso_neto NUMERIC(12,3) NOT NULL CHECK (peso_neto > 0),
@@ -705,11 +669,11 @@ CREATE TABLE IF NOT EXISTS liberacion_producto (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE liberacion_producto ADD COLUMN IF NOT EXISTS numero_factura VARCHAR(80);
-ALTER TABLE liberacion_producto ADD COLUMN IF NOT EXISTS conductor VARCHAR(120);
-ALTER TABLE liberacion_producto ADD COLUMN IF NOT EXISTS placa_vehiculo VARCHAR(20);
-ALTER TABLE liberacion_producto ADD COLUMN IF NOT EXISTS limpieza_vehiculo VARCHAR(20);
-ALTER TABLE liberacion_producto ADD COLUMN IF NOT EXISTS documentacion_dotacion VARCHAR(20);
+ALTER TABLE liberacion_producto DROP COLUMN IF EXISTS numero_factura;
+ALTER TABLE liberacion_producto DROP COLUMN IF EXISTS conductor;
+ALTER TABLE liberacion_producto DROP COLUMN IF EXISTS placa_vehiculo;
+ALTER TABLE liberacion_producto DROP COLUMN IF EXISTS limpieza_vehiculo;
+ALTER TABLE liberacion_producto DROP COLUMN IF EXISTS documentacion_dotacion;
 ALTER TABLE liberacion_producto ADD COLUMN IF NOT EXISTS verificacion_envase BOOLEAN NOT NULL DEFAULT true;
 
 CREATE TABLE IF NOT EXISTS inventario_producto_terminado (
@@ -803,8 +767,130 @@ SELECT setval(
   true
 );
 
-DROP TABLE IF EXISTS liberaciones_producto CASCADE;
+DO $$
+BEGIN
+  IF to_regclass('public.documentos_proveedor_materia') IS NOT NULL
+     AND to_regclass('public.documentos_inocuidad') IS NULL THEN
+    ALTER TABLE documentos_proveedor_materia RENAME TO documentos_inocuidad;
+  END IF;
+END $$;
 
+CREATE TABLE IF NOT EXISTS documentos_inocuidad (
+  id_documento BIGSERIAL PRIMARY KEY,
+  tipo_documental VARCHAR(160) NOT NULL,
+  entidad_emisora VARCHAR(160) NOT NULL,
+  numero_documento VARCHAR(120),
+  nombre_original VARCHAR(255) NOT NULL,
+  objeto_minio VARCHAR(500) NOT NULL UNIQUE,
+  bucket VARCHAR(100) NOT NULL,
+  mime_type VARCHAR(120) NOT NULL,
+  tamano_bytes BIGINT NOT NULL CHECK (tamano_bytes > 0),
+  fecha_emision DATE,
+  fecha_vencimiento DATE,
+  observaciones TEXT,
+  estado VARCHAR(20) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'anulado')),
+  cargado_por BIGINT NOT NULL REFERENCES users(id),
+  anulado_por BIGINT REFERENCES users(id),
+  anulado_en TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT documentos_vigencia_check CHECK (
+    fecha_vencimiento IS NULL OR fecha_emision IS NULL OR fecha_vencimiento >= fecha_emision
+  )
+);
+
+ALTER TABLE documentos_inocuidad
+  ADD COLUMN IF NOT EXISTS entidad_emisora VARCHAR(160);
+ALTER TABLE documentos_inocuidad
+  ADD COLUMN IF NOT EXISTS numero_documento VARCHAR(120);
+UPDATE documentos_inocuidad
+SET entidad_emisora = 'No especificada'
+WHERE entidad_emisora IS NULL OR btrim(entidad_emisora) = '';
+ALTER TABLE documentos_inocuidad
+  ALTER COLUMN entidad_emisora SET NOT NULL;
+ALTER TABLE documentos_inocuidad
+  ALTER COLUMN tipo_documental TYPE VARCHAR(160);
+ALTER TABLE documentos_inocuidad
+  DROP CONSTRAINT IF EXISTS documentos_asociacion_exclusiva_check;
+ALTER TABLE documentos_inocuidad
+  DROP CONSTRAINT IF EXISTS documentos_tipo_documental_check;
+ALTER TABLE documentos_inocuidad
+  DROP CONSTRAINT IF EXISTS documentos_proveedor_materia_tipo_documental_check;
+ALTER TABLE documentos_inocuidad
+  DROP CONSTRAINT IF EXISTS documentos_vigencia_check;
+ALTER TABLE documentos_inocuidad
+  ADD CONSTRAINT documentos_tipo_documental_check CHECK (length(btrim(tipo_documental)) >= 2);
+ALTER TABLE documentos_inocuidad
+  ADD CONSTRAINT documentos_vigencia_check CHECK (
+    fecha_vencimiento IS NULL OR fecha_emision IS NULL OR fecha_vencimiento >= fecha_emision
+  );
+ALTER TABLE documentos_inocuidad
+  DROP COLUMN IF EXISTS proveedor_id;
+ALTER TABLE documentos_inocuidad
+  DROP COLUMN IF EXISTS materia_prima_id;
+ALTER TABLE documentos_inocuidad
+  DROP COLUMN IF EXISTS reception_inspection_id;
+
+
+CREATE TABLE IF NOT EXISTS epcis_identificadores_lote (
+  id BIGSERIAL PRIMARY KEY,
+  lote VARCHAR(100) NOT NULL UNIQUE,
+  epc_class_uri VARCHAR(500) NOT NULL,
+  producto_uri VARCHAR(500),
+  read_point_uri VARCHAR(500),
+  biz_location_uri VARCHAR(500),
+  actualizado_por BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (epc_class_uri ~ '^urn:epc:class:|^https?://'),
+  CHECK (producto_uri IS NULL OR producto_uri ~ '^urn:epc:idpat:|^https?://'),
+  CHECK (read_point_uri IS NULL OR read_point_uri ~ '^urn:epc:id:sgln:|^https?://'),
+  CHECK (biz_location_uri IS NULL OR biz_location_uri ~ '^urn:epc:id:sgln:|^https?://')
+);
+
+CREATE TABLE IF NOT EXISTS auditoria_interoperabilidad (
+  id BIGSERIAL PRIMARY KEY,
+  direccion VARCHAR(20) NOT NULL CHECK (direccion IN ('capture', 'query')),
+  estandar VARCHAR(30) NOT NULL DEFAULT 'GS1_EPCIS_2.0',
+  actor VARCHAR(255) NOT NULL,
+  cantidad_eventos INTEGER NOT NULL DEFAULT 0 CHECK (cantidad_eventos >= 0),
+  resultado VARCHAR(20) NOT NULL CHECK (resultado IN ('aceptado', 'rechazado', 'generado')),
+  codigo_error VARCHAR(100),
+  metadatos JSONB NOT NULL DEFAULT '{}'::JSONB CHECK (jsonb_typeof(metadatos) = 'object'),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS consecutivos_lote_producto (
+  prefijo_producto VARCHAR(5) NOT NULL,
+  fecha_fabricacion DATE NOT NULL,
+  fecha_vencimiento DATE NOT NULL,
+  ultimo_consecutivo INTEGER NOT NULL DEFAULT 0 CHECK (ultimo_consecutivo BETWEEN 0 AND 9999),
+  PRIMARY KEY (prefijo_producto, fecha_fabricacion, fecha_vencimiento),
+  CHECK (prefijo_producto ~ '^[A-Z0-9]{2,5}$'),
+  CHECK (fecha_vencimiento >= fecha_fabricacion)
+);
+
+CREATE TABLE IF NOT EXISTS alertas_vencimiento_lote (
+  id_alerta BIGSERIAL PRIMARY KEY,
+  id_inventario BIGINT NOT NULL REFERENCES inventario_producto_terminado(id_inventario) ON DELETE CASCADE,
+  tipo_alerta VARCHAR(30) NOT NULL CHECK (tipo_alerta IN ('proximo_vencimiento', 'vencido')),
+  fecha_vencimiento DATE NOT NULL,
+  dias_anticipacion INTEGER CHECK (dias_anticipacion IS NULL OR dias_anticipacion >= 0),
+  evidencia_estado VARCHAR(20) NOT NULL DEFAULT 'pendiente' CHECK (evidencia_estado IN ('pendiente', 'registrada', 'error')),
+  evidencia_error TEXT,
+  detectada_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  evidencia_at TIMESTAMPTZ,
+  UNIQUE (id_inventario, tipo_alerta)
+);
+
+CREATE INDEX IF NOT EXISTS idx_documentos_tipo ON documentos_inocuidad (tipo_documental);
+CREATE INDEX IF NOT EXISTS idx_documentos_emisora ON documentos_inocuidad (entidad_emisora);
+CREATE INDEX IF NOT EXISTS idx_documentos_vencimiento ON documentos_inocuidad (fecha_vencimiento) WHERE estado = 'activo';
+CREATE INDEX IF NOT EXISTS idx_documentos_estado ON documentos_inocuidad (estado, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_auditoria_interoperabilidad_fecha ON auditoria_interoperabilidad (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_auditoria_interoperabilidad_actor ON auditoria_interoperabilidad (actor, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alertas_vencimiento_tipo_fecha ON alertas_vencimiento_lote (tipo_alerta, fecha_vencimiento);
+CREATE INDEX IF NOT EXISTS idx_alertas_vencimiento_evidencia ON alertas_vencimiento_lote (evidencia_estado, detectada_at) WHERE evidencia_estado <> 'registrada';
 CREATE INDEX IF NOT EXISTS idx_receptions_lote ON receptions(lote_proveedor);
 CREATE INDEX IF NOT EXISTS idx_receptions_proveedor ON receptions(proveedor_id);
 CREATE INDEX IF NOT EXISTS idx_eventos_lote ON trazabilidad_eventos(lote, creado_en DESC);
@@ -817,6 +903,7 @@ CREATE INDEX IF NOT EXISTS idx_ordenes_produccion_fecha ON ordenes_produccion(fe
 CREATE INDEX IF NOT EXISTS idx_ordenes_materiales_orden ON ordenes_produccion_materias(orden_produccion_id);
 CREATE INDEX IF NOT EXISTS idx_registro_manufactura_lote ON registro_manufactura(lote_producido);
 CREATE INDEX IF NOT EXISTS idx_registro_manufactura_orden ON registro_manufactura(id_orden_produccion);
+CREATE INDEX IF NOT EXISTS idx_registro_manufactura_hora_inicio_fin ON registro_manufactura(hora_inicio, hora_fin);
 CREATE INDEX IF NOT EXISTS idx_almacenamientos_lote ON almacenamientos_lote(lote_producido, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_almacenamientos_estado ON almacenamientos_lote(estado, fecha_ingreso);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_almacenamiento_activo_manufactura

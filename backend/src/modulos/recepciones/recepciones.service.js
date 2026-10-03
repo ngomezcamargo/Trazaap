@@ -1,13 +1,4 @@
 import {
-  registrarEventoCritico,
-  registrarEventoInspeccion,
-  registrarEventoRecepcion,
-  registrarVersionEventoCritico
-} from '../blockchain/blockchain.service.js';
-import {
-  buscarInventarioMateriaPorMateriaPrimaId,
-  buscarContextoRecepcionBlockchain,
-  buscarMovimientoInventarioPorReferencia,
   crearRecepcion,
   listarRecepciones,
   obtenerDetalleRecepcion,
@@ -15,8 +6,7 @@ import {
 } from './recepciones.repository.js';
 
 export async function crearRecepcionService(data, actor) {
-  const { recepcion, inspeccion } = await crearRecepcion(data);
-  const contexto = await buscarContextoRecepcionBlockchain(recepcion.id);
+  const { recepcion, inspeccion } = await crearRecepcion(data, actor);
 
   await registrarEventoTrazabilidad({
     recepcion_id: recepcion.id,
@@ -43,39 +33,12 @@ export async function crearRecepcionService(data, actor) {
     }
   });
 
-  let evidenciaRecepcion = null;
-  let evidenciaInspeccion = null;
-
-  if (contexto) {
-    evidenciaRecepcion = await registrarEventoRecepcion(contexto, actor);
-    evidenciaInspeccion = await registrarEventoInspeccion(contexto, actor);
-  }
-
-  const evidenciaInventario = [];
-  if (recepcion.estado_recepcion === 'aceptado') {
-    const inventario = await buscarInventarioMateriaPorMateriaPrimaId(recepcion.materia_prima_id);
-    const movimiento = await buscarMovimientoInventarioPorReferencia('recepcion', recepcion.id);
-
-    if (inventario?.id) {
-      evidenciaInventario.push(await registrarVersionEventoCritico(
-        'inventario_materia_prima',
-        inventario.id,
-        actor,
-        `Entrada de inventario por recepcion ${recepcion.numero_lote}`
-      ));
-    }
-    if (movimiento?.id) {
-      evidenciaInventario.push(await registrarEventoCritico('movimiento_inventario', movimiento.id, actor));
-    }
-  }
-
   return {
     ...recepcion,
     inspeccion,
     blockchain: {
-      recepcion: evidenciaRecepcion,
-      inspeccion: evidenciaInspeccion,
-      inventario: evidenciaInventario.filter(Boolean)
+      estado: 'PENDIENTE',
+      mensaje: 'Recepcion, inspeccion e inventario encolados para Hyperledger Fabric'
     }
   };
 }

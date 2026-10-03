@@ -733,8 +733,8 @@ def add_document_content(doc):
     add_heading(doc, "5. Confirmación del cliente", 1)
     add_body(
         doc,
-        "El cliente receptor no necesita una cuenta interna. Desde el portal público del QR puede consultar "
-        "el lote y confirmar la recepción mediante el número de factura o el código de cliente."
+        "El cliente receptor no necesita una cuenta interna para recibir un reporte. La consulta operativa "
+        "del lote se realiza dentro del sistema y la información autorizada puede compartirse mediante el reporte."
     )
     add_list(doc, [
         "El backend valida las credenciales contra la información operativa del lote.",
@@ -746,8 +746,8 @@ def add_document_content(doc):
     add_callout(
         doc,
         "Privacidad",
-        "El portal del consumidor no expone hashes, identidades Fabric ni información comercial sensible. "
-        "El detalle técnico permanece reservado para usuarios autorizados y el acceso de auditoría."
+        "Los reportes no exponen hashes, identidades Fabric ni información comercial sensible. "
+        "El detalle técnico permanece reservado para usuarios autorizados y auditoría."
     )
 
     add_heading(doc, "6. Alertas de vencimiento", 1)
@@ -767,7 +767,7 @@ def add_document_content(doc):
     add_heading(doc, "7. Cambios en frontend, trazabilidad y reportes", 1)
     frontend_rows = [
         ("Liberación", "Muestra los motivos del chaincode dentro del formulario y conserva los datos para corregirlos."),
-        ("Portal QR", "Permite consulta pública y confirmación controlada por factura o código."),
+        ("Consulta por lote", "Permite revisar la trazabilidad interna y generar el reporte autorizado."),
         ("Dashboard", "Presenta alertas de lotes vencidos sin despacho."),
         ("Trazabilidad interna", "Muestra estado, hashes, mensaje, correcciones y decisiones automáticas."),
         ("Reporte PDF", "Incluye validación, decisión, motivos, fecha Fabric y txId por etapa."),
@@ -809,7 +809,7 @@ def add_document_content(doc):
         ("Backend", "13 de 13", "HTTP 503, rollback, inventario, credenciales públicas, hashes y RBAC."),
         ("Frontend", "17 rutas", "Compilación optimizada sin errores de tipos ni renderizado."),
         ("Red Fabric", "Correcto", "Chaincode 2.2 / secuencia 4 confirmado desde peer0 y peer1."),
-        ("Prueba visual", "Correcto", "Portal público, vista técnica, historial de correcciones y reporte."),
+        ("Prueba visual", "Correcto", "Vista técnica, historial de correcciones y reporte."),
     ]
     add_table(doc, ["Capa", "Resultado", "Cobertura"], test_rows, [1800, 1500, 6060], font_size=9)
 
@@ -849,7 +849,7 @@ def add_document_content(doc):
         ("4", "Un despacho fuera de rango se bloquea.", "Completado", "Reglas y motivos retornados por chaincode."),
         ("5", "Un despacho conforme se registra en Fabric.", "Completado", "Prueba de registrarDespacho."),
         ("6", "Inventario cambia solo tras aprobación.", "Completado", "Transacción y pruebas de no escritura."),
-        ("7", "Cliente confirma sin cuenta interna.", "Completado", "Portal público con factura o código."),
+        ("7", "La trazabilidad se consulta sin crear usuarios externos.", "Completado", "Consulta interna por lote y reporte autorizado."),
         ("8", "Lote vencido genera una sola alerta.", "Completado", "Job periódico y deduplicación Fabric."),
         ("9", "Trazabilidad y reporte muestran decisiones.", "Completado", "Vista técnica y reporte verificados."),
         ("10", "Pruebas automatizadas pasan.", "Completado", "10/10 chaincode y 13/13 backend."),
@@ -889,7 +889,7 @@ def add_document_content(doc):
         "Abrir el reporte PDF y comprobar estados, decisiones, fecha Fabric y txId.",
         "Intentar liberar un lote con un control fuera de rango y verificar el bloqueo.",
         "Corregir los datos, aprobar el despacho y comprobar el registro Fabric.",
-        "Abrir el portal QR y confirmar la recepción con factura o código de cliente.",
+        "Consultar el lote desde Trazabilidad y verificar la información autorizada del reporte.",
     ], ordered=True)
 
     add_heading(doc, "13.1 Comandos de verificación", 2)
@@ -912,7 +912,7 @@ def add_document_content(doc):
         ("Liberación/despacho", "backend/src/modulos/liberacion/liberacion.service.js"),
         ("Controles críticos", "backend/src/modulos/liberacion/controles-criticos.service.js"),
         ("Alertas", "backend/src/modulos/liberacion/vencimientos.job.js"),
-        ("Portal público", "backend/src/modulos/publico y frontend/src/app/verificar/[lote]"),
+        ("Consulta por lote", "backend/src/modulos/trazabilidad y frontend/src/app/trazabilidad"),
         ("Trazabilidad", "backend/src/modulos/trazabilidad y frontend/src/modulos/trazabilidad"),
         ("Despliegue", "fabric/scripts/deploy-chaincode.sh y fabric/scripts/env.sh"),
     ]

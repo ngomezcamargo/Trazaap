@@ -33,8 +33,19 @@ const dependenciasPredeterminadas = {
 };
 
 function validarChecks(data) {
-  if (!data.etiqueta_verificada || !data.verificacion_envase) {
+  const checks = [
+    data.etiqueta_verificada,
+    data.verificacion_envase,
+    data.lote_visible,
+    data.fecha_vencimiento_visible,
+    data.empaque_conforme,
+    data.producto_en_buen_estado
+  ];
+  if (checks.some((item) => typeof item !== 'boolean')) {
     throw new ErrorHttp(400, 'Debe completar todas las validaciones de liberacion.');
+  }
+  if (data.estado_liberacion === 'aprobado' && checks.some((item) => item !== true)) {
+    throw new ErrorHttp(422, 'Un lote con validaciones no conformes debe quedar retenido o rechazado.');
   }
 }
 
@@ -43,6 +54,7 @@ export function listarPendientesLiberacionService() {
 }
 
 export async function crearLiberacionService(data, usuario, deps = dependenciasPredeterminadas) {
+  deps = { ...dependenciasPredeterminadas, ...deps };
   const manufactura = await deps.buscarManufacturaPorId(data.id_manufactura);
   if (!manufactura) throw new ErrorHttp(404, 'Manufactura registrada no encontrada');
   if (!manufactura.id_almacenamiento || manufactura.estado_almacenamiento !== 'listo_para_liberacion') {

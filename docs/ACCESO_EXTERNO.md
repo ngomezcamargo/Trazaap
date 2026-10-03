@@ -1,4 +1,4 @@
-# Acceso externo y portal QR
+# Acceso externo y consulta por lote
 
 Trazaap diferencia los usuarios internos del sistema y los actores externos de consulta.
 
@@ -26,11 +26,13 @@ Su acceso se realiza mediante rutas publicas bajo `/api/public`, sin JWT y sin p
 
 | Actor externo | Forma de acceso | Informacion visible |
 | --- | --- | --- |
-| Consumidor final | QR o enlace `/verificar/:lote` | lote final, producto, fechas principales, estado de liberacion, origen resumido de materias primas y estado general blockchain |
+| Consumidor final | No habilitado en la version local | La trazabilidad se consulta desde el panel interno usando el lote producido. |
 | Cliente/receptor | lote + numero de factura o codigo privado del despacho | informacion publica y datos del despacho autorizado: factura, conductor, placa, cantidades, estado del transporte y validacion blockchain |
 | Auditoria/INVIMA | lote + codigo de auditoria | trazabilidad completa del lote, recepciones, inspecciones, produccion, manufactura, liberacion y hashes de validacion blockchain |
 
 ## Endpoints publicos
+
+La interfaz web no expone una vista publica ni genera codigos QR. Las rutas API existentes se conservan como base para una futura integracion externa por lote, factura o codigo privado.
 
 Base backend: `http://localhost:4000/api`
 

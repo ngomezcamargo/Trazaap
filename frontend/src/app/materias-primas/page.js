@@ -7,7 +7,7 @@ import { GuardiaSesion } from '@/comunes/GuardiaSesion';
 import { materiasPrimasServicio } from '@/servicios/materias-primas.servicio';
 import { proveedoresServicio } from '@/servicios/proveedores.servicio';
 import { obtenerUsuario } from '@/utilidades/sesion';
-import { puedeAdministrar, ROLES } from '@/utilidades/roles';
+import { tieneAcceso, ROLES } from '@/utilidades/roles';
 
 const inicial = {
   id: null,
@@ -22,7 +22,7 @@ const inicial = {
 
 export default function MateriasPrimasPage() {
   const usuario = obtenerUsuario();
-  const puedeEditar = puedeAdministrar(usuario?.role);
+  const puedeEditar = tieneAcceso(usuario?.role, [ROLES.GERENTE, ROLES.OPERARIO]);
   const [form, setForm] = useState(inicial);
   const [items, setItems] = useState([]);
   const [proveedores, setProveedores] = useState([]);
@@ -106,7 +106,7 @@ export default function MateriasPrimasPage() {
 
   return (
     <GuardiaSesion>
-      <GuardiaRol permitido={[ROLES.GERENTE]}>
+      <GuardiaRol permitido={[ROLES.GERENTE, ROLES.OPERARIO]}>
       <ContenedorApp titulo="Materias primas" subtitulo="Catalogo base para recepcion de productos recibidos.">
         <div className="tarjeta">
           {puedeEditar && (
@@ -120,7 +120,7 @@ export default function MateriasPrimasPage() {
           </div>
           <table className="tabla">
             <thead><tr><th>ID</th><th>Nombre</th><th>Unidad base</th><th>Proveedor</th><th>Estado</th><th>Acciones</th></tr></thead>
-            <tbody>{filtradas.map((item) => <tr key={item.id}><td>{item.id}</td><td>{item.nombre}</td><td>{item.unidad_medida_base || item.unidad_medida}</td><td>{item.proveedor_nombre || '-'}</td><td>{item.is_active ? 'activo' : 'inactivo'}</td><td><div className="acciones" style={{ marginTop: 0 }}>{puedeEditar && <button className="boton secundario" onClick={() => abrirEditar(item)} type="button">Editar</button>}<button className="boton secundario" onClick={() => setDetalle(item)} type="button">Ver detalle</button></div></td></tr>)}</tbody>
+            <tbody>{filtradas.map((item, index) => <tr key={`${item.id}-${item.nombre || 'materia'}-${index}`}><td>{item.id}</td><td>{item.nombre}</td><td>{item.unidad_medida_base || item.unidad_medida}</td><td>{item.proveedor_nombre || '-'}</td><td>{item.is_active ? 'activo' : 'inactivo'}</td><td><div className="acciones" style={{ marginTop: 0 }}>{puedeEditar && <button className="boton secundario" onClick={() => abrirEditar(item)} type="button">Editar</button>}<button className="boton secundario" onClick={() => setDetalle(item)} type="button">Ver detalle</button></div></td></tr>)}</tbody>
           </table>
           {!modalAbierto && message && <div className="alerta ok">{message}</div>}
           {!modalAbierto && error && <div className="alerta error">{error}</div>}

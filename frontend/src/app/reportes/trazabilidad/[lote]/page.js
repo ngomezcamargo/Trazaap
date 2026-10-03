@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import { useParams } from 'next/navigation';
-import { QRCodeSVG } from 'qrcode.react';
 import { GuardiaSesion } from '@/comunes/GuardiaSesion';
 import { GuardiaRol } from '@/comunes/GuardiaRol';
 import { trazabilidadServicio } from '@/servicios/trazabilidad.servicio';
@@ -15,13 +15,10 @@ const nombresEventos = {
   orden_produccion: 'ORDEN DE PRODUCCION',
   producto_fabricado_configurado: 'PRODUCTO / RECETA',
   registro_manufactura: 'FABRICACION',
-  envasado_embalado: 'ENVASADO Y EMBALADO',
-  devolucion_no_conformidad: 'DEVOLUCION / NO CONFORMIDAD',
-  control_calidad_lote: 'CONTROL DE CALIDAD E INOCUIDAD',
   ingreso_almacenamiento: 'INGRESO A ALMACENAMIENTO',
   control_almacenamiento: 'CONTROL DE ALMACENAMIENTO',
   salida_almacenamiento: 'SALIDA DE ALMACENAMIENTO',
-  liberacion_producto: 'EMBALADO / LIBERACION',
+  liberacion_producto: 'LIBERACION DE PRODUCTO',
   inventario_producto_terminado: 'INVENTARIO PRODUCTO TERMINADO',
   inventario_materia_prima: 'INVENTARIO MATERIA PRIMA',
   movimiento_inventario: 'MOVIMIENTO DE INVENTARIO',
@@ -47,10 +44,6 @@ function estadoTexto(estado) {
   if (estado === 'ALTERADO') return 'ALTERADO';
   if (estado === 'NO_ENCONTRADO') return 'NO ENCONTRADO';
   return 'PENDIENTE';
-}
-
-function CodigoQrTrazabilidad({ url, descripcion }) {
-  return <QRCodeSVG className="qr-imagen" value={url} size={240} level="M" marginSize={4} title={descripcion} />;
 }
 
 function obtenerValidacion(data, tipoEvento, idEntidad) {
@@ -153,23 +146,6 @@ function crearEventosReporte(data) {
   }
 
   const almacenamiento = data.almacenamiento;
-  for (const control of data.controlesCalidad || []) {
-    eventos.push({ tipoEvento: 'control_calidad_lote', idEntidad: control.id_control,
-      titulo: nombresEventos.control_calidad_lote, referencia: `Control #${control.id_control}`, lote: control.lote,
-      filas: [['Categoria', control.categoria], ['Parametro', control.parametro], ['Resultado', `${control.resultado_numerico ?? control.resultado_texto} ${control.unidad || ''}`], ['Referencia', control.referencia || '-'], ['Rango', `${control.limite_minimo ?? '-'} a ${control.limite_maximo ?? '-'}`], ['Conformidad', control.conformidad], ['Decision lote', control.decision_lote], ['Responsable', control.responsable_email], ['Fecha', fechaCorta(control.fecha_control)]] });
-  }
-  for (const caso of data.devoluciones || []) {
-    eventos.push({ tipoEvento: 'devolucion_no_conformidad', idEntidad: caso.id_caso,
-      titulo: nombresEventos.devolucion_no_conformidad, referencia: `Caso #${caso.id_caso}`, lote: caso.lote,
-      filas: [['Tipo', caso.tipo_caso], ['Fecha', fechaCorta(caso.fecha_registro)], ['Cliente', caso.cliente || '-'], ['Despacho', caso.codigo_despacho || '-'], ['Cantidad', caso.cantidad], ['Motivo', caso.motivo], ['Accion', caso.accion], ['Responsable', caso.responsable_email], ['Impacto inventario', caso.impacto_inventario]] });
-  }
-  for (const envasado of data.envasados || []) {
-    eventos.push({
-      tipoEvento: 'envasado_embalado', idEntidad: envasado.id_envasado,
-      titulo: nombresEventos.envasado_embalado, referencia: `Envasado #${envasado.id_envasado}`, lote: envasado.lote,
-      filas: [['Fecha', fechaCorta(envasado.fecha_operacion)], ['Responsable', envasado.responsable_email], ['Operacion', envasado.descripcion_operacion], ['Resultado', envasado.resultado], ['Observaciones', envasado.observaciones || '-']]
-    });
-  }
 
   if (almacenamiento) {
     eventos.push({
@@ -267,6 +243,7 @@ function crearEventosReporte(data) {
     const detalles = (despacho.detalles || []).filter((detalle) => String(detalle.lote) === String(data.lote));
     const cantidad = detalles.reduce((total, detalle) => total + Number(detalle.cantidad_despachada || 0), 0);
     const evidencia = despacho.blockchain;
+    const validacion = despacho.validacionBlockchain || obtenerValidacion(data, 'despacho_producto', despacho.id_despacho);
     eventos.push({
       tipoEvento: 'despacho_producto',
       idEntidad: despacho.id_despacho,
@@ -284,7 +261,7 @@ function crearEventosReporte(data) {
         ['Temperatura de transporte', despacho.temperatura_transporte_c == null ? '-' : `${despacho.temperatura_transporte_c} C`],
         ['Estado', despacho.estado_despacho || '-']
       ],
-      validacion: evidencia
+      validacion: validacion || (evidencia
         ? {
             estadoBlockchain: 'VERIFICADO',
             hashActual: evidencia.hashRegistro,
@@ -294,7 +271,7 @@ function crearEventosReporte(data) {
             decision: evidencia.decisionChaincode?.estado || evidencia.estado,
             motivos: evidencia.decisionChaincode?.motivos || []
           }
-        : obtenerValidacion(data, 'despacho_producto', despacho.id_despacho)
+        : null)
     });
 
     if (despacho.id_confirmacion) {
@@ -403,10 +380,9 @@ function crearEventosReporte(data) {
   }));
 }
 
-function EventoReporte({ evento, index, verificarUrl }) {
+function EventoReporte({ evento, index }) {
   const validacion = evento.validacion || {};
   const estado = estadoTexto(validacion.estadoBlockchain);
-  const verificacionId = `${evento.tipoEvento}-${evento.idEntidad}`;
 
   return (
     <section className="reporte-evento">
@@ -435,14 +411,7 @@ function EventoReporte({ evento, index, verificarUrl }) {
           </dl>
         </div>
 
-        <aside className="reporte-qr-card">
-          <strong>QR DE VERIFICACION</strong>
-          <CodigoQrTrazabilidad url={verificarUrl} descripcion={`QR de verificacion ${verificacionId}`} />
-          <span>ID Verificacion:</span>
-          <b>{verificacionId}</b>
-          <small>Verificar en: {verificarUrl}</small>
-        </aside>
-      </div>
+     </div>
     </section>
   );
 }
@@ -461,10 +430,8 @@ export default function ReporteTrazabilidadPage() {
   }, [lote]);
 
   const eventos = useMemo(() => (data ? crearEventosReporte(data) : []), [data]);
-  const generadoEn = useMemo(() => new Date(), []);
-  const reporteId = `REP-${generadoEn.getFullYear()}-${String(generadoEn.getMonth() + 1).padStart(2, '0')}-${String(generadoEn.getDate()).padStart(2, '0')}-${String(lote || 'LOTE').replace(/[^A-Za-z0-9]/g, '')}`;
-  const origen = typeof window !== 'undefined' ? window.location.origin : '';
-  const verificarUrl = `${origen}/verificar/${encodeURIComponent(data?.lote || lote)}`;
+ const generadoEn = useMemo(() => new Date(), []);
+ const reporteId = `REP-${generadoEn.getFullYear()}-${String(generadoEn.getMonth() + 1).padStart(2, '0')}-${String(generadoEn.getDate()).padStart(2, '0')}-${String(lote || 'LOTE').replace(/[^A-Za-z0-9]/g, '')}`;
 
   if (error) {
     return (
@@ -501,7 +468,7 @@ export default function ReporteTrazabilidadPage() {
       <main className="reporte-pagina">
         <header className="reporte-header">
           <div className="reporte-marca">
-            <img src="/trazaap-logo.jpeg" alt="Trazaap" />
+            <Image src="/trazaap-logo.jpeg" alt="Trazaap" width={68} height={68} priority />
             <div>
               <h1>Trazaap</h1>
               <p>Trazabilidad alimentaria<br />con integridad blockchain</p>
@@ -515,8 +482,7 @@ export default function ReporteTrazabilidadPage() {
             <p><b>Reporte No:</b><br />{reporteId}</p>
             <p><b>Fecha de generacion:</b><br />{fechaCorta(generadoEn)}</p>
             <p><b>Generado por:</b><br />{usuario?.email || 'usuario@trazaap.local'}</p>
-            <p><b>Despachos registrados:</b><br />{data.despachos?.length || 0}</p>
-            <p><b>Codigo auditoria:</b><br />{data.codigosAcceso?.auditoria || '-'}</p>
+           <p><b>Despachos registrados:</b><br />{data.despachos?.length || 0}</p>
           </div>
         </header>
 
@@ -534,24 +500,19 @@ export default function ReporteTrazabilidadPage() {
           </div>
         </section>
 
-        {eventos.map((evento, index) => (
-          <EventoReporte key={`${evento.tipoEvento}-${evento.idEntidad}`} evento={evento} index={index} verificarUrl={verificarUrl} />
-        ))}
+       {eventos.map((evento, index) => (
+          <EventoReporte key={`${evento.tipoEvento}-${evento.idEntidad}`} evento={evento} index={index} />
+       ))}
 
-        <footer className="reporte-footer">
-          <div>
-            <h4>VERIFICACION DEL REPORTE</h4>
-            <div className="reporte-footer-qr">
-              <CodigoQrTrazabilidad url={verificarUrl} descripcion="QR publico de trazabilidad" />
-              <p>
-                Escanee el codigo QR o visite el enlace para verificar la autenticidad del reporte:<br />
-                <b>{verificarUrl}</b><br />
-                ID de verificacion: <b>{reporteId}</b><br />
-                Despachos parciales: <b>{data.despachos?.length || 0}</b><br />
-                Codigo auditoria: <b>{data.codigosAcceso?.auditoria || '-'}</b>
-              </p>
-            </div>
-          </div>
+       <footer className="reporte-footer">
+         <div>
+            <h4>IDENTIFICADOR DE TRAZABILIDAD</h4>
+            <p>
+              Lote consultado: <b>{data.lote}</b><br />
+             Reporte: <b>{reporteId}</b><br />
+             Despachos registrados: <b>{data.despachos?.length || 0}</b><br />
+           </p>
+         </div>
           <div>
             <h4>TECNOLOGIA</h4>
             <p><b>HYPERLEDGER FABRIC</b></p>

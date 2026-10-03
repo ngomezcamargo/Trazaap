@@ -12,6 +12,10 @@ const dataLiberacion = {
   fecha_vencimiento: '2099-12-31',
   etiqueta_verificada: true,
   verificacion_envase: true,
+  lote_visible: true,
+  fecha_vencimiento_visible: true,
+  empaque_conforme: true,
+  producto_en_buen_estado: true,
   estado_liberacion: 'aprobado',
   motivo_retencion: '',
   motivo_rechazo: '',
@@ -51,6 +55,15 @@ function dependenciasLiberacion(overrides = {}) {
     actualizarAlmacenamientoDesdeLiberacion: async (_id, estado) => ({ id_almacenamiento: 4, estado }),
     registrarEventoTrazabilidad: async () => {},
     encolarEventoBlockchain: async (evento) => evento,
+    obtenerResumenCalidadPorManufactura: async () => ({
+      estado: 'conforme',
+      total_obligatorios: 1,
+      total_registrados: 1,
+      faltantes: [],
+      no_conformes: [],
+      decisiones_bloqueantes: [],
+      controles: []
+    }),
     ...overrides
   };
 }
